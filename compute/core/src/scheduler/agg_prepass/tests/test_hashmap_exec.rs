@@ -6,7 +6,7 @@ use super::*;
 
 #[test]
 fn test_build_agg_map_countifs() {
-    let mirror = test_mirror();
+    let cell_store = test_store();
     let s = sheet_id_1();
 
     // Pattern: COUNTIFS(A1:A5, <dynamic>)
@@ -22,7 +22,7 @@ fn test_build_agg_map_countifs() {
         }]),
     };
 
-    let map = build_agg_map(&pattern, &mirror).unwrap();
+    let map = build_agg_map(&pattern, &cell_store).unwrap();
 
     // "X" appears 3 times (rows 0, 2, 4), "Y" appears 2 times (rows 1, 3).
     let key_x: AggKey = SmallVec::from_vec(vec![NormalizedKey::Text("x".to_string())]);
@@ -40,7 +40,7 @@ fn test_build_agg_map_countifs() {
 
 #[test]
 fn test_build_agg_map_sumifs() {
-    let mirror = test_mirror();
+    let cell_store = test_store();
     let s = sheet_id_1();
 
     // Pattern: SUMIFS(C1:C5, A1:A5, <dynamic>)
@@ -59,7 +59,7 @@ fn test_build_agg_map_sumifs() {
         }]),
     };
 
-    let map = build_agg_map(&pattern, &mirror).unwrap();
+    let map = build_agg_map(&pattern, &cell_store).unwrap();
 
     let key_x: AggKey = SmallVec::from_vec(vec![NormalizedKey::Text("x".to_string())]);
     let key_y: AggKey = SmallVec::from_vec(vec![NormalizedKey::Text("y".to_string())]);
@@ -82,7 +82,7 @@ fn test_build_agg_map_sumifs() {
 
 #[test]
 fn test_execute_agg_group_countifs() {
-    let mirror = test_mirror();
+    let cell_store = test_store();
     let s = sheet_id_1();
 
     let pattern = AggPattern {
@@ -112,7 +112,7 @@ fn test_execute_agg_group_countifs() {
 
     let no_formulas = |_: &SheetId, _: u32, _: u32, _: u32| false;
     let no_stale = |_: &SheetId, _: u32, _: u32, _: u32| false;
-    let results = execute_agg_group(&group, &mirror, no_formulas, no_stale).unwrap();
+    let results = execute_agg_group(&group, &cell_store, no_formulas, no_stale).unwrap();
     assert_eq!(results.len(), 5);
 
     // Row 0: criteria "X" -> count 3
@@ -129,7 +129,7 @@ fn test_execute_agg_group_countifs() {
 
 #[test]
 fn test_execute_agg_group_bails_on_data_formulas() {
-    let mirror = test_mirror();
+    let cell_store = test_store();
     let s = sheet_id_1();
 
     let pattern = AggPattern {
@@ -157,7 +157,7 @@ fn test_execute_agg_group_bails_on_data_formulas() {
     // Simulate: data range has formulas
     let has_formulas = |_: &SheetId, _: u32, _: u32, _: u32| true;
     let no_stale = |_: &SheetId, _: u32, _: u32, _: u32| false;
-    assert!(execute_agg_group(&group, &mirror, has_formulas, no_stale).is_none());
+    assert!(execute_agg_group(&group, &cell_store, has_formulas, no_stale).is_none());
 }
 
 #[test]
@@ -165,7 +165,7 @@ fn test_criteria_guard_clean_dynamic_column_passes() {
     // Regression test: when the dynamic criteria column contains only data values
     // (no formulas, no spill projections), the criteria_formula_guard should NOT
     // bail. Previously, false positives caused entire groups to bail unnecessarily.
-    let mirror = test_mirror();
+    let cell_store = test_store();
     let s = sheet_id_1();
 
     let pattern = AggPattern {
@@ -195,7 +195,7 @@ fn test_criteria_guard_clean_dynamic_column_passes() {
     // Both guards should pass and the group should resolve successfully.
     let no_formulas = |_: &SheetId, _: u32, _: u32, _: u32| false;
     let no_stale = |_: &SheetId, _: u32, _: u32, _: u32| false;
-    let results = execute_agg_group(&group, &mirror, no_formulas, no_stale).unwrap();
+    let results = execute_agg_group(&group, &cell_store, no_formulas, no_stale).unwrap();
     assert_eq!(results.len(), 5);
     // Verify results are correct (same as test_execute_agg_group_countifs)
     assert_eq!(results[0].1, CellValue::number(3.0));
@@ -206,7 +206,7 @@ fn test_criteria_guard_clean_dynamic_column_passes() {
 fn test_criteria_guard_bails_on_stale_projection() {
     // When the criteria column has a stale spill projection (source formula dirty),
     // the criteria_formula_guard should bail to prevent reading stale values.
-    let mirror = test_mirror();
+    let cell_store = test_store();
     let s = sheet_id_1();
 
     let pattern = AggPattern {
@@ -234,14 +234,14 @@ fn test_criteria_guard_bails_on_stale_projection() {
     // Data columns: clean. Criteria column: has stale projections.
     let no_formulas = |_: &SheetId, _: u32, _: u32, _: u32| false;
     let has_stale = |_: &SheetId, _: u32, _: u32, _: u32| true;
-    assert!(execute_agg_group(&group, &mirror, no_formulas, has_stale).is_none());
+    assert!(execute_agg_group(&group, &cell_store, no_formulas, has_stale).is_none());
 }
 
 #[test]
 fn test_criteria_guard_independent_from_data_guard() {
     // The data guard and criteria guard use separate closures.
     // A clean data guard should not prevent the criteria guard from bailing.
-    let mirror = test_mirror();
+    let cell_store = test_store();
     let s = sheet_id_1();
 
     let pattern = AggPattern {
@@ -269,17 +269,17 @@ fn test_criteria_guard_independent_from_data_guard() {
     // Data guard passes, criteria guard fails (stale projection).
     let no_formulas = |_: &SheetId, _: u32, _: u32, _: u32| false;
     let has_stale = |_: &SheetId, _: u32, _: u32, _: u32| true;
-    assert!(execute_agg_group(&group, &mirror, no_formulas, has_stale).is_none());
+    assert!(execute_agg_group(&group, &cell_store, no_formulas, has_stale).is_none());
 
     // Data guard fails, criteria guard passes -- should still bail.
     let has_formulas = |_: &SheetId, _: u32, _: u32, _: u32| true;
     let no_stale = |_: &SheetId, _: u32, _: u32, _: u32| false;
-    assert!(execute_agg_group(&group, &mirror, has_formulas, no_stale).is_none());
+    assert!(execute_agg_group(&group, &cell_store, has_formulas, no_stale).is_none());
 }
 
 #[test]
 fn test_averageifs_div_zero() {
-    let mirror = test_mirror();
+    let cell_store = test_store();
     let s = sheet_id_1();
 
     // AVERAGEIFS(C1:C5, A1:A5, <dynamic>) -- look up "Z" which doesn't exist
@@ -309,14 +309,14 @@ fn test_averageifs_div_zero() {
 
     let no_formulas = |_: &SheetId, _: u32, _: u32, _: u32| false;
     let no_stale = |_: &SheetId, _: u32, _: u32, _: u32| false;
-    let results = execute_agg_group(&group, &mirror, no_formulas, no_stale).unwrap();
+    let results = execute_agg_group(&group, &cell_store, no_formulas, no_stale).unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].1, CellValue::Error(CellError::Div0, None));
 }
 
 #[test]
 fn test_static_filter_criteria() {
-    let mirror = test_mirror();
+    let cell_store = test_store();
     let s = sheet_id_1();
 
     // SUMIFS(C1:C5, C1:C5, ">20") -- sum values where value > 20
@@ -335,7 +335,7 @@ fn test_static_filter_criteria() {
         }]),
     };
 
-    let map = build_agg_map(&pattern, &mirror).unwrap();
+    let map = build_agg_map(&pattern, &cell_store).unwrap();
 
     // All matching rows map to the same key (Null placeholder for filter)
     let key: AggKey = SmallVec::from_vec(vec![NormalizedKey::Null]);

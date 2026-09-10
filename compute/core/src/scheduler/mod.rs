@@ -1,6 +1,6 @@
 //! Recalc Scheduler — orchestrates formula recalculation.
 //!
-//! `ComputeCore` is the top-level struct that owns the CellMirror, DependencyGraph,
+//! `ComputeCore` is the top-level struct that owns the CellStore, DependencyGraph,
 //! and AST cache. It processes cell edits by parsing formulas, building the dependency
 //! graph, and evaluating cells in topological order.
 //!
@@ -11,8 +11,8 @@
 //! All recalc paths converge on a single evaluation core:
 //!
 //! - **`Evaluator::evaluate()`** (`eval/engine/evaluator.rs`) — the one and only
-//!   formula evaluator. Every path calls this with a `MirrorContext` adapter.
-//! - **`MirrorContext`** (`eval_bridge/mirror_context.rs`) — implements `EvalDataAccess`
+//!   formula evaluator. Every path calls this with a `EvalContext` adapter.
+//! - **`EvalContext`** (`eval_bridge/eval_context.rs`) — implements `EvalDataAccess`
 //!   + `EvalMetadata` traits, providing uniform data access regardless of caller.
 //! - **`make_cell_change()`** — shared result packaging for all topo-based paths.
 //!
@@ -36,19 +36,19 @@
 //! Cells are grouped by topological level (Kahn's algorithm). Cells at the same level
 //! have no mutual dependencies and can be evaluated concurrently. Each level uses a
 //! two-phase approach:
-//! 1. **Parallel read phase** — evaluate all formulas using shared `&CellMirror`
-//! 2. **Sequential write phase** — apply results to the mirror
+//! 1. **Parallel read phase** — evaluate all formulas using shared `&CellStore`
+//! 2. **Sequential write phase** — apply results to the cell store
 //!
 //! Levels with fewer than `PARALLEL_THRESHOLD` cells skip rayon overhead and evaluate
 //! sequentially.
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use crate::cells::{CellStore, StorePositionLookup};
 use crate::eval::clock::RecalcClock;
-use crate::eval_bridge::MirrorCellRefResolver;
+use crate::eval_bridge::StoreCellRefResolver;
 use crate::formula_text::{FormulaTextDepIndex, FormulaTextDepTarget, FormulaTextProvider};
 use crate::graph::{DepTarget, DependencyGraph, GraphBuilder, RangeAccess};
-use crate::mirror::{CellMirror, MirrorPositionLookup};
 use crate::schema::schema_map::SchemaMap;
 use crate::snapshot::{
     CalcMode, CellChange, CellEdit, CellErrorInfo, ProjectionCellData, ProjectionChange,
@@ -82,8 +82,8 @@ mod data_table_prepass;
 mod dep_extract;
 mod edit;
 mod formula_reg;
-mod init;
 mod history;
+mod init;
 mod level_eval;
 mod recalc;
 mod region_guard;
@@ -91,7 +91,6 @@ mod resolvers;
 mod schema_validation;
 mod solver_methods;
 mod spill;
-mod tables;
 mod value_utils;
 
 #[cfg(test)]
@@ -163,10 +162,10 @@ use compute_functions::helpers::VOLATILE_FUNCTIONS;
 // ComputeCore — the top-level orchestrator
 // ---------------------------------------------------------------------------
 
-/// Top-level compute engine that owns the cell mirror, dependency graph, and AST cache.
+/// Top-level compute engine that owns the cell store, dependency graph, and AST cache.
 ///
 /// All recalculation flows through this struct:
-/// 1. Edits update the mirror and graph
+/// 1. Edits update the cell store and graph
 /// 2. Affected cells are found via the dependency graph
 /// 3. Cells are evaluated in topological order
 /// 4. Changed cells are returned as `RecalcResult`
@@ -318,14 +317,14 @@ impl ComputeCore {
 
     pub(crate) fn mark_formula_text_changed(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         cell_id: CellId,
     ) -> FxHashSet<CellId> {
         let mut out = FxHashSet::default();
         self.formula_text_deps
             .mark_changed(&FormulaTextDepTarget::Cell(cell_id), &mut out);
-        if let Some(sheet) = mirror.sheet_for_cell(&cell_id)
-            && let Some(pos) = mirror.resolve_position(&cell_id)
+        if let Some(sheet) = cell_store.sheet_for_cell(&cell_id)
+            && let Some(pos) = cell_store.resolve_position(&cell_id)
         {
             self.formula_text_deps.mark_changed(
                 &FormulaTextDepTarget::PosTopLeft {
@@ -383,7 +382,7 @@ impl ComputeCore {
     /// formulas blocked by the now-removed merge region are re-evaluated.
     pub(crate) fn drain_spill_blockers_for_region(
         &mut self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         sheet_id: &SheetId,
         start_row: u32,
         start_col: u32,
@@ -392,10 +391,10 @@ impl ComputeCore {
     ) -> Vec<CellId> {
         let mut unblocked = Vec::new();
         self.spill_blockers.retain(|blocker_id, source_id| {
-            let in_region = mirror
+            let in_region = cell_store
                 .sheet_for_cell(blocker_id)
                 .is_some_and(|sid| sid == *sheet_id)
-                && mirror.resolve_position(blocker_id).is_some_and(|pos| {
+                && cell_store.resolve_position(blocker_id).is_some_and(|pos| {
                     pos.row() >= start_row
                         && pos.row() <= end_row
                         && pos.col() >= start_col
@@ -410,7 +409,7 @@ impl ComputeCore {
             // the same sheet is removed — otherwise the formula stays
             // permanently #SPILL!. Repro: spill-into-merged-cell scenario.
             let is_merge_fallback = blocker_id == source_id
-                && mirror
+                && cell_store
                     .sheet_for_cell(source_id)
                     .is_some_and(|sid| sid == *sheet_id);
             if in_region || is_merge_fallback {
@@ -429,12 +428,12 @@ impl ComputeCore {
     /// Called after `clear_all_merges` when every merge on the sheet is gone.
     pub(crate) fn drain_spill_blockers_for_sheet(
         &mut self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         sheet_id: &SheetId,
     ) -> Vec<CellId> {
         let mut unblocked = Vec::new();
         self.spill_blockers.retain(|blocker_id, source_id| {
-            let on_sheet = mirror
+            let on_sheet = cell_store
                 .sheet_for_cell(blocker_id)
                 .is_some_and(|sid| sid == *sheet_id);
             if on_sheet {
@@ -454,7 +453,7 @@ impl ComputeCore {
     /// Add a new sheet from a snapshot. Parses formulas and recalculates.
     pub fn add_sheet(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         snapshot: SheetSnapshot,
     ) -> Result<(), ComputeError> {
         // Extract formula cells before adding (need the data)
@@ -475,16 +474,16 @@ impl ComputeCore {
             })
             .collect();
 
-        mirror.add_sheet(snapshot)?;
+        cell_store.add_sheet(snapshot)?;
 
-        self.register_sheet_formulas(mirror, sheet_id, formula_cells);
+        self.register_sheet_formulas(cell_store, sheet_id, formula_cells);
         Ok(())
     }
 
     /// Register formulas for an already installed native sheet.
     pub(crate) fn register_sheet_formulas(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         sheet_id: SheetId,
         formula_cells: impl IntoIterator<Item = (CellId, String)>,
     ) {
@@ -509,7 +508,7 @@ impl ComputeCore {
         // append edges for the new sheet without dropping existing sheets'
         // dependency edges.
         for (cell_id, formula) in formula_cells {
-            self.parse_and_register_formula(mirror, cell_id, sheet_id, formula, true);
+            self.parse_and_register_formula(cell_store, cell_id, sheet_id, formula, true);
         }
     }
 
@@ -518,11 +517,11 @@ impl ComputeCore {
     /// that depended on cells in the deleted sheet (they now evaluate to #REF!).
     pub fn remove_sheet(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         sheet_id: &SheetId,
     ) -> Result<RecalcResult, ComputeError> {
         // Collect cell IDs from this sheet before removing
-        let cell_ids: Vec<CellId> = if let Some(sheet) = mirror.get_sheet(sheet_id) {
+        let cell_ids: Vec<CellId> = if let Some(sheet) = cell_store.get_sheet(sheet_id) {
             sheet.cell_ids().copied().collect()
         } else {
             Vec::new()
@@ -542,7 +541,7 @@ impl ComputeCore {
         }
         let external_dependents: Vec<CellId> = ext_dep_set.into_iter().collect();
 
-        self.regenerate_formula_strings_for_sheet_delete(mirror, sheet_id);
+        self.regenerate_formula_strings_for_sheet_delete(cell_store, sheet_id);
 
         // Remove from graph and caches
         for cell_id in &cell_ids {
@@ -559,30 +558,32 @@ impl ComputeCore {
         self.graph.cleanup_sheet_ranges(sheet_id);
 
         // Maintain sheet_order — leaving the deleted sheet's entry behind
-        // would make sheet_order disagree with the mirror's set of sheets
+        // would make sheet_order disagree with the cell store's set of sheets
         // and confuse callers that iterate the order map.
         self.sheet_order.remove(sheet_id);
         self.rebuild_ordered_sheets_cache();
 
         // Recalc external dependents so they pick up #REF! from the missing sheet.
-        mirror.remove_sheet(sheet_id);
+        cell_store.remove_sheet(sheet_id);
         if external_dependents.is_empty() {
             Ok(RecalcResult::empty())
         } else {
-            self.recalc(mirror, &external_dependents)
+            self.recalc(cell_store, &external_dependents)
         }
     }
 
     /// Rename a sheet. May need to reparse formulas that reference the old name.
-    pub fn rename_sheet(&mut self, mirror: &mut CellMirror, sheet_id: &SheetId, name: &str) {
-        let old_name = mirror.get_sheet(sheet_id).map(|sheet| sheet.name.clone());
+    pub fn rename_sheet(&mut self, cell_store: &mut CellStore, sheet_id: &SheetId, name: &str) {
+        let old_name = cell_store
+            .get_sheet(sheet_id)
+            .map(|sheet| sheet.name.clone());
         let authored_formula_text = self.cell_formula_text.clone();
 
-        mirror.rename_sheet(sheet_id, name);
+        cell_store.rename_sheet(sheet_id, name);
         // Formulas use resolved SheetIds internally, so no reparsing needed.
         // But formula_strings (A1 display cache) contain sheet names, so we
         // must regenerate them to reflect the new name.
-        self.regenerate_formula_strings(mirror);
+        self.regenerate_formula_strings(cell_store);
 
         let Some(old_name) = old_name else {
             return;
@@ -625,10 +626,10 @@ impl ComputeCore {
     /// Get the current value of a cell.
     pub fn get_cell_value<'a>(
         &self,
-        mirror: &'a CellMirror,
+        cell_store: &'a CellStore,
         cell_id: &CellId,
     ) -> Option<&'a CellValue> {
-        mirror.get_cell_value(cell_id)
+        cell_store.get_cell_value(cell_id)
     }
 
     /// Get a reference to the underlying DependencyGraph (for testing/inspection).
@@ -689,14 +690,14 @@ impl ComputeCore {
         &self.id_alloc
     }
 
-    /// Get or create a CellId at the given position (delegates to mirror + allocator).
+    /// Get or create a CellId at the given position (delegates to cell_store + allocator).
     pub fn ensure_cell_id(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         sheet_id: &SheetId,
         pos: SheetPos,
     ) -> Option<CellId> {
-        mirror.ensure_cell_id(sheet_id, pos, &self.id_alloc)
+        cell_store.ensure_cell_id(sheet_id, pos, &self.id_alloc)
     }
 
     /// Check if a cell is flagged as a dynamic array formula.
@@ -733,31 +734,31 @@ impl ComputeCore {
     /// a synthetic CellId, and registers its dependencies in the graph.
     pub fn set_named_range(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         name: String,
         def: formula_types::NamedRangeDef,
     ) {
-        let def = self.resolve_named_range_def_for_graph(mirror, def);
+        let def = self.resolve_named_range_def_for_graph(cell_store, def);
         let scope = def.scope.clone();
         let raw_expr = def.raw_expression.clone();
 
-        // Insert into mirror (which populates VariableStore id maps)
-        mirror.set_named_range(name.clone(), def);
+        // Insert into cell_store (which populates VariableStore id maps)
+        cell_store.set_named_range(name.clone(), def);
 
         // Register in the DAG
-        self.register_single_variable(mirror, &scope, &name, raw_expr.as_deref());
+        self.register_single_variable(cell_store, &scope, &name, raw_expr.as_deref());
     }
 
     /// Remove a named range by name, cleaning up its DAG node.
-    pub fn remove_named_range(&mut self, mirror: &mut CellMirror, name: &str) {
+    pub fn remove_named_range(&mut self, cell_store: &mut CellStore, name: &str) {
         // Collect all variable CellIds for this name before removing
         let key = name.to_ascii_lowercase();
-        let to_remove: Vec<(formula_types::Scope, CellId)> = mirror
+        let to_remove: Vec<(formula_types::Scope, CellId)> = cell_store
             .variables
             .all_variables()
             .filter(|(_, var_name, _)| var_name.as_str() == key)
             .filter_map(|(scope, _, _)| {
-                let cell_id = mirror.variables.get_variable_cell_id(scope, &key)?;
+                let cell_id = cell_store.variables.get_variable_cell_id(scope, &key)?;
                 Some((scope.clone(), cell_id))
             })
             .collect();
@@ -770,24 +771,99 @@ impl ComputeCore {
             self.cell_range_keys.remove(cell_id);
         }
 
-        mirror.remove_named_range(name);
+        cell_store.remove_named_range(name);
     }
 
     /// Remove a named range by name and scope, cleaning up only that specific DAG node.
     pub fn remove_named_range_scoped(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         scope: &formula_types::Scope,
         name: &str,
     ) {
         let key = name.to_ascii_lowercase();
-        if let Some(cell_id) = mirror.variables.get_variable_cell_id(scope, &key) {
+        if let Some(cell_id) = cell_store.variables.get_variable_cell_id(scope, &key) {
             self.graph.remove_cell(&cell_id);
             self.ast_cache.remove(&cell_id);
             self.formula_strings.remove(&cell_id);
             self.cell_range_keys.remove(&cell_id);
         }
-        mirror.remove_named_range_scoped(scope, name);
+        cell_store.remove_named_range_scoped(scope, name);
+    }
+
+    // -----------------------------------------------------------------------
+    // Table management
+    // -----------------------------------------------------------------------
+
+    /// Add or update a canonical table definition.
+    pub fn set_table(
+        &mut self,
+        cell_store: &mut CellStore,
+        table: domain_types::domain::table::Table,
+    ) {
+        cell_store.set_table(table);
+        // CELL reads structured table formatting without a cell-value dependency.
+        // Catalog changes must invalidate the clean full-recalculation fast path.
+        self.mark_dirty();
+    }
+
+    /// Remove a table by name.
+    pub fn remove_table(&mut self, cell_store: &mut CellStore, name: &str) {
+        cell_store.remove_table(name);
+        self.mark_dirty();
+    }
+
+    /// Re-parse formula cells in a given table range that contain implicit
+    /// structured refs (`[@…]`), then recalc any that changed.
+    ///
+    /// Called after table creation to fix up formulas that were entered before
+    /// the table existed (they would have been stored as `#NAME?`).
+    pub fn reparse_implicit_structured_refs(
+        &mut self,
+        cell_store: &mut CellStore,
+        sheet_id: &SheetId,
+        start_row: u32,
+        start_col: u32,
+        end_row: u32,
+        end_col: u32,
+    ) -> RecalcResult {
+        let sheet_hex = sheet_id.to_uuid_string();
+        let cells_to_reparse: Vec<(CellId, String)> = self
+            .cell_formula_text
+            .iter()
+            .filter_map(|(cell_id, formula)| {
+                if !formula.contains("[@") {
+                    return None;
+                }
+                let pos = cell_store.resolve_position(cell_id)?;
+                let cell_sheet = cell_store.sheet_for_cell(cell_id)?;
+                if cell_sheet.to_uuid_string() != sheet_hex {
+                    return None;
+                }
+                if pos.row() >= start_row
+                    && pos.row() <= end_row
+                    && pos.col() >= start_col
+                    && pos.col() <= end_col
+                {
+                    Some((*cell_id, formula.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if cells_to_reparse.is_empty() {
+            return RecalcResult::empty();
+        }
+
+        let mut dirty = Vec::new();
+        for (cell_id, formula) in cells_to_reparse {
+            self.parse_and_register_formula(cell_store, cell_id, *sheet_id, formula, false);
+            dirty.push(cell_id);
+        }
+
+        self.recalc(cell_store, &dirty)
+            .unwrap_or_else(|_| RecalcResult::empty())
     }
 
     // -----------------------------------------------------------------------
@@ -870,17 +946,17 @@ impl ComputeCore {
 
     /// Convert an A1-style formula string to an identity-based `IdentityFormula`.
     ///
-    /// Uses a `CoreIdentityResolver` backed by the live `CellMirror` so that
+    /// Uses a `CoreIdentityResolver` backed by the live `CellStore` so that
     /// referenced cells get stable `CellId`s (creating them for empty cells if
     /// necessary, which is why `&mut self` is required).
     pub fn to_identity_formula(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         sheet: &SheetId,
         formula_a1: &str,
     ) -> Result<IdentityFormula, ComputeError> {
         let resolver = CoreIdentityResolver {
-            mirror: std::cell::RefCell::new(mirror),
+            cell_store: std::cell::RefCell::new(cell_store),
             id_alloc: &self.id_alloc,
             current_sheet: *sheet,
         };
@@ -894,12 +970,12 @@ impl ComputeCore {
 
     pub fn to_identity_formula_with_rect_ranges(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         sheet: &SheetId,
         formula_a1: &str,
     ) -> Result<IdentityFormula, ComputeError> {
         let resolver = CoreIdentityResolver {
-            mirror: std::cell::RefCell::new(mirror),
+            cell_store: std::cell::RefCell::new(cell_store),
             id_alloc: &self.id_alloc,
             current_sheet: *sheet,
         };
@@ -913,15 +989,15 @@ impl ComputeCore {
 
     /// Convert an `IdentityFormula` back to an A1-style display string.
     ///
-    /// Read-only — uses a `MirrorPositionLookup` to resolve identity IDs to
+    /// Read-only — uses a `StorePositionLookup` to resolve identity IDs to
     /// their current positional coordinates.
     pub fn to_a1_display(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         sheet: &SheetId,
         formula: &IdentityFormula,
     ) -> String {
-        let lookup = MirrorPositionLookup::new(mirror, *sheet);
+        let lookup = StorePositionLookup::new(cell_store, *sheet);
         compute_parser::to_a1_string(formula, &lookup)
     }
 
@@ -929,11 +1005,11 @@ impl ComputeCore {
     /// sheet prefix on every reference (used for named-range display).
     pub fn to_a1_display_qualified(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         sheet: &SheetId,
         formula: &IdentityFormula,
     ) -> String {
-        let lookup = MirrorPositionLookup::new(mirror, *sheet);
+        let lookup = StorePositionLookup::new(cell_store, *sheet);
         compute_parser::to_a1_string_qualified(formula, &lookup)
     }
 }

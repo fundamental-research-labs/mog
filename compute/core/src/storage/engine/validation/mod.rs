@@ -31,7 +31,7 @@ pub fn validate_mutation(
         }
         EngineMutation::SetCellsByPosition { .. } => {}
         EngineMutation::CreateDataTable { input } => {
-            crate::data_table::prepare_data_table_creation(engine.mirror(), input)?;
+            crate::data_table::prepare_data_table_creation(engine.cell_store(), input)?;
         }
         EngineMutation::ClearRangeByPosition {
             start_row,

@@ -1,4 +1,5 @@
 #![allow(unused_imports, unused_variables)]
+use crate::cells::StorePositionLookup;
 use crate::diagnostics::formula_references::{
     FormulaReferenceDiagnosticsOptions, FormulaReferenceDiagnosticsPage,
 };
@@ -9,8 +10,7 @@ use crate::engine_types::{
 };
 use crate::eval::Evaluator;
 use crate::eval::sync_block_on;
-use crate::eval_bridge::{MirrorCellRefResolver, MirrorContext};
-use crate::mirror::MirrorPositionLookup;
+use crate::eval_bridge::{EvalContext, StoreCellRefResolver};
 use crate::range_manager::{self, A1CellRef, A1RangeRef};
 use crate::snapshot::{
     BatchRangeEntry, BatchRangeRequest, BatchRangeResponse, BatchRangeResult, CalculationSettings,
@@ -26,7 +26,6 @@ use crate::storage::sheet::{hyperlinks, merges, properties as sheets};
 use crate::storage::workbook::settings as workbook;
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::{hex_to_id, id_to_hex};
-use compute_wire::mutation::serialize_multi_viewport_patches;
 use domain_types::domain::merge::{CellMergeInfo, MergeRegion, ResolvedMergedRegion};
 use domain_types::domain::sheet::{FrozenPanes, SheetMeta, SheetScrollPosition, SheetViewOptions};
 use domain_types::domain::slicer::{NamedSlicerStyle, SlicerCustomStyle};
@@ -59,7 +58,7 @@ pub(in crate::storage::engine) fn query_range(
                 cid.to_uuid_string()
             } else if visit.is_projection {
                 engine
-                    .mirror
+                    .cell_store
                     .projection_registry
                     .resolve(sheet_id, visit.row, visit.col)
                     .map(|(src, _, _)| src.to_uuid_string())
@@ -74,7 +73,7 @@ pub(in crate::storage::engine) fn query_range(
                 grid_index.and_then(|grid| {
                     crate::storage::engine::services::objects::get_hyperlink(
                         &engine.stores,
-                        &engine.mirror,
+                        &engine.cell_store,
                         sheet_id,
                         visit.row,
                         visit.col,
@@ -101,7 +100,7 @@ pub(in crate::storage::engine) fn query_range(
         },
     );
 
-    let merges_result: Vec<ViewportMerge> = match grid_index {
+    let merges_result: Vec<ViewportMerge> = match engine.cell_store.get_sheet(sheet_id) {
         Some(grid) => merges::get_merges_in_range(
             &engine.stores.storage,
             *sheet_id,
@@ -151,7 +150,7 @@ pub(in crate::storage::engine) fn get_range_with_identity(
                 cid.to_uuid_string()
             } else if visit.is_projection {
                 engine
-                    .mirror
+                    .cell_store
                     .projection_registry
                     .resolve(sheet_id, visit.row, visit.col)
                     .map(|(src, _, _)| src.to_uuid_string())
@@ -207,7 +206,7 @@ pub(in crate::storage::engine) fn query_ranges(
     let entries = requests
         .into_iter()
         .map(|req| {
-            let sheet_id = match engine.mirror.sheet_by_name(&req.sheet_name) {
+            let sheet_id = match engine.cell_store.sheet_by_name(&req.sheet_name) {
                 Some(id) => id,
                 None => {
                     return BatchRangeEntry::Err {
@@ -222,7 +221,7 @@ pub(in crate::storage::engine) fn query_ranges(
                     _ => {
                         match services::queries::get_data_bounds(
                             &engine.stores,
-                            &engine.mirror,
+                            &engine.cell_store,
                             &sheet_id,
                         ) {
                             Some(bounds) => (
@@ -344,7 +343,7 @@ pub(in crate::storage::engine) fn validate_formula_circular_reference(
     formula: &str,
 ) -> Option<crate::engine_types::FormulaCircularReferenceValidation> {
     engine.stores.compute.validate_formula_circular_reference(
-        &engine.mirror,
+        &engine.cell_store,
         sheet_id,
         row,
         col,
@@ -363,8 +362,8 @@ pub(in crate::storage::engine) fn evaluate_expression(
         format!("={}", expression)
     };
 
-    let resolver = MirrorCellRefResolver {
-        mirror: &engine.mirror,
+    let resolver = StoreCellRefResolver {
+        cell_store: &engine.cell_store,
         current_sheet: *sheet_id,
     };
     let ast = compute_parser::parse_formula(&formula_str, Some(&resolver))
@@ -374,10 +373,10 @@ pub(in crate::storage::engine) fn evaluate_expression(
         .into_inner();
 
     let cell_id = engine
-        .mirror
+        .cell_store
         .resolve_cell_id(sheet_id, SheetPos::new(0, 0))
         .unwrap_or(CellId::from_raw(0));
-    let ctx = MirrorContext::new(&engine.mirror, cell_id, *sheet_id);
+    let ctx = EvalContext::new(&engine.cell_store, cell_id, *sheet_id);
 
     let value =
         sync_block_on(Evaluator::evaluate(&ast, &ctx, &ctx)).map_err(|e| ComputeError::Eval {

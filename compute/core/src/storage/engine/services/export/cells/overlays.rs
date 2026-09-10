@@ -3,7 +3,7 @@ use domain_types::CellData;
 use rustc_hash::FxHashMap;
 use value_types::CellValue;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::stores::EngineStores;
 
 use super::super::PaletteOps;
@@ -13,7 +13,7 @@ use super::style_ids::positional_style_id_at;
 
 pub(in crate::storage::engine) fn export_cells_for_sheet(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     palette: &impl PaletteOps,
 ) -> Vec<CellData> {
@@ -21,19 +21,15 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
 
     // Read native cell properties and formula metadata using typed CellId keys.
     let (all_props, array_refs, formula_metadata, rich_strings) =
-        batch_read_props_array_refs_and_formula_metadata(stores, mirror, sheet_id);
+        batch_read_props_array_refs_and_formula_metadata(stores, cell_store, sheet_id);
 
-    // Build a reverse map: cell_id → (row, col) from grid_indexes.
-    let grid = stores.grid_indexes.get(sheet_id);
-    let sheet_mirror = mirror.get_sheet(sheet_id);
     let mut cells_by_pos: FxHashMap<(u32, u32), CellData> = FxHashMap::default();
-    // Iterate all cells registered in the grid index.
-    if let Some(grid) = grid {
-        profile.counter("grid_cells", grid.cells().count() as u64);
-        for (cell_id, row, col) in grid.cells() {
+    if let Some(sheet) = cell_store.get_sheet(sheet_id) {
+        profile.counter("registered_cells", sheet.cells().count() as u64);
+        for (cell_id, row, col) in sheet.cells() {
             if let Some(mut cell) = build_cell_data_for_cell_id(
                 stores,
-                mirror,
+                cell_store,
                 sheet_id,
                 &cell_id,
                 row,
@@ -43,51 +39,13 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                 &formula_metadata,
                 &rich_strings,
                 palette,
-                false,
-            ) {
-                if cell.style_id.is_none() {
-                    cell.style_id =
-                        positional_style_id_at(stores, mirror, sheet_id, row, col, palette);
-                }
-                cells_by_pos.insert((row, col), cell);
-            }
-        }
-    }
-
-    if let Some(sheet) = sheet_mirror {
-        // Native authored entries can exist without an eagerly allocated grid CellId.
-        for (cell_id, _) in sheet.cells_iter() {
-            let Some(pos) = sheet.position_of(cell_id) else {
-                continue;
-            };
-            if cells_by_pos.contains_key(&(pos.row(), pos.col())) {
-                continue;
-            }
-            if let Some(mut cell) = build_cell_data_for_cell_id(
-                stores,
-                mirror,
-                sheet_id,
-                cell_id,
-                pos.row(),
-                pos.col(),
-                &all_props,
-                &array_refs,
-                &formula_metadata,
-                &rich_strings,
-                palette,
                 cell_id.is_virtual(),
             ) {
                 if cell.style_id.is_none() {
-                    cell.style_id = positional_style_id_at(
-                        stores,
-                        mirror,
-                        sheet_id,
-                        pos.row(),
-                        pos.col(),
-                        palette,
-                    );
+                    cell.style_id =
+                        positional_style_id_at(stores, cell_store, sheet_id, row, col, palette);
                 }
-                cells_by_pos.insert((pos.row(), pos.col()), cell);
+                cells_by_pos.insert((row, col), cell);
             }
         }
 
@@ -104,7 +62,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                 None => {
                     let mut cell = range_payload_cell(row, col, value);
                     cell.style_id =
-                        positional_style_id_at(stores, mirror, sheet_id, row, col, palette);
+                        positional_style_id_at(stores, cell_store, sheet_id, row, col, palette);
                     cells_by_pos.insert((row, col), cell);
                 }
             }
@@ -121,7 +79,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                 std::collections::hash_map::Entry::Vacant(entry) => {
                     let mut cell = range_payload_cell(row, col, value);
                     cell.style_id =
-                        positional_style_id_at(stores, mirror, sheet_id, row, col, palette);
+                        positional_style_id_at(stores, cell_store, sheet_id, row, col, palette);
                     entry.insert(cell);
                 }
                 std::collections::hash_map::Entry::Occupied(mut entry) => {
@@ -165,7 +123,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                 }
 
                 let owned_by_source =
-                    cache_position_owned_by_source(mirror, sheet_id, cache, position);
+                    cache_position_owned_by_source(cell_store, sheet_id, cache, position);
                 if owned_by_source {
                     if let Some(existing) = cells_by_pos.get_mut(&key) {
                         merge_live_imported_cache_metadata(existing, cached);
@@ -174,7 +132,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                         // element. Retain its empty formula marker while using
                         // the current live value (never the stale cache value).
                         let mut marker = style_only_cell(cached);
-                        marker.value = mirror
+                        marker.value = cell_store
                             .get_cell_value_at(sheet_id, position)
                             .cloned()
                             .unwrap_or(CellValue::Null);
@@ -189,7 +147,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                         // value to materialize; this emits a styled blank and
                         // does not recreate a formula or stale cache payload.
                         let mut styled = style_only_cell(cached);
-                        styled.value = mirror
+                        styled.value = cell_store
                             .get_cell_value_at(sheet_id, position)
                             .cloned()
                             .unwrap_or(CellValue::Null);
@@ -213,7 +171,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
     }
 
     let sheet_uuid = sheet_id.to_uuid_string();
-    for pivot in mirror
+    for pivot in cell_store
         .all_pivot_tables()
         .iter()
         .filter(|pivot| pivot.sheet == sheet_uuid)
@@ -233,7 +191,7 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
 
         for row in pivot.start_row..=end_row {
             for col in pivot.start_col..=end_col {
-                let Some(value) = mirror.get_cell_value_at(sheet_id, SheetPos::new(row, col))
+                let Some(value) = cell_store.get_cell_value_at(sheet_id, SheetPos::new(row, col))
                 else {
                     continue;
                 };
@@ -259,18 +217,18 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
 }
 
 fn cache_position_owned_by_source(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     cache: &crate::imported_array_cache::ImportedArrayCache,
     position: SheetPos,
 ) -> bool {
-    mirror
+    cell_store
         .projection_registry
         .resolve(sheet_id, position.row(), position.col())
         .is_some_and(|(owner, _, _)| owner == cache.source_id)
 }
 
-fn has_authored_cell_at(sheet: &crate::mirror::SheetMirror, position: SheetPos) -> bool {
+fn has_authored_cell_at(sheet: &crate::cells::SheetStore, position: SheetPos) -> bool {
     let Some(cell_id) = sheet.cell_id_at(position) else {
         return false;
     };
@@ -280,7 +238,7 @@ fn has_authored_cell_at(sheet: &crate::mirror::SheetMirror, position: SheetPos) 
         // comments, merges, or formula dependencies. They carry no authored
         // value and must not hide an imported spill cache. A virtual range
         // identity is authoritative only when it has a materialized entry.
-        .is_some_and(|entry| !entry.is_ghost() || cell_id.is_virtual())
+        .is_some_and(|_| !sheet.is_ghost(&cell_id) || cell_id.is_virtual())
 }
 
 fn is_empty_imported_formula_marker(cell: &CellData) -> bool {

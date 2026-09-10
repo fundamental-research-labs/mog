@@ -114,7 +114,7 @@ impl ComputeCore {
     /// dirty the source AND surface the cleared spill targets in the recalc result.
     ///
     /// IMPORTANT: this MUST NOT pre-set the source to `#SPILL!` before recalc.
-    /// Recalc compares the topo-evaluated new value against the mirror's stored
+    /// Recalc compares the topo-evaluated new value against the cell store's stored
     /// old value to decide whether to emit a `CellChange`; pre-setting `#SPILL!`
     /// makes that comparison `Spill == Spill` and silently drops the anchor
     /// transition out of `changed_cells`, leaving the viewport buffer with the
@@ -124,18 +124,18 @@ impl ComputeCore {
     /// (the prior `Array(...)`) makes the change visible to the wire patches.
     pub(super) fn invalidate_projection_at(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         sheet_id: &SheetId,
         row: u32,
         col: u32,
         cell_id: CellId,
     ) -> Option<(CellId, Projection)> {
-        let (proj_source, _, _) = mirror.projection_registry.resolve(sheet_id, row, col)?;
+        let (proj_source, _, _) = cell_store.projection_registry.resolve(sheet_id, row, col)?;
         if proj_source == cell_id {
             return None;
         }
-        let old_proj = mirror.projection_registry.remove(&proj_source)?;
-        mirror.clear_materialization(
+        let old_proj = cell_store.projection_registry.remove(&proj_source)?;
+        cell_store.clear_materialization(
             &old_proj.sheet,
             old_proj.origin_row,
             old_proj.origin_col,
@@ -150,11 +150,11 @@ impl ComputeCore {
     /// emit a teardown `ProjectionChange` into the recalc result.
     pub(super) fn clear_projection_for_cell(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         cell_id: &CellId,
     ) -> Option<Projection> {
-        let old_proj = mirror.projection_registry.remove(cell_id)?;
-        mirror.clear_materialization(
+        let old_proj = cell_store.projection_registry.remove(cell_id)?;
+        cell_store.clear_materialization(
             &old_proj.sheet,
             old_proj.origin_row,
             old_proj.origin_col,
@@ -186,7 +186,7 @@ impl ComputeCore {
     /// Cell(source) edges for future incremental recalcs.
     pub(super) fn projection_stabilize(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         deltas: &[ProjectionDelta],
         deadline: &super::recalc::Deadline,
         depth: usize,
@@ -270,7 +270,7 @@ impl ComputeCore {
             .iter()
             .filter_map(|&cell_id| {
                 let entry = self.ast_cache.get(&cell_id)?.clone();
-                let sheet_id = mirror.sheet_for_cell(&cell_id)?;
+                let sheet_id = cell_store.sheet_for_cell(&cell_id)?;
                 Some((cell_id, entry, sheet_id))
             })
             .collect();
@@ -278,11 +278,11 @@ impl ComputeCore {
         {
             let mut batch = self.graph.batch_mutations();
             for (cell_id, entry, sheet_id) in &dep_inputs {
-                let current_row = mirror.resolve_position(cell_id).map(|pos| pos.row());
+                let current_row = cell_store.resolve_position(cell_id).map(|pos| pos.row());
                 let extracted = extract_deps_and_volatility(
                     &entry.ast,
                     sheet_id,
-                    mirror,
+                    cell_store,
                     &ordered_sheets,
                     current_row,
                 );
@@ -303,7 +303,7 @@ impl ComputeCore {
         let mut spill_metrics = RecalcMetrics::default();
         let (stab_changes, stab_projection_changes, stab_errors, more_deltas, _spill_cycles) = self
             .topo_evaluate_pass(
-                mirror,
+                cell_store,
                 &correction_cells,
                 deadline,
                 epoch_range_store,
@@ -313,7 +313,7 @@ impl ComputeCore {
         // 5. If more projection deltas occurred, recurse
         if !more_deltas.is_empty() {
             let (recursive_changes, recursive_proj, recursive_errors) = self.projection_stabilize(
-                mirror,
+                cell_store,
                 &more_deltas,
                 deadline,
                 depth + 1,
@@ -339,7 +339,7 @@ impl ComputeCore {
     /// Projection deltas (old/new shape changes) are appended to `projection_deltas`.
     pub(super) fn apply_spill_handling_with_deltas(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         cell_id: CellId,
         sheet_id: SheetId,
         new_value: &mut CellValue,
@@ -350,11 +350,11 @@ impl ComputeCore {
         // its imported package cache before dependents run so a shrink,
         // growth, or #SPILL! result cannot expose old child values during the
         // same recalc pass.
-        if let Some(source_pos) = mirror.resolve_position(&cell_id) {
-            mirror.invalidate_imported_array_caches_at(std::iter::once((sheet_id, source_pos)));
+        if let Some(source_pos) = cell_store.resolve_position(&cell_id) {
+            cell_store.invalidate_imported_array_caches_at(std::iter::once((sheet_id, source_pos)));
         }
         // Snapshot old projection state for delta tracking
-        let old_proj = mirror.projection_registry.get(&cell_id).cloned();
+        let old_proj = cell_store.projection_registry.get(&cell_id).cloned();
 
         #[cfg(feature = "journal")]
         {
@@ -365,12 +365,12 @@ impl ComputeCore {
             });
         }
 
-        use crate::mirror::cell_metadata::FormulaResultMode;
-        let imported_mode = mirror.formula_result_mode(&cell_id);
+        use crate::cells::cell_metadata::FormulaResultMode;
+        let imported_mode = cell_store.formula_result_mode(&cell_id);
         // Fixed CSE output dimensions are authored state, unlike a dynamic
         // formula's last successful spill range. Crop/pad to that declaration.
         if imported_mode == Some(FormulaResultMode::Cse)
-            && let Some((rows, cols)) = mirror.declared_array_extent(&cell_id)
+            && let Some((rows, cols)) = cell_store.declared_array_extent(&cell_id)
         {
             let mut values = Vec::with_capacity(rows as usize * cols as usize);
             for row in 0..rows as usize {
@@ -397,8 +397,8 @@ impl ComputeCore {
                 // as a 1×1 array formula (t="array" ref="X1:X1"), it must NOT spill
                 // regardless of is_dynamic_array. Apply implicit intersection.
                 let is_cse_single = imported_mode != Some(FormulaResultMode::Dynamic)
-                    && mirror.cse_single_cell.contains(&cell_id);
-                let is_cse_multi = mirror.is_cse_anchor(&cell_id);
+                    && cell_store.cse_single_cell.contains(&cell_id);
+                let is_cse_multi = cell_store.is_cse_anchor(&cell_id);
                 let should_intersect = match imported_mode {
                     Some(FormulaResultMode::LegacyScalar) => true,
                     Some(FormulaResultMode::Dynamic | FormulaResultMode::Cse) => false,
@@ -427,8 +427,8 @@ impl ComputeCore {
                     }
                     // Implicit intersection: extract [0][0] (top-left value).
                     // Clear projection registry for implicit intersection
-                    if let Some(old_proj) = mirror.projection_registry.remove(&cell_id) {
-                        mirror.clear_materialization(
+                    if let Some(old_proj) = cell_store.projection_registry.remove(&cell_id) {
+                        cell_store.clear_materialization(
                             &old_proj.sheet,
                             old_proj.origin_row,
                             old_proj.origin_col,
@@ -444,7 +444,7 @@ impl ComputeCore {
                     } else {
                         *new_value = CellValue::Null;
                     }
-                } else if let Some(origin_pos) = mirror.resolve_position(&cell_id) {
+                } else if let Some(origin_pos) = cell_store.resolve_position(&cell_id) {
                     let origin_row = origin_pos.row();
                     let origin_col = origin_pos.col();
                     #[cfg(feature = "journal")]
@@ -460,8 +460,13 @@ impl ComputeCore {
                         });
                     }
                     // Dynamic array formula: attempt to spill
-                    match mirror.projection_registry.check_conflict(
-                        &*mirror, &sheet_id, origin_row, origin_col, array_rows, array_cols,
+                    match cell_store.projection_registry.check_conflict(
+                        &*cell_store,
+                        &sheet_id,
+                        origin_row,
+                        origin_col,
+                        array_rows,
+                        array_cols,
                         &cell_id,
                     ) {
                         Ok(()) => {
@@ -483,14 +488,14 @@ impl ComputeCore {
                             // Emit a teardown ProjectionChange covering the OLD region first;
                             // the new projection's cells are pushed below and overwrite any
                             // overlap, leaving only the genuinely-vacated positions as Null.
-                            let cur_proj = mirror.projection_registry.get(&cell_id).cloned();
+                            let cur_proj = cell_store.projection_registry.get(&cell_id).cloned();
                             if let Some(ref old) = cur_proj
                                 && (old.rows != array_rows
                                     || old.cols != array_cols
                                     || old.origin_row != origin_row
                                     || old.origin_col != origin_col)
                             {
-                                mirror.clear_materialization(
+                                cell_store.clear_materialization(
                                     &old.sheet,
                                     old.origin_row,
                                     old.origin_col,
@@ -503,7 +508,7 @@ impl ComputeCore {
                             }
 
                             // Register the projection in the registry
-                            mirror.projection_registry.register(
+                            cell_store.projection_registry.register(
                                 cell_id, sheet_id, origin_row, origin_col, array_rows, array_cols,
                             );
                             #[cfg(feature = "journal")]
@@ -529,7 +534,7 @@ impl ComputeCore {
                                     },
                                 );
                             }
-                            mirror.materialize_projection(
+                            cell_store.materialize_projection(
                                 &sheet_id, origin_row, origin_col, new_value,
                             );
 
@@ -585,8 +590,9 @@ impl ComputeCore {
                                 });
                             }
                             // Conflict — clear existing projection, set #SPILL!
-                            if let Some(old_proj) = mirror.projection_registry.remove(&cell_id) {
-                                mirror.clear_materialization(
+                            if let Some(old_proj) = cell_store.projection_registry.remove(&cell_id)
+                            {
+                                cell_store.clear_materialization(
                                     &old_proj.sheet,
                                     old_proj.origin_row,
                                     old_proj.origin_col,
@@ -619,8 +625,8 @@ impl ComputeCore {
                     });
                 }
                 *new_value = arr.get(0, 0).cloned().unwrap_or(CellValue::Null);
-                if let Some(old_proj) = mirror.projection_registry.remove(&cell_id) {
-                    mirror.clear_materialization(
+                if let Some(old_proj) = cell_store.projection_registry.remove(&cell_id) {
+                    cell_store.clear_materialization(
                         &old_proj.sheet,
                         old_proj.origin_row,
                         old_proj.origin_col,
@@ -643,8 +649,8 @@ impl ComputeCore {
                     path: "clear_projection",
                 });
             }
-            if let Some(old_proj) = mirror.projection_registry.remove(&cell_id) {
-                mirror.clear_materialization(
+            if let Some(old_proj) = cell_store.projection_registry.remove(&cell_id) {
+                cell_store.clear_materialization(
                     &old_proj.sheet,
                     old_proj.origin_row,
                     old_proj.origin_col,
@@ -658,7 +664,7 @@ impl ComputeCore {
         }
 
         // --- Projection delta tracking ---
-        let new_proj = mirror.projection_registry.get(&cell_id).cloned();
+        let new_proj = cell_store.projection_registry.get(&cell_id).cloned();
         let shape_changed = match (&old_proj, &new_proj) {
             (None, None) => false,
             (Some(_), None) | (None, Some(_)) => true,
@@ -679,7 +685,7 @@ impl ComputeCore {
 
         #[cfg(feature = "journal")]
         {
-            let outcome = if mirror.projection_registry.get(&cell_id).is_some() {
+            let outcome = if cell_store.projection_registry.get(&cell_id).is_some() {
                 "spill_ok"
             } else if matches!(new_value, CellValue::Error(CellError::Spill, _)) {
                 "spill_conflict"

@@ -11,7 +11,7 @@ fn blank_cell_annotation_roundtrips_and_removes() {
     let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
-    let (_patches, result) = engine
+    let result = engine
         .set_cell_annotation_by_position(&sid, 5, 5, "Check blank cell")
         .expect("set cell annotation");
     let created = result
@@ -33,7 +33,7 @@ fn blank_cell_annotation_roundtrips_and_removes() {
     assert_eq!(record.status, AnnotationStatus::Fresh);
     assert_eq!(engine.list_cell_annotations(&sid).unwrap().len(), 1);
 
-    let (_patches, result) = engine
+    let result = engine
         .remove_cell_annotation_by_position(&sid, 5, 5)
         .expect("remove cell annotation");
     let deleted = result
@@ -98,7 +98,7 @@ fn table_annotation_uses_stable_table_id_across_rename() {
         .id
         .clone();
 
-    let (_patches, result) = engine
+    let result = engine
         .set_table_annotation("People", "Check source table")
         .expect("set table annotation");
     let created = result
@@ -154,7 +154,7 @@ fn copied_table_annotation_has_new_anchor_and_matching_native_fingerprint() {
     let source = engine.get_table_annotation("Annotated").unwrap().unwrap();
     let (copied_sheet, _) = engine.copy_sheet(&sid, "Annotated copy").unwrap();
     let copied_table = engine
-        .mirror()
+        .cell_store()
         .all_tables()
         .into_iter()
         .find(|table| table.sheet_id == copied_sheet)

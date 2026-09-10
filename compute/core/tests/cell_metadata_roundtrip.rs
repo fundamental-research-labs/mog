@@ -90,7 +90,7 @@ fn workbook() -> Vec<u8> {
 }
 
 fn check(engine: &ComputeEngine, expected: &[CellValue]) {
-    let sheet = *engine.mirror().sheet_ids().next().unwrap();
+    let sheet = *engine.cell_store().sheet_ids().next().unwrap();
     for (row, expected) in expected.iter().enumerate() {
         assert_eq!(
             engine.get_cell_value(&sheet, row as u32, 1),
@@ -124,9 +124,9 @@ fn cell_reads_imported_metadata_then_live_edits_and_reload() {
             CellValue::number(20.0),
         ],
     );
-    let sheet = *engine.mirror().sheet_ids().next().unwrap();
+    let sheet = *engine.cell_store().sheet_ids().next().unwrap();
     let cell = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&sheet, cell_types::SheetPos::new(0, 0))
         .unwrap();
     engine
@@ -205,12 +205,12 @@ fn cell_reads_imported_metadata_then_live_edits_and_reload() {
     reloaded.recalculate().unwrap();
     check(&reloaded, &expected);
     // Removing a live direct layer must reveal the inherited row layer.
-    let sheet = *reloaded.mirror().sheet_ids().next().unwrap();
+    let sheet = *reloaded.cell_store().sheet_ids().next().unwrap();
     reloaded
         .set_cell_value_as_text(&sheet, 19, 0, "row label")
         .unwrap();
     let cell = reloaded
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&sheet, cell_types::SheetPos::new(19, 0))
         .unwrap();
     reloaded
@@ -239,7 +239,7 @@ fn cell_reads_imported_metadata_then_live_edits_and_reload() {
 #[test]
 fn cell_width_uses_supplied_metrics_after_document_reload_and_rebuild() {
     let (mut source, _) = ComputeEngine::from_xlsx_bytes(&workbook()).unwrap();
-    let sheet = *source.mirror().sheet_ids().next().unwrap();
+    let sheet = *source.cell_store().sheet_ids().next().unwrap();
     source.set_col_width_chars(&sheet, 0, 8.95).unwrap();
     let bytes = source.export_to_xlsx_bytes().unwrap();
     for (mdw, expected) in [(7.0, 8.0), (14.0, 9.0)] {
@@ -252,7 +252,7 @@ fn cell_width_uses_supplied_metrics_after_document_reload_and_rebuild() {
         // Reload through public XLSX import so column metadata is hydrated
         // alongside formulas using the engine's supplied layout metrics.
         engine.import_from_xlsx_bytes(&bytes, true).unwrap();
-        let sheet = *engine.mirror().sheet_ids().next().unwrap();
+        let sheet = *engine.cell_store().sheet_ids().next().unwrap();
         assert_eq!(
             engine.get_cell_value(&sheet, 5, 1),
             CellValue::number(expected),

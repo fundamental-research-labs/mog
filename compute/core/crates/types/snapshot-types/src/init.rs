@@ -2,7 +2,6 @@
 //!
 //! Two serialization paths, chosen by the caller at the IPC boundary:
 //! - **JSON path** ([`WorkbookSnapshot`]): String UUIDs, parsed at boundary via `uuid::Uuid`.
-//!   Used by Tauri commands (default).
 //! - **Bincode path** ([`WorkbookSnapshotBin`]): Raw u128 IDs directly, no UUID string
 //!   parsing overhead. Used for large workbooks where UUID parsing is measurable.
 
@@ -231,7 +230,7 @@ pub type SnapshotAxisIdentityRun = AxisIdentityRun;
 /// Snapshot contract for one compact axis run span reference.
 pub type SnapshotAxisIdentityRunRef = AxisIdentityRunRef;
 
-// === JSON path (Tauri command default) ===
+// === JSON path ===
 
 /// Full workbook snapshot for init (JSON path — string IDs).
 #[derive(Debug, Clone, Serialize, Deserialize)]

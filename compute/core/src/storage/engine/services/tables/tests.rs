@@ -65,37 +65,9 @@ mod tests {
             .id
     }
 
-    fn set_people_data(engine: &mut ComputeEngine, sid: SheetId) {
-        engine
-            .batch_set_cells_by_position(
-                vec![
-                    (
-                        sid,
-                        0,
-                        0,
-                        CellInput::Parse {
-                            text: "Name".into(),
-                        },
-                    ),
-                    (
-                        sid,
-                        1,
-                        0,
-                        CellInput::Parse {
-                            text: "Alice".into(),
-                        },
-                    ),
-                    (sid, 0, 1, CellInput::Parse { text: "Age".into() }),
-                    (sid, 1, 1, CellInput::Parse { text: "30".into() }),
-                ],
-                false,
-            )
-            .expect("set people data");
-    }
-
     fn cell_value(engine: &ComputeEngine, sid: SheetId, row: u32, col: u32) -> Option<CellValue> {
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sid, SheetPos::new(row, col))
             .cloned()
     }
@@ -104,13 +76,13 @@ mod tests {
     fn delete_missing_table_preserves_empty_catalog() {
         let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         engine.delete_table("DoesNotExist").unwrap();
-        assert!(engine.mirror.all_tables().is_empty());
+        assert!(engine.cell_store.all_tables().is_empty());
     }
 
     fn reload_native_snapshot(engine: &mut ComputeEngine) {
         let snapshot = crate::storage::engine::construction::build_workbook_snapshot(
             &engine.stores,
-            &engine.mirror,
+            &engine.cell_store,
         );
         assert!(
             snapshot.tables.is_empty(),
@@ -251,7 +223,7 @@ mod tests {
             )
             .expect("create_table");
 
-        // Verify the table is in the mirror
+        // Verify the table is in the cell store
         assert_eq!(engine.get_all_tables_in_sheet(&sid).len(), 1);
 
         reload_native_snapshot(&mut engine);
@@ -316,11 +288,11 @@ mod tests {
 
         assert!(
             engine.get_table_by_name("Table1").is_none(),
-            "convert_to_range must remove the table from the mirror"
+            "convert_to_range must remove the table from the cell_store"
         );
         assert!(
             engine
-                .mirror
+                .cell_store
                 .all_tables()
                 .iter()
                 .all(|table| table.id != table_id_before_convert)
@@ -350,11 +322,11 @@ mod tests {
 
         assert!(
             engine.get_table_by_name("Table1").is_none(),
-            "delete_table must remove the table from the mirror"
+            "delete_table must remove the table from the cell_store"
         );
         assert!(
             engine
-                .mirror
+                .cell_store
                 .all_tables()
                 .iter()
                 .all(|table| table.id != table_id)

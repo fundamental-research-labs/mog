@@ -26,7 +26,7 @@ pub(crate) struct ViewportRegistration {
 /// This is the first sub-struct extracted from `ComputeEngine` to reduce
 /// god-object field sprawl. Both fields are exclusively used by viewport
 /// rendering / patch production and have zero entanglement with the mutation
-/// pipeline or CellMirror.
+/// pipeline or CellStore.
 ///
 /// ## Interior mutability
 ///

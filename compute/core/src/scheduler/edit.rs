@@ -22,7 +22,7 @@ impl ComputeCore {
     /// [`ComputeError::PartialArrayWrite`].
     pub fn set_cell<I: Into<CellInput>>(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         sheet_id: &SheetId,
         cell_id: CellId,
         row: u32,
@@ -37,8 +37,8 @@ impl ComputeCore {
         // down the whole array). Both `set_cell` and the batch path
         // `set_cells` route through it; production user edits go
         // through `set_cells`.
-        check_region_partial_write(mirror, sheet_id, cell_id, row, col, &input)?;
-        self.set_cell_inner(mirror, sheet_id, cell_id, row, col, input)
+        check_region_partial_write(cell_store, sheet_id, cell_id, row, col, &input)?;
+        self.set_cell_inner(cell_store, sheet_id, cell_id, row, col, input)
     }
 
     /// Internal: skips the CSE-anchor partial-write check.
@@ -46,19 +46,19 @@ impl ComputeCore {
     /// (which establishes the anchor itself).
     fn set_cell_inner(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         sheet_id: &SheetId,
         cell_id: CellId,
         row: u32,
         col: u32,
         input: CellInput,
     ) -> Result<RecalcResult, ComputeError> {
-        self.ensure_graph_built(mirror)?;
+        self.ensure_graph_built(cell_store)?;
         let (extra, teardown_pcs) =
-            self.process_input(mirror, sheet_id, cell_id, row, col, &input, false);
+            self.process_input(cell_store, sheet_id, cell_id, row, col, &input, false);
         let mut dirty = vec![cell_id];
         dirty.extend(extra);
-        let mut result = self.recalc(mirror, &dirty)?;
+        let mut result = self.recalc(cell_store, &dirty)?;
         super::spill::append_filtered_teardowns(&mut result, teardown_pcs);
         Ok(result)
     }
@@ -73,7 +73,7 @@ impl ComputeCore {
     /// to [`set_cell`].
     pub fn set_cell_with_target<I: Into<CellInput>>(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         sheet_id: &SheetId,
         cell_id: CellId,
         row: u32,
@@ -82,13 +82,14 @@ impl ComputeCore {
         target: Option<compute_formats::FormatType>,
     ) -> Result<RecalcResult, ComputeError> {
         let input = input.into();
-        check_region_partial_write(mirror, sheet_id, cell_id, row, col, &input)?;
-        self.ensure_graph_built(mirror)?;
-        let (extra, teardown_pcs) = self
-            .process_input_with_target(mirror, sheet_id, cell_id, row, col, &input, false, target);
+        check_region_partial_write(cell_store, sheet_id, cell_id, row, col, &input)?;
+        self.ensure_graph_built(cell_store)?;
+        let (extra, teardown_pcs) = self.process_input_with_target(
+            cell_store, sheet_id, cell_id, row, col, &input, false, target,
+        );
         let mut dirty = vec![cell_id];
         dirty.extend(extra);
-        let mut result = self.recalc(mirror, &dirty)?;
+        let mut result = self.recalc(cell_store, &dirty)?;
         super::spill::append_filtered_teardowns(&mut result, teardown_pcs);
         Ok(result)
     }
@@ -109,7 +110,7 @@ impl ComputeCore {
     /// `formula` is the formula body — leading `=` is optional.
     pub fn set_array_formula(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         sheet_id: &SheetId,
         anchor_id: CellId,
         top_row: u32,
@@ -136,12 +137,12 @@ impl ComputeCore {
         // Use `projections_in_range` so the check is O(num_projections)
         // rather than O(rows * cols). Any overlapping projection whose
         // source is registered as a CSE anchor (i.e. exists in
-        // `mirror.cse_anchors`) is a blocker, except the anchor we are
+        // `cell_store.cse_anchors`) is a blocker, except the anchor we are
         // about to re-establish — self-overlap is resolved below by
         // tearing down the prior registration.
         let new_end_row = bottom_row + 1;
         let new_end_col = right_col + 1;
-        for proj in mirror.projection_registry.projections_in_range(
+        for proj in cell_store.projection_registry.projections_in_range(
             sheet_id,
             top_row,
             left_col,
@@ -151,13 +152,13 @@ impl ComputeCore {
             if proj.source == anchor_id {
                 continue; // self-overlap → tear down + re-install below
             }
-            if !mirror.is_cse_anchor(&proj.source) {
+            if !cell_store.is_cse_anchor(&proj.source) {
                 continue; // dynamic-array spill, not a CSE blocker
             }
             // First overlapping CSE wins for the error report. The
             // anchor row/col reported is the existing CSE's anchor —
             // that's what the user-facing error message points at.
-            let existing_anchor_pos = mirror
+            let existing_anchor_pos = cell_store
                 .resolve_position(&proj.source)
                 .map(|p| (p.row(), p.col()))
                 .unwrap_or((proj.origin_row, proj.origin_col));
@@ -171,12 +172,12 @@ impl ComputeCore {
         }
         // Tear down any prior CSE registration on this anchor — we
         // re-establish it below with the (possibly new) extent.
-        mirror.cse_single_cell.remove(&anchor_id);
+        cell_store.cse_single_cell.remove(&anchor_id);
         let is_multi_cell = bottom_row > top_row || right_col > left_col;
         if is_multi_cell {
-            mirror.mark_cse_anchor(anchor_id);
+            cell_store.mark_cse_anchor(anchor_id);
         } else {
-            mirror.unmark_cse_anchor(&anchor_id);
+            cell_store.unmark_cse_anchor(&anchor_id);
         }
 
         // Normalize the formula string to canonical `=<body>` form so
@@ -192,8 +193,9 @@ impl ComputeCore {
         // Run the formula through the regular pipeline. The scheduler
         // already produces an `Array` value for array-returning
         // formulas and registers the projection in
-        // `mirror.projection_registry` via the spill handler.
-        let result = self.set_cell_inner(mirror, sheet_id, anchor_id, top_row, left_col, input)?;
+        // `cell_store.projection_registry` via the spill handler.
+        let result =
+            self.set_cell_inner(cell_store, sheet_id, anchor_id, top_row, left_col, input)?;
 
         // Mark this cell as a CSE anchor *after* recalc so the
         // process_input projection-cleanup branch (which clears any
@@ -204,9 +206,9 @@ impl ComputeCore {
         let rows = bottom_row - top_row + 1;
         let cols = right_col - left_col + 1;
         if rows == 1 && cols == 1 {
-            mirror.cse_single_cell.insert(anchor_id);
+            cell_store.cse_single_cell.insert(anchor_id);
         }
-        mirror.mark_cse_anchor(anchor_id);
+        cell_store.mark_cse_anchor(anchor_id);
 
         // Spill registration is best-effort: if the formula's actual
         // array result didn't cover the requested extent, the
@@ -216,7 +218,7 @@ impl ComputeCore {
         // projection registry to match the requested extent so
         // partial-array rejection covers exactly the cells the user
         // selected, even when the result is a scalar.
-        mirror
+        cell_store
             .projection_registry
             .register(anchor_id, *sheet_id, top_row, left_col, rows, cols);
         Ok(result)
@@ -229,12 +231,12 @@ impl ComputeCore {
     /// because the topological sort in `recalc()` will catch any cycles.
     pub fn set_cells(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         edits: &[(SheetId, CellId, u32, u32, CellInput)],
         skip_cycle_check: bool,
     ) -> Result<RecalcResult, ComputeError> {
-        self.validate_region_partial_writes(mirror, edits)?;
-        self.ensure_graph_built(mirror)?;
+        self.validate_region_partial_writes(cell_store, edits)?;
+        self.ensure_graph_built(cell_store)?;
 
         // Pass 2: apply edits. `check_region_partial_write` is the
         // per-cell safety net — anchor-Clear tears down the CSE;
@@ -243,9 +245,9 @@ impl ComputeCore {
         let mut changed = Vec::with_capacity(edits.len());
         let mut teardown_pcs: Vec<ProjectionChange> = Vec::new();
         for (sheet_id, cell_id, row, col, input) in edits {
-            check_region_partial_write(mirror, sheet_id, *cell_id, *row, *col, input)?;
+            check_region_partial_write(cell_store, sheet_id, *cell_id, *row, *col, input)?;
             let (extra, pcs) = self.process_input(
-                mirror,
+                cell_store,
                 sheet_id,
                 *cell_id,
                 *row,
@@ -257,7 +259,7 @@ impl ComputeCore {
             changed.extend(extra);
             teardown_pcs.extend(pcs);
         }
-        let mut result = self.recalc(mirror, &changed)?;
+        let mut result = self.recalc(cell_store, &changed)?;
         super::spill::append_filtered_teardowns(&mut result, teardown_pcs);
         Ok(result)
     }
@@ -272,7 +274,7 @@ impl ComputeCore {
     /// format-blind [`set_cells`] behaviour.
     pub fn set_cells_with_targets(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         edits: &[(SheetId, CellId, u32, u32, CellInput)],
         targets: &[Option<compute_formats::FormatType>],
         skip_cycle_check: bool,
@@ -282,12 +284,12 @@ impl ComputeCore {
             .copied()
             .map(crate::storage::cells::values::InputParseContext::default_for_target)
             .collect();
-        self.set_cells_with_contexts(mirror, edits, &contexts, skip_cycle_check)
+        self.set_cells_with_contexts(cell_store, edits, &contexts, skip_cycle_check)
     }
 
     pub(crate) fn set_cells_with_contexts(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         edits: &[(SheetId, CellId, u32, u32, CellInput)],
         contexts: &[crate::storage::cells::values::InputParseContext],
         skip_cycle_check: bool,
@@ -298,15 +300,15 @@ impl ComputeCore {
             "set_cells_with_contexts: contexts length must match edits length"
         );
 
-        self.validate_region_partial_writes(mirror, edits)?;
-        self.ensure_graph_built(mirror)?;
+        self.validate_region_partial_writes(cell_store, edits)?;
+        self.ensure_graph_built(cell_store)?;
 
         let mut changed = Vec::with_capacity(edits.len());
         let mut teardown_pcs: Vec<ProjectionChange> = Vec::new();
         for (idx, (sheet_id, cell_id, row, col, input)) in edits.iter().enumerate() {
-            check_region_partial_write(mirror, sheet_id, *cell_id, *row, *col, input)?;
+            check_region_partial_write(cell_store, sheet_id, *cell_id, *row, *col, input)?;
             let (extra, pcs) = self.process_input_with_context(
-                mirror,
+                cell_store,
                 sheet_id,
                 *cell_id,
                 *row,
@@ -319,7 +321,7 @@ impl ComputeCore {
             changed.extend(extra);
             teardown_pcs.extend(pcs);
         }
-        let mut result = self.recalc(mirror, &changed)?;
+        let mut result = self.recalc(cell_store, &changed)?;
         super::spill::append_filtered_teardowns(&mut result, teardown_pcs);
         Ok(result)
     }
@@ -345,7 +347,7 @@ impl ComputeCore {
     /// [`set_cells`].
     pub fn set_cells_raw(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         edits: &[(SheetId, CellId, u32, u32, CellValue, Option<String>)],
         skip_cycle_check: bool,
     ) -> Result<RecalcResult, ComputeError> {
@@ -353,7 +355,12 @@ impl ComputeCore {
         // `TrustedReplay`. Callers that originate from user-driven paths
         // MUST migrate to `set_cells_raw_with_trust(WriteTrust::UserEdit)`.
         // See `WriteTrust` for the Stream A′ rationale.
-        self.set_cells_raw_with_trust(mirror, edits, skip_cycle_check, WriteTrust::TrustedReplay)
+        self.set_cells_raw_with_trust(
+            cell_store,
+            edits,
+            skip_cycle_check,
+            WriteTrust::TrustedReplay,
+        )
     }
 
     /// Value-typed batch write with explicit trust marker (Stream A′).
@@ -366,7 +373,7 @@ impl ComputeCore {
     /// upstream op already cleared the guard.
     pub fn set_cells_raw_with_trust(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         edits: &[(SheetId, CellId, u32, u32, CellValue, Option<String>)],
         skip_cycle_check: bool,
         trust: WriteTrust,
@@ -376,15 +383,15 @@ impl ComputeCore {
         // there's no `CellInput::Clear` discriminator, so any value-write
         // into a guarded region is treated as a partial write.
         if matches!(trust, WriteTrust::UserEdit) {
-            self.validate_raw_user_edit_region_writes(mirror, edits)?;
+            self.validate_raw_user_edit_region_writes(cell_store, edits)?;
         }
-        self.ensure_graph_built(mirror)?;
+        self.ensure_graph_built(cell_store)?;
 
         let mut changed = Vec::with_capacity(edits.len());
         let mut teardown_pcs: Vec<ProjectionChange> = Vec::new();
         for (sheet_id, cell_id, row, col, value, formula) in edits {
             let (extra, pcs) = self.process_value_input(
-                mirror,
+                cell_store,
                 sheet_id,
                 *cell_id,
                 *row,
@@ -397,7 +404,7 @@ impl ComputeCore {
             changed.extend(extra);
             teardown_pcs.extend(pcs);
         }
-        let mut result = self.recalc(mirror, &changed)?;
+        let mut result = self.recalc(cell_store, &changed)?;
         super::spill::append_filtered_teardowns(&mut result, teardown_pcs);
         Ok(result)
     }
@@ -410,11 +417,11 @@ impl ComputeCore {
     /// will catch any cycles. Skipping saves O(N * edges * graph_depth) work.
     pub fn apply_changes(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         changes: &[CellEdit],
         skip_cycle_check: bool,
     ) -> Result<RecalcResult, ComputeError> {
-        self.ensure_graph_built(mirror)?;
+        self.ensure_graph_built(cell_store)?;
         let mut changed = Vec::with_capacity(changes.len());
         let mut teardown_pcs: Vec<ProjectionChange> = Vec::new();
         for edit in changes {
@@ -423,7 +430,7 @@ impl ComputeCore {
 
             // Projection invalidation
             if let Some((proj_source, old_proj)) =
-                self.invalidate_projection_at(mirror, &sheet_id, edit.row, edit.col, cell_id)
+                self.invalidate_projection_at(cell_store, &sheet_id, edit.row, edit.col, cell_id)
             {
                 changed.push(proj_source);
                 if let Some(pc) =
@@ -434,14 +441,14 @@ impl ComputeCore {
             }
 
             // Projection cleanup: if this cell has a registered projection, clear it
-            if let Some(old_proj) = self.clear_projection_for_cell(mirror, &cell_id)
+            if let Some(old_proj) = self.clear_projection_for_cell(cell_store, &cell_id)
                 && let Some(pc) = super::spill::build_teardown_projection_change(cell_id, &old_proj)
             {
                 teardown_pcs.push(pc);
             }
 
-            // Apply edit to mirror with IdentityFormula from CellEdit when available.
-            mirror.apply_edit(
+            // Apply edit to cell_store with IdentityFormula from CellEdit when available.
+            cell_store.apply_edit(
                 &sheet_id,
                 cell_id,
                 SheetPos::new(edit.row, edit.col),
@@ -452,7 +459,7 @@ impl ComputeCore {
             // If there's a formula, parse and register it
             if let Some(formula) = &edit.formula {
                 self.parse_and_register_formula(
-                    mirror,
+                    cell_store,
                     cell_id,
                     sheet_id,
                     formula.clone(),
@@ -460,12 +467,12 @@ impl ComputeCore {
                 );
             } else {
                 // Plain value — remove own formula deps, keep dependents intact
-                self.clear_formula_deps(mirror, cell_id);
+                self.clear_formula_deps(cell_store, cell_id);
             }
 
             changed.push(cell_id);
         }
-        let mut result = self.recalc(mirror, &changed)?;
+        let mut result = self.recalc(cell_store, &changed)?;
         super::spill::append_filtered_teardowns(&mut result, teardown_pcs);
         Ok(result)
     }
@@ -478,10 +485,10 @@ impl ComputeCore {
     /// blockers.
     pub fn clear_cells(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         cell_ids: &[CellId],
     ) -> Result<RecalcResult, ComputeError> {
-        self.ensure_graph_built(mirror)?;
+        self.ensure_graph_built(cell_store)?;
         // First pass: if any cleared cell is a CSE member (not anchor),
         // collect the anchor cell IDs so the caller-issued list is
         // expanded to include them. Excel: Clear on any cell of a CSE
@@ -489,16 +496,17 @@ impl ComputeCore {
         let dynamic_sources_being_cleared: std::collections::HashSet<CellId> = cell_ids
             .iter()
             .filter(|cell_id| {
-                mirror.projection_registry.get(cell_id).is_some() && !mirror.is_cse_anchor(cell_id)
+                cell_store.projection_registry.get(cell_id).is_some()
+                    && !cell_store.is_cse_anchor(cell_id)
             })
             .copied()
             .collect();
         let mut expanded: Vec<CellId> = Vec::with_capacity(cell_ids.len());
         for cell_id in cell_ids {
-            if let Some(sheet_id) = mirror.sheet_for_cell(cell_id)
-                && let Some(pos) = mirror.resolve_position(cell_id)
+            if let Some(sheet_id) = cell_store.sheet_for_cell(cell_id)
+                && let Some(pos) = cell_store.resolve_position(cell_id)
                 && let Some((anchor_id, anchor_pos)) =
-                    mirror.dynamic_spill_member_covering(&sheet_id, pos.row(), pos.col())
+                    cell_store.dynamic_spill_member_covering(&sheet_id, pos.row(), pos.col())
             {
                 if dynamic_sources_being_cleared.contains(&anchor_id) {
                     continue;
@@ -514,10 +522,10 @@ impl ComputeCore {
             if !expanded.contains(cell_id) {
                 expanded.push(*cell_id);
             }
-            if let Some(sheet_id) = mirror.sheet_for_cell(cell_id)
-                && let Some(pos) = mirror.resolve_position(cell_id)
+            if let Some(sheet_id) = cell_store.sheet_for_cell(cell_id)
+                && let Some(pos) = cell_store.resolve_position(cell_id)
                 && let Some((anchor_id, _)) =
-                    mirror.cse_anchor_covering(&sheet_id, pos.row(), pos.col())
+                    cell_store.cse_anchor_covering(&sheet_id, pos.row(), pos.col())
                 && anchor_id != *cell_id
                 && !expanded.contains(&anchor_id)
             {
@@ -531,11 +539,11 @@ impl ComputeCore {
         for cell_id in cell_ids {
             // Tear down any CSE registration on this cell — clearing
             // the anchor cancels the array formula entirely.
-            mirror.unmark_cse_anchor(cell_id);
-            mirror.cse_single_cell.remove(cell_id);
+            cell_store.unmark_cse_anchor(cell_id);
+            cell_store.cse_single_cell.remove(cell_id);
 
             // If clearing a projection source, clean up its projection
-            if let Some(old_proj) = self.clear_projection_for_cell(mirror, cell_id)
+            if let Some(old_proj) = self.clear_projection_for_cell(cell_store, cell_id)
                 && let Some(pc) =
                     super::spill::build_teardown_projection_change(*cell_id, &old_proj)
             {
@@ -543,10 +551,15 @@ impl ComputeCore {
             }
 
             // If the cleared cell's position falls in a projection, invalidate its source
-            if let Some(sheet_id) = mirror.sheet_for_cell(cell_id)
-                && let Some(pos) = mirror.resolve_position(cell_id)
-                && let Some((proj_source, old_proj)) =
-                    self.invalidate_projection_at(mirror, &sheet_id, pos.row(), pos.col(), *cell_id)
+            if let Some(sheet_id) = cell_store.sheet_for_cell(cell_id)
+                && let Some(pos) = cell_store.resolve_position(cell_id)
+                && let Some((proj_source, old_proj)) = self.invalidate_projection_at(
+                    cell_store,
+                    &sheet_id,
+                    pos.row(),
+                    pos.col(),
+                    *cell_id,
+                )
             {
                 dirty.push(proj_source);
                 if let Some(pc) =
@@ -556,11 +569,11 @@ impl ComputeCore {
                 }
             }
 
-            // Set value to Null in mirror
-            mirror.set_value_mut(cell_id, CellValue::Null);
-            mirror.set_formula(cell_id, None);
+            // Set value to Null in cell_store
+            cell_store.set_value_mut(cell_id, CellValue::Null);
+            cell_store.set_formula(cell_id, None);
             // Remove own formula deps, keep dependents intact
-            self.clear_formula_deps(mirror, *cell_id);
+            self.clear_formula_deps(cell_store, *cell_id);
             dirty.push(*cell_id);
 
             // If this cell was blocking a spill projection, re-dirty the spill
@@ -570,7 +583,7 @@ impl ComputeCore {
                 dirty.push(spill_source);
             }
         }
-        let mut result = self.recalc(mirror, &dirty)?;
+        let mut result = self.recalc(cell_store, &dirty)?;
         super::spill::append_filtered_teardowns(&mut result, teardown_pcs);
         Ok(result)
     }
@@ -579,7 +592,7 @@ impl ComputeCore {
     ///
     /// **Identity-stable refs**: `CellRef::Resolved(CellId)` and
     /// `IdentityFormula` refs (which carry `CellId`s) auto-track position
-    /// shifts via the mirror — no rewrite needed for those.
+    /// shifts via the cell store — no rewrite needed for those.
     ///
     /// **Positional refs**: `CellRef::Positional { sheet, row, col }` in
     /// cached ASTs encode a snapshot position with no implicit shift, so
@@ -592,20 +605,20 @@ impl ComputeCore {
     /// referenced cells materialized (the formula reaches an empty cell).
     pub fn structure_change(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         change: Option<(&formula_types::StructureChange, SheetId)>,
     ) -> Result<RecalcResult, ComputeError> {
-        self.structure_change_with_formula_refresh(mirror, change, &[])
+        self.structure_change_with_formula_refresh(cell_store, change, &[])
     }
 
     pub fn structure_change_with_formula_refresh(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         change: Option<(&formula_types::StructureChange, SheetId)>,
         refresh_formula_cells: &[CellId],
     ) -> Result<RecalcResult, ComputeError> {
-        // NOTE: mirror.apply_structure_change() is NOT called here — the caller
-        // (StructuralOps) already updated the mirror before delegating to ComputeCore.
+        // NOTE: cell_store.apply_structure_change() is NOT called here — the caller
+        // (StructuralOps) already updated the cell store before delegating to ComputeCore.
         // Calling it again would double-shift cell positions.
 
         // Invalidate ALL workbook-lifetime caches. Structural changes shift row
@@ -613,7 +626,7 @@ impl ComputeCore {
         // sorted column caches, frequency caches, and bitmask caches (Tier 1).
         self.workbook_cache.clear_all();
 
-        // 2. Shift `CellRef::Positional` refs in every cached AST to mirror
+        // 2. Shift `CellRef::Positional` refs in every cached AST to cell_store
         //    the structural op. Refs in the deleted band collapse to
         //    `ASTNode::Error(CellError::Ref)` — producing `#REF!` propagation
         //    at eval time without depending on IdentityFormula display
@@ -632,21 +645,21 @@ impl ComputeCore {
         //    Since positions changed, the A1 representation changes. Refs that
         //    pointed at deleted cells render as `#REF!` (their backing
         //    CellId / RowId / ColId is unregistered after the structural op).
-        self.regenerate_formula_strings_and_cell_formula_text(mirror);
+        self.regenerate_formula_strings_and_cell_formula_text(cell_store);
 
         // 3.5. Reparse formulas whose identity refs were retargeted before
         //      the delete so evaluation uses the same references that
         //      structural display text now exposes.
-        self.refresh_ast_cache_from_formula_text(mirror, refresh_formula_cells);
+        self.refresh_ast_cache_from_formula_text(cell_store, refresh_formula_cells);
 
         // 4. Rebuild dep graph edges.
         //    Inserting/deleting between range corners changes the range
         //    extent; with positional refs already shifted in step 2, the
         //    dep graph rebuild lands on the correct precedent set.
-        self.rebuild_dep_graph_from_asts(mirror);
+        self.rebuild_dep_graph_from_asts(cell_store);
 
         // 5. Full recalc (safe: evaluates all formula cells)
-        self.full_recalc(mirror)
+        self.full_recalc(cell_store)
     }
 
     /// Walk the cached ASTs and apply `shift_ast_for_structure_change`.
@@ -681,16 +694,16 @@ impl ComputeCore {
 
     /// Reparse formula text for selected live cell formulas after structural
     /// display text has been regenerated.
-    fn refresh_ast_cache_from_formula_text(&mut self, mirror: &CellMirror, cell_ids: &[CellId]) {
+    fn refresh_ast_cache_from_formula_text(&mut self, cell_store: &CellStore, cell_ids: &[CellId]) {
         use crate::eval::GLOBAL_REGISTRY;
 
         let mut refreshed = Vec::new();
 
         for cell_id in cell_ids {
-            let Some(sheet_id) = mirror.sheet_for_cell(cell_id) else {
+            let Some(sheet_id) = cell_store.sheet_for_cell(cell_id) else {
                 continue;
             };
-            if mirror.get_formula(cell_id).is_none() {
+            if cell_store.get_formula(cell_id).is_none() {
                 continue;
             }
 
@@ -703,8 +716,8 @@ impl ComputeCore {
                 continue;
             };
 
-            let resolver = MirrorCellRefResolver {
-                mirror,
+            let resolver = StoreCellRefResolver {
+                cell_store,
                 current_sheet: sheet_id,
             };
             match parse_formula(&formula_text, Some(&resolver)) {
@@ -732,25 +745,22 @@ impl ComputeCore {
         }
     }
 
-    /// Regenerate all rendered `formula_strings` entries from CellEntry.formula
-    /// IdentityFormulas.
+    /// Regenerate rendered `formula_strings` from the native formula sidecar.
     ///
     /// Walks all sheets, finds cells with IdentityFormulas, and converts them back
-    /// to A1 notation using the mirror's current position mappings. This cache is
+    /// to A1 notation using the cell store's current position mappings. This cache is
     /// secondary to `cell_formula_text`: formula graph refresh must not replace
     /// authored formula text because rendering an IdentityFormula intentionally
     /// drops qualifiers that are implicit for the formula's owner sheet.
-    pub(crate) fn regenerate_formula_strings(&mut self, mirror: &CellMirror) {
+    pub(crate) fn regenerate_formula_strings(&mut self, cell_store: &CellStore) {
         self.formula_strings.clear();
-        let sheet_ids: Vec<SheetId> = mirror.sheet_ids().copied().collect();
+        let sheet_ids: Vec<SheetId> = cell_store.sheet_ids().copied().collect();
         for sheet_id in sheet_ids {
-            if let Some(sheet) = mirror.get_sheet(&sheet_id) {
-                let lookup = MirrorPositionLookup::new(mirror, sheet_id);
-                for (cell_id, entry) in sheet.cells_iter() {
-                    if let Some(formula) = &entry.formula {
-                        let a1 = compute_parser::to_a1_string(formula, &lookup);
-                        self.formula_strings.insert(*cell_id, a1);
-                    }
+            if let Some(sheet) = cell_store.get_sheet(&sheet_id) {
+                let lookup = StorePositionLookup::new(cell_store, sheet_id);
+                for (cell_id, formula) in &sheet.formulas {
+                    let a1 = compute_parser::to_a1_string(formula, &lookup);
+                    self.formula_strings.insert(*cell_id, a1);
                 }
             }
         }
@@ -764,35 +774,36 @@ impl ComputeCore {
     /// cache build. Rewrites preserve per-reference sheet qualifiers from the
     /// prior formula text, so `=Sheet1!A1` structurally shifts to `=Sheet1!A2`
     /// rather than collapsing to `=A2`.
-    pub(crate) fn regenerate_formula_strings_and_cell_formula_text(&mut self, mirror: &CellMirror) {
+    pub(crate) fn regenerate_formula_strings_and_cell_formula_text(
+        &mut self,
+        cell_store: &CellStore,
+    ) {
         let previous_formula_strings = std::mem::take(&mut self.formula_strings);
         let mut formula_text_updates: Vec<(CellId, String)> = Vec::new();
-        let sheet_ids: Vec<SheetId> = mirror.sheet_ids().copied().collect();
+        let sheet_ids: Vec<SheetId> = cell_store.sheet_ids().copied().collect();
         for sheet_id in sheet_ids {
-            if let Some(sheet) = mirror.get_sheet(&sheet_id) {
-                let lookup = MirrorPositionLookup::new(mirror, sheet_id);
-                for (cell_id, entry) in sheet.cells_iter() {
-                    if let Some(formula) = &entry.formula {
-                        let rendered = compute_parser::to_a1_string(formula, &lookup);
-                        let rendered_changed = previous_formula_strings
-                            .get(cell_id)
-                            .map_or(true, |previous| previous != &rendered);
-                        self.formula_strings.insert(*cell_id, rendered.clone());
+            if let Some(sheet) = cell_store.get_sheet(&sheet_id) {
+                let lookup = StorePositionLookup::new(cell_store, sheet_id);
+                for (cell_id, formula) in &sheet.formulas {
+                    let rendered = compute_parser::to_a1_string(formula, &lookup);
+                    let rendered_changed = previous_formula_strings
+                        .get(cell_id)
+                        .map_or(true, |previous| previous != &rendered);
+                    self.formula_strings.insert(*cell_id, rendered.clone());
 
-                        if rendered_changed || !self.cell_formula_text.contains_key(cell_id) {
-                            let rewritten = self
-                                .cell_formula_text
-                                .get(cell_id)
-                                .and_then(|previous_text| {
-                                    render_formula_text_with_previous_qualifiers(
-                                        formula,
-                                        &lookup,
-                                        previous_text,
-                                    )
-                                })
-                                .unwrap_or(rendered);
-                            formula_text_updates.push((*cell_id, rewritten));
-                        }
+                    if rendered_changed || !self.cell_formula_text.contains_key(cell_id) {
+                        let rewritten = self
+                            .cell_formula_text
+                            .get(cell_id)
+                            .and_then(|previous_text| {
+                                render_formula_text_with_previous_qualifiers(
+                                    formula,
+                                    &lookup,
+                                    previous_text,
+                                )
+                            })
+                            .unwrap_or(rendered);
+                        formula_text_updates.push((*cell_id, rewritten));
                     }
                 }
             }
@@ -803,45 +814,44 @@ impl ComputeCore {
     }
 
     /// Regenerate display formula text while a sheet is still present in the
-    /// mirror, but render references to that sheet as a deleted-sheet `#REF!`
+    /// cell_store, but render references to that sheet as a deleted-sheet `#REF!`
     /// prefix. This preserves the referenced row/column body (`#REF!$A$1`)
-    /// before the mirror loses the deleted sheet's position mappings.
+    /// before the cell store loses the deleted sheet's position mappings.
     pub(crate) fn regenerate_formula_strings_for_sheet_delete(
         &mut self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         deleted_sheet_id: &SheetId,
     ) {
         let previous_formula_strings = std::mem::take(&mut self.formula_strings);
         let mut formula_text_updates: Vec<(CellId, String)> = Vec::new();
-        let sheet_ids: Vec<SheetId> = mirror.sheet_ids().copied().collect();
+        let sheet_ids: Vec<SheetId> = cell_store.sheet_ids().copied().collect();
         for sheet_id in sheet_ids {
             if sheet_id == *deleted_sheet_id {
                 continue;
             }
-            if let Some(sheet) = mirror.get_sheet(&sheet_id) {
-                let lookup = DeletedSheetDisplayLookup::new(mirror, sheet_id, *deleted_sheet_id);
-                for (cell_id, entry) in sheet.cells_iter() {
-                    if let Some(formula) = &entry.formula {
-                        let rendered = compute_parser::to_a1_string(formula, &lookup);
-                        let rendered_changed = previous_formula_strings
-                            .get(cell_id)
-                            .map_or(true, |previous| previous != &rendered);
-                        self.formula_strings.insert(*cell_id, rendered.clone());
+            if let Some(sheet) = cell_store.get_sheet(&sheet_id) {
+                let lookup =
+                    DeletedSheetDisplayLookup::new(cell_store, sheet_id, *deleted_sheet_id);
+                for (cell_id, formula) in &sheet.formulas {
+                    let rendered = compute_parser::to_a1_string(formula, &lookup);
+                    let rendered_changed = previous_formula_strings
+                        .get(cell_id)
+                        .map_or(true, |previous| previous != &rendered);
+                    self.formula_strings.insert(*cell_id, rendered.clone());
 
-                        if rendered_changed || !self.cell_formula_text.contains_key(cell_id) {
-                            let rewritten = self
-                                .cell_formula_text
-                                .get(cell_id)
-                                .and_then(|previous_text| {
-                                    render_formula_text_with_previous_qualifiers(
-                                        formula,
-                                        &lookup,
-                                        previous_text,
-                                    )
-                                })
-                                .unwrap_or(rendered);
-                            formula_text_updates.push((*cell_id, rewritten));
-                        }
+                    if rendered_changed || !self.cell_formula_text.contains_key(cell_id) {
+                        let rewritten = self
+                            .cell_formula_text
+                            .get(cell_id)
+                            .and_then(|previous_text| {
+                                render_formula_text_with_previous_qualifiers(
+                                    formula,
+                                    &lookup,
+                                    previous_text,
+                                )
+                            })
+                            .unwrap_or(rendered);
+                        formula_text_updates.push((*cell_id, rewritten));
                     }
                 }
             }
@@ -856,26 +866,26 @@ impl ComputeCore {
     /// Clears the graph and re-extracts dependencies from all cached ASTs.
     /// This is needed after structural changes because range extents may have
     /// changed (e.g., inserting a row between range corners expands the range).
-    fn rebuild_dep_graph_from_asts(&mut self, mirror: &CellMirror) {
+    fn rebuild_dep_graph_from_asts(&mut self, cell_store: &CellStore) {
         self.graph.clear();
         self.formula_text_deps.clear_all();
 
         // Collect (cell_id, sheet_id, ast, is_dynamic_array) to avoid borrow conflicts.
-        // For regular cells, sheet_id comes from the mirror. For variable synthetic
+        // For regular cells, sheet_id comes from the cell store. For variable synthetic
         // CellIds, sheet_id comes from the variable's scope.
         let entries: Vec<(CellId, SheetId, ASTNode, bool)> = self
             .ast_cache
             .iter()
             .filter_map(|(cell_id, entry)| {
-                let sheet_id = if mirror.variables.is_variable(cell_id) {
+                let sheet_id = if cell_store.variables.is_variable(cell_id) {
                     // Variable: derive sheet from scope
-                    match mirror.variables.get_variable_by_cell_id(cell_id) {
+                    match cell_store.variables.get_variable_by_cell_id(cell_id) {
                         Some((formula_types::Scope::Sheet(s), _, _)) => *s,
                         _ => SheetId::from_raw(0),
                     }
                 } else {
-                    // Regular cell: look up in mirror
-                    mirror.sheet_for_cell(cell_id)?
+                    // Regular cell: look up in cell_store
+                    cell_store.sheet_for_cell(cell_id)?
                 };
                 Some((
                     *cell_id,
@@ -895,11 +905,11 @@ impl ComputeCore {
         {
             let mut batch = self.graph.batch_mutations();
             for (cell_id, sheet_id, ast, _) in &entries {
-                let current_row = mirror.resolve_position(cell_id).map(|pos| pos.row());
+                let current_row = cell_store.resolve_position(cell_id).map(|pos| pos.row());
                 let extracted = extract_deps_and_volatility(
                     ast,
                     sheet_id,
-                    mirror,
+                    cell_store,
                     &ordered_sheets,
                     current_row,
                 );
@@ -911,10 +921,10 @@ impl ComputeCore {
                 }
 
                 // Recompute range keys for this cell
-                let sheet_ctx = mirror.sheet_for_cell(cell_id);
+                let sheet_ctx = cell_store.sheet_for_cell(cell_id);
                 let mut plan = crate::eval::cache::range_store::DataPlan::default();
                 crate::eval::cache::range_store::collect_static_ranges_pub(
-                    ast, sheet_ctx, mirror, &mut plan,
+                    ast, sheet_ctx, cell_store, &mut plan,
                 );
                 if !plan.is_empty() {
                     self.cell_range_keys
@@ -944,14 +954,14 @@ fn render_formula_text_with_previous_qualifiers(
 }
 
 struct DeletedSheetDisplayLookup<'a> {
-    inner: MirrorPositionLookup<'a>,
+    inner: StorePositionLookup<'a>,
     deleted_sheet_id: SheetId,
 }
 
 impl<'a> DeletedSheetDisplayLookup<'a> {
-    fn new(mirror: &'a CellMirror, formula_sheet: SheetId, deleted_sheet_id: SheetId) -> Self {
+    fn new(cell_store: &'a CellStore, formula_sheet: SheetId, deleted_sheet_id: SheetId) -> Self {
         Self {
-            inner: MirrorPositionLookup::new(mirror, formula_sheet),
+            inner: StorePositionLookup::new(cell_store, formula_sheet),
             deleted_sheet_id,
         }
     }

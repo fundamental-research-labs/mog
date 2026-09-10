@@ -2,6 +2,7 @@
 //! aggregation primitives, and special-eval functions.
 
 pub(crate) mod aggregate;
+pub(crate) mod aggregate_range;
 pub(crate) mod collections;
 pub(crate) mod eval_primitives;
 pub(crate) mod eval_state;

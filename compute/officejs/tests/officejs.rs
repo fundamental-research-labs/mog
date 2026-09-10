@@ -5,6 +5,41 @@ use compute_api::Workbook;
 use mog::{OfficeJsError, run_office_js, run_office_js_with_workbook};
 
 #[test]
+fn a1_range_handle_reuses_resolved_bounds_across_reads_writes_and_syncs() {
+    let output = run_office_js(
+        r#"
+        return await Excel.run(async (context) => {
+            const sheet = context.workbook.worksheets.getItem("Sheet1");
+            const data = sheet.getRange("$b$2:$C$3");
+            data.values = [[1, 2], [3, 4]];
+            data.load("values");
+            await context.sync();
+            const before = data.values;
+            data.formulas = [["=10+1", 12], [13, "=B2+C2"]];
+            data.load("values,formulas");
+            await context.sync();
+            const calculated = data.values;
+            const formulas = data.formulas;
+            data.values = [[21, 22], [23, 24]];
+            data.load("values");
+            await context.sync();
+            return {before, calculated, formulas, after: data.values};
+        });
+    "#,
+    )
+    .unwrap();
+    assert_eq!(
+        output.value,
+        serde_json::json!({
+            "before": [[1, 2], [3, 4]],
+            "calculated": [[11, 12], [13, 23]],
+            "formulas": [["=10+1", 12], [13, "=B2+C2"]],
+            "after": [[21, 22], [23, 24]]
+        })
+    );
+}
+
+#[test]
 fn bulk_sync_and_subsequent_rust_edit_share_values_and_dependencies() {
     let (workbook, _) = Workbook::blank().unwrap();
     let first = run_office_js_with_workbook(

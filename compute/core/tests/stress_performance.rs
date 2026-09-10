@@ -4,7 +4,7 @@ mod stress_common;
 use stress_common::*;
 
 use cell_types::{CellId, SheetId};
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, CellEdit, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellError, CellValue};
@@ -22,7 +22,7 @@ use value_types::{CellError, CellValue};
 #[test]
 fn test_deep_500_cell_chain() {
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
 
     // Build all 500 cells in the snapshot
     let mut cell_data: Vec<CellData> = Vec::new();
@@ -74,15 +74,15 @@ fn test_deep_500_cell_chain() {
         calculation_settings: None,
     };
 
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Assert exact chain values: A1=1, A2=2, ..., A500=500
-    assert_mirror_number(&mirror, 0, 0, 0, 1.0); // A1
-    assert_mirror_number(&mirror, 0, 1, 0, 2.0); // A2
-    assert_mirror_number(&mirror, 0, 9, 0, 10.0); // A10
-    assert_mirror_number(&mirror, 0, 99, 0, 100.0); // A100
-    assert_mirror_number(&mirror, 0, 249, 0, 250.0); // A250
-    assert_mirror_number(&mirror, 0, 499, 0, 500.0); // A500
+    assert_store_number(&cell_store, 0, 0, 0, 1.0); // A1
+    assert_store_number(&cell_store, 0, 1, 0, 2.0); // A2
+    assert_store_number(&cell_store, 0, 9, 0, 10.0); // A10
+    assert_store_number(&cell_store, 0, 99, 0, 100.0); // A100
+    assert_store_number(&cell_store, 0, 249, 0, 250.0); // A250
+    assert_store_number(&cell_store, 0, 499, 0, 500.0); // A500
 
     // Linear, not exponential: changed_cells should be at most 501
     assert!(
@@ -101,24 +101,24 @@ fn test_deep_500_cell_chain() {
 #[test]
 fn test_no_leaked_state_200_edits() {
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![("Sheet1", 1000, 26, vec![])]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Set B1="=A1*2"
-    let _r = set(&mut core, &mut mirror, 0, 0, 1, "=A1*2");
+    let _r = set(&mut core, &mut cell_store, 0, 0, 1, "=A1*2");
     // Initially A1=0 (empty→0 for formula), B1=0
-    assert_mirror_number(&mirror, 0, 0, 1, 0.0);
+    assert_store_number(&cell_store, 0, 0, 1, 0.0);
 
     for i in 1u32..=200 {
-        let _r = set(&mut core, &mut mirror, 0, 0, 0, &i.to_string());
-        assert_mirror_number(&mirror, 0, 0, 0, i as f64);
-        assert_mirror_number(&mirror, 0, 0, 1, (2 * i) as f64);
+        let _r = set(&mut core, &mut cell_store, 0, 0, 0, &i.to_string());
+        assert_store_number(&cell_store, 0, 0, 0, i as f64);
+        assert_store_number(&cell_store, 0, 0, 1, (2 * i) as f64);
     }
 
     // Final state
-    assert_mirror_number(&mirror, 0, 0, 0, 200.0);
-    assert_mirror_number(&mirror, 0, 0, 1, 400.0);
+    assert_store_number(&cell_store, 0, 0, 0, 200.0);
+    assert_store_number(&cell_store, 0, 0, 1, 400.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +132,7 @@ fn test_no_leaked_state_200_edits() {
 #[test]
 fn test_cycle_recalc_scope_isolation() {
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
 
     // Build snapshot with:
     //   A1=1 (constant), A2="=A1+1"=2, ..., A100="=A99+1"=100
@@ -207,18 +207,18 @@ fn test_cycle_recalc_scope_isolation() {
         calculation_settings: None,
     };
 
-    let _init_result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let _init_result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Chain should be correct
-    assert_mirror_number(&mirror, 0, 0, 0, 1.0); // A1
-    assert_mirror_number(&mirror, 0, 99, 0, 100.0); // A100
+    assert_store_number(&cell_store, 0, 0, 0, 1.0); // A1
+    assert_store_number(&cell_store, 0, 99, 0, 100.0); // A100
 
-    assert_mirror_number(&mirror, 0, 0, 1, 0.0);
-    assert_mirror_number(&mirror, 0, 0, 2, 0.0);
+    assert_store_number(&cell_store, 0, 0, 1, 0.0);
+    assert_store_number(&cell_store, 0, 0, 2, 0.0);
 
     // Now re-set B1 to same formula via set_cell (incremental path).
     // set_cell detects cycle → B1 gets #REF!, but the chain should NOT be recalculated.
-    let result = set(&mut core, &mut mirror, 0, 0, 1, "=C1+1");
+    let result = set(&mut core, &mut cell_store, 0, 0, 1, "=C1+1");
 
     // The chain cells (A1..A100) should not appear in changed_cells
     // Only B1 (and possibly C1) should be affected
@@ -229,9 +229,9 @@ fn test_cycle_recalc_scope_isolation() {
     );
 
     // Chain values should be intact
-    assert_mirror_number(&mirror, 0, 0, 0, 1.0); // A1
-    assert_mirror_number(&mirror, 0, 49, 0, 50.0); // A50
-    assert_mirror_number(&mirror, 0, 99, 0, 100.0); // A100
+    assert_store_number(&cell_store, 0, 0, 0, 1.0); // A1
+    assert_store_number(&cell_store, 0, 49, 0, 50.0); // A50
+    assert_store_number(&cell_store, 0, 99, 0, 100.0); // A100
 }
 
 // ---------------------------------------------------------------------------
@@ -245,7 +245,7 @@ fn test_cycle_recalc_scope_isolation() {
 #[test]
 fn test_100_cell_convergent_ring() {
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
 
     // Build 100-cell ring in column A: A1="=A100*0.99+0.01", A2="=A1*0.99+0.01", ...
     let mut cell_data: Vec<CellData> = Vec::new();
@@ -297,12 +297,12 @@ fn test_100_cell_convergent_ring() {
         calculation_settings: None,
     };
 
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Fixed point: x = 0.99x + 0.01 → x = 1.0
     // Check all 100 cells
     for row in 0u32..100 {
-        assert_mirror_number_tol(&mirror, 0, row, 0, 1.0, 0.01);
+        assert_store_number_tol(&cell_store, 0, row, 0, 1.0, 0.01);
     }
 
     // Must have circular refs
@@ -330,7 +330,7 @@ fn test_100_cell_convergent_ring() {
 #[test]
 fn test_divergent_cycle_capped_at_max_iterations() {
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
 
     let snapshot = build_iterative_snapshot(
         vec![(
@@ -346,7 +346,7 @@ fn test_divergent_cycle_capped_at_max_iterations() {
         0.001,
     );
 
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Must have circular refs
     assert!(
@@ -362,15 +362,15 @@ fn test_divergent_cycle_capped_at_max_iterations() {
     );
 
     // Both cells should be Numbers (iterative solver produces Numbers, not errors)
-    let _a1 = read_mirror_number(&mirror, 0, 0, 0);
-    let b1 = read_mirror_number(&mirror, 0, 0, 1);
+    let _a1 = read_store_number(&cell_store, 0, 0, 0);
+    let b1 = read_store_number(&cell_store, 0, 0, 1);
 
     // Self-consistency: A1's formula is "=B1+1", so A1 should ≈ B1+1
     // B1's formula is "=A1+1", so B1 should ≈ A1+1
     // With only 10 iterations of a divergent cycle, values are small numbers.
     // The divergent cycle alternates, so last-iteration consistency has slack.
     assert_cycle_self_consistent(
-        &mirror,
+        &cell_store,
         0,
         0,
         0,
@@ -390,9 +390,9 @@ fn test_divergent_cycle_capped_at_max_iterations() {
 #[test]
 fn test_memory_stability_500_create_break_cycles() {
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![("Sheet1", 100, 26, vec![])]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     let s = sid(0);
 
@@ -424,7 +424,7 @@ fn test_memory_stability_500_create_break_cycles() {
                 },
             ),
         ];
-        let _r = core.set_cells(&mut mirror, &cycle_edits, true).unwrap();
+        let _r = core.set_cells(&mut cell_store, &cycle_edits, true).unwrap();
 
         // Break cycle by setting constant values (skip_cycle_check=false)
         let break_edits: Vec<(
@@ -453,14 +453,16 @@ fn test_memory_stability_500_create_break_cycles() {
                 },
             ),
         ];
-        let _r = core.set_cells(&mut mirror, &break_edits, false).unwrap();
+        let _r = core
+            .set_cells(&mut cell_store, &break_edits, false)
+            .unwrap();
 
         // Assert clean state after breaking the cycle
-        assert_mirror_number(&mirror, 0, 0, 0, 1.0);
-        assert_mirror_number(&mirror, 0, 0, 1, 2.0);
+        assert_store_number(&cell_store, 0, 0, 0, 1.0);
+        assert_store_number(&cell_store, 0, 0, 1, 2.0);
     }
 
     // Final state after all 500 iterations is clean
-    assert_mirror_number(&mirror, 0, 0, 0, 1.0);
-    assert_mirror_number(&mirror, 0, 0, 1, 2.0);
+    assert_store_number(&cell_store, 0, 0, 0, 1.0);
+    assert_store_number(&cell_store, 0, 0, 1, 2.0);
 }

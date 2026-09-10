@@ -29,7 +29,7 @@ impl SheetBindings {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.create_binding(&sid, binding).map(|(_, r)| r))
+            .call_engine(move |e| e.create_binding(&sid, binding))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -42,7 +42,7 @@ impl SheetBindings {
         let sid = self.sheet_id;
         let owned_id = binding_id.to_owned();
         self.dispatch
-            .call_engine(move |e| e.update_binding(&sid, &owned_id, updates).map(|(_, r)| r))
+            .call_engine(move |e| e.update_binding(&sid, &owned_id, updates))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -51,7 +51,7 @@ impl SheetBindings {
         let sid = self.sheet_id;
         let owned_id = binding_id.to_owned();
         self.dispatch
-            .call_engine(move |e| e.remove_binding(&sid, &owned_id).map(|(_, r)| r))
+            .call_engine(move |e| e.remove_binding(&sid, &owned_id))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 

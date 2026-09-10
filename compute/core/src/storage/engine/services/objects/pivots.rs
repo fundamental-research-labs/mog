@@ -1,4 +1,4 @@
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::{ChangeKind, MutationResult, PivotTableChange};
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::pivots;
@@ -92,12 +92,12 @@ pub(in crate::storage::engine) fn pivot_get_all(
 }
 
 pub(in crate::storage::engine) fn resolve_pivot_format_at_cell(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
 ) -> Option<CellFormat> {
-    let pivot = mirror.find_pivot_table_at(sheet_id, row, col)?;
+    let pivot = cell_store.find_pivot_table_at(sheet_id, row, col)?;
     if !is_supported_light_pivot_style(pivot.style.as_ref()?.style_name.as_deref()) {
         return None;
     }
@@ -135,7 +135,7 @@ fn is_supported_light_pivot_style(style_name: Option<&str>) -> bool {
 #[allow(clippy::too_many_arguments)]
 pub(in crate::storage::engine) fn pivot_register_def(
     stores: &EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     pivot_id: &str,
     total_rows: u32,
@@ -160,7 +160,7 @@ pub(in crate::storage::engine) fn pivot_register_def(
         .output_sheet_id
         .as_deref()
         .and_then(|sheet_id| SheetId::from_uuid_str(sheet_id).ok())
-        .or_else(|| mirror.sheet_by_name(&config.output_sheet_name))
+        .or_else(|| cell_store.sheet_by_name(&config.output_sheet_name))
         .ok_or_else(|| ComputeError::SheetNotFound {
             sheet_id: config
                 .output_sheet_id
@@ -173,7 +173,7 @@ pub(in crate::storage::engine) fn pivot_register_def(
             message: format!("Pivot config conversion error: {e}"),
         })?;
     let mut def = engine_config.to_pivot_table_def(&bounds, &output_sheet_id);
-    if let Some(previous) = mirror.find_pivot_table_def(&def.id, &def.name, &def.sheet)
+    if let Some(previous) = cell_store.find_pivot_table_def(&def.id, &def.name, &def.sheet)
         && previous.start_row == def.start_row
         && previous.start_col == def.start_col
         && previous.end_row == def.end_row
@@ -189,17 +189,17 @@ pub(in crate::storage::engine) fn pivot_register_def(
     {
         def.grand_total_cells = previous.grand_total_cells.clone();
     }
-    mirror.upsert_pivot_table_def(def);
+    cell_store.upsert_pivot_table_def(def);
     Ok(MutationResult::empty())
 }
 
 pub(in crate::storage::engine) fn pivot_unregister_def(
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     pivot_name: &str,
 ) -> Result<MutationResult, ComputeError> {
     let sheet_uuid = sheet_id.to_uuid_string();
-    mirror.remove_pivot_table_def(pivot_name, &sheet_uuid);
+    cell_store.remove_pivot_table_def(pivot_name, &sheet_uuid);
     Ok(MutationResult::empty())
 }
 
@@ -209,12 +209,12 @@ mod tests {
     use domain_types::domain::pivot::PivotTableStyle;
     use snapshot_types::PivotTableDef;
 
-    fn mirror_with_light16_pivot(
+    fn store_with_light16_pivot(
         sheet_id: &SheetId,
         show_row_grand_totals: Option<bool>,
-    ) -> CellMirror {
-        let mut mirror = CellMirror::new();
-        mirror.upsert_pivot_table_def(PivotTableDef {
+    ) -> CellStore {
+        let mut cell_store = CellStore::new();
+        cell_store.upsert_pivot_table_def(PivotTableDef {
             grand_total_cells: Vec::new(),
             id: "pivot-1".to_string(),
             name: "Pivot1".to_string(),
@@ -243,24 +243,24 @@ mod tests {
             show_row_grand_totals,
             show_column_grand_totals: Some(true),
         });
-        mirror
+        cell_store
     }
 
     #[test]
     fn pivot_light16_styles_headers_and_grand_total_data_cells() {
         let sheet_id = SheetId::from_raw(40);
-        let mirror = mirror_with_light16_pivot(&sheet_id, Some(true));
+        let cell_store = store_with_light16_pivot(&sheet_id, Some(true));
 
-        let header = resolve_pivot_format_at_cell(&mirror, &sheet_id, 17, 5).expect("header");
+        let header = resolve_pivot_format_at_cell(&cell_store, &sheet_id, 17, 5).expect("header");
         assert_eq!(header.bold, Some(true));
         assert_eq!(header.background_color.as_deref(), Some("#d9e1f2"));
         assert_eq!(header.pattern_type, Some(PatternType::Solid));
         assert_eq!(header.number_format, None);
 
-        assert!(resolve_pivot_format_at_cell(&mirror, &sheet_id, 18, 5).is_none());
+        assert!(resolve_pivot_format_at_cell(&cell_store, &sheet_id, 18, 5).is_none());
 
         let grand_total_label =
-            resolve_pivot_format_at_cell(&mirror, &sheet_id, 35, 2).expect("grand total label");
+            resolve_pivot_format_at_cell(&cell_store, &sheet_id, 35, 2).expect("grand total label");
         assert_eq!(grand_total_label.bold, Some(true));
         assert_eq!(
             grand_total_label.background_color.as_deref(),
@@ -269,7 +269,7 @@ mod tests {
         assert_eq!(grand_total_label.number_format, None);
 
         let grand_total_value =
-            resolve_pivot_format_at_cell(&mirror, &sheet_id, 35, 3).expect("grand total value");
+            resolve_pivot_format_at_cell(&cell_store, &sheet_id, 35, 3).expect("grand total value");
         assert_eq!(grand_total_value.bold, Some(true));
         assert_eq!(
             grand_total_value.background_color.as_deref(),
@@ -282,8 +282,8 @@ mod tests {
     #[test]
     fn pivot_light16_respects_disabled_row_grand_totals() {
         let sheet_id = SheetId::from_raw(41);
-        let mirror = mirror_with_light16_pivot(&sheet_id, Some(false));
+        let cell_store = store_with_light16_pivot(&sheet_id, Some(false));
 
-        assert!(resolve_pivot_format_at_cell(&mirror, &sheet_id, 35, 3).is_none());
+        assert!(resolve_pivot_format_at_cell(&cell_store, &sheet_id, 35, 3).is_none());
     }
 }

@@ -130,34 +130,34 @@ fn recalc_options() -> RecalcOptions {
 fn run_fixed_recalc(
     count: usize,
     date1904: bool,
-) -> (ComputeCore, CellMirror, snapshot_types::RecalcResult) {
+) -> (ComputeCore, CellStore, snapshot_types::RecalcResult) {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, volatile_snapshot(count))
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, volatile_snapshot(count))
         .expect("volatile snapshot should initialize");
-    mirror.date1904 = date1904;
+    cell_store.date1904 = date1904;
     let result = core
-        .full_recalc_with_options(&mut mirror, &recalc_options())
+        .full_recalc_with_options(&mut cell_store, &recalc_options())
         .expect("fixed-clock recalc should succeed");
-    (core, mirror, result)
+    (core, cell_store, result)
 }
 
 fn run_session_recalc(
     count: usize,
     date1904: bool,
-) -> (ComputeCore, CellMirror, snapshot_types::RecalcResult) {
+) -> (ComputeCore, CellStore, snapshot_types::RecalcResult) {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, volatile_snapshot(count))
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, volatile_snapshot(count))
         .expect("volatile snapshot should initialize");
-    mirror.date1904 = date1904;
+    cell_store.date1904 = date1904;
     let result = core
-        .full_recalc(&mut mirror)
+        .full_recalc(&mut cell_store)
         .expect("session-clock recalc should succeed");
-    (core, mirror, result)
+    (core, cell_store, result)
 }
 
-fn volatile_values(mirror: &CellMirror, count: usize) -> Vec<CellValue> {
+fn volatile_values(cell_store: &CellStore, count: usize) -> Vec<CellValue> {
     (0..count)
         .map(|index| {
             let cell_id = CellId::from_uuid_str(&format!(
@@ -165,15 +165,15 @@ fn volatile_values(mirror: &CellMirror, count: usize) -> Vec<CellValue> {
                 FIRST_CELL_SUFFIX + index as u128
             ))
             .unwrap();
-            mirror.get_cell_value(&cell_id).cloned().unwrap()
+            cell_store.get_cell_value(&cell_id).cloned().unwrap()
         })
         .collect()
 }
 
-fn composition_values(mirror: &CellMirror) -> Vec<CellValue> {
+fn composition_values(cell_store: &CellStore) -> Vec<CellValue> {
     (0..13)
         .map(|index| {
-            mirror
+            cell_store
                 .get_cell_value_raw(&composition_cell_id(index))
                 .cloned()
                 .unwrap()
@@ -184,15 +184,16 @@ fn composition_values(mirror: &CellMirror) -> Vec<CellValue> {
 #[test]
 fn fixed_clock_makes_sequential_and_parallel_now_today_equivalent() {
     for date1904 in [false, true] {
-        let (_sequential_core, sequential_mirror, sequential_result) =
+        let (_sequential_core, sequential_cell_store, sequential_result) =
             run_fixed_recalc(8, date1904);
-        let (_parallel_core, parallel_mirror, parallel_result) = run_fixed_recalc(600, date1904);
+        let (_parallel_core, parallel_cell_store, parallel_result) =
+            run_fixed_recalc(600, date1904);
 
         assert_eq!(sequential_result.metrics.levels_parallel, 0);
         assert!(parallel_result.metrics.levels_parallel > 0);
 
-        let sequential = volatile_values(&sequential_mirror, 8);
-        let parallel = volatile_values(&parallel_mirror, 600);
+        let sequential = volatile_values(&sequential_cell_store, 8);
+        let parallel = volatile_values(&parallel_cell_store, 600);
         let timestamp = if date1904 {
             FIXED_TIMESTAMP - crate::eval::clock::DATE_SYSTEM_1904_OFFSET
         } else {
@@ -214,12 +215,12 @@ fn fixed_clock_makes_sequential_and_parallel_now_today_equivalent() {
 fn fixed_clock_date_functions_compose_in_both_workbook_date_systems() {
     for date1904 in [false, true] {
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
-        core.init_from_snapshot(&mut mirror, date_composition_snapshot(date1904))
+        let mut cell_store = CellStore::new();
+        core.init_from_snapshot(&mut cell_store, date_composition_snapshot(date1904))
             .expect("date composition snapshot should initialize");
-        mirror.date1904 = date1904;
+        cell_store.date1904 = date1904;
         core.full_recalc_with_options(
-            &mut mirror,
+            &mut cell_store,
             &RecalcOptions {
                 iterative: None,
                 max_iterations: None,
@@ -229,7 +230,7 @@ fn fixed_clock_date_functions_compose_in_both_workbook_date_systems() {
         )
         .expect("date composition recalc should succeed");
 
-        let values = composition_values(&mirror);
+        let values = composition_values(&cell_store);
         let timestamp = if date1904 {
             COMPOSITION_TIMESTAMP - crate::eval::clock::DATE_SYSTEM_1904_OFFSET
         } else {
@@ -302,10 +303,10 @@ fn injected_session_clock_reaches_parallel_workers() {
         [false, true]
             .into_iter()
             .map(|date1904| {
-                let (_core, mirror, result) = run_session_recalc(600, date1904);
+                let (_core, cell_store, result) = run_session_recalc(600, date1904);
                 (
                     date1904,
-                    volatile_values(&mirror, 600),
+                    volatile_values(&cell_store, 600),
                     result.metrics.levels_parallel,
                 )
             })
@@ -337,12 +338,12 @@ fn injected_session_clock_reaches_parallel_workers() {
 fn explicit_zero_clock_is_valid_in_both_workbook_date_systems() {
     for date1904 in [false, true] {
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
-        core.init_from_snapshot(&mut mirror, volatile_snapshot(2))
+        let mut cell_store = CellStore::new();
+        core.init_from_snapshot(&mut cell_store, volatile_snapshot(2))
             .expect("volatile snapshot should initialize");
-        mirror.date1904 = date1904;
+        cell_store.date1904 = date1904;
         core.full_recalc_with_options(
-            &mut mirror,
+            &mut cell_store,
             &RecalcOptions {
                 iterative: None,
                 max_iterations: None,
@@ -352,7 +353,7 @@ fn explicit_zero_clock_is_valid_in_both_workbook_date_systems() {
         )
         .expect("zero timestamp recalc should succeed");
 
-        let values = volatile_values(&mirror, 2);
+        let values = volatile_values(&cell_store, 2);
         let expected_now = if date1904 {
             -crate::eval::clock::DATE_SYSTEM_1904_OFFSET
         } else {

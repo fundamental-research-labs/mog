@@ -89,9 +89,9 @@ pub struct RangeCellData {
     pub col: u32,
     /// Cell ID (UUID string).
     pub cell_id: String,
-    /// Computed value (ComputeCore-first, mirror fallback).
+    /// Computed value (ComputeCore-first, cell_store fallback).
     pub value: CellValue,
-    /// Actual formula text (e.g., "=SUM(A1:A3)") — from ComputeCore or mirror identity formula.
+    /// Actual formula text (e.g., "=SUM(A1:A3)") — from ComputeCore or cell_store identity formula.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub formula: Option<String>,
     /// Pre-formatted display string (number format applied).

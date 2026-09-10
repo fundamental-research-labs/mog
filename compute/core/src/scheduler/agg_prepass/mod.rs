@@ -15,7 +15,7 @@ use compute_parser::{ASTNode, CellRefNode, RangeRef};
 use formula_types::{CellRef, RangeType};
 use value_types::{CellError, CellValue, KahanSum};
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 
 /// Type alias to reduce complexity in type annotations for static criteria filter closures.
 type StaticFilterVec = SmallVec<[Option<Box<dyn Fn(&CellValue) -> bool>>; 4]>;
@@ -143,7 +143,11 @@ pub(super) type RangeInfo = (SheetId, u32, u32, u32);
 // ---------------------------------------------------------------------------
 
 /// Apply an arithmetic post-operation to an aggregation result.
-pub(super) fn apply_post_op(value: CellValue, post_op: &PostOp, mirror: &CellMirror) -> CellValue {
+pub(super) fn apply_post_op(
+    value: CellValue,
+    post_op: &PostOp,
+    cell_store: &CellStore,
+) -> CellValue {
     let raw = match &value {
         CellValue::Number(n) => n.get(),
         _ => return value, // errors/non-numeric pass through
@@ -152,7 +156,7 @@ pub(super) fn apply_post_op(value: CellValue, post_op: &PostOp, mirror: &CellMir
     let operand_val = match &post_op.operand {
         PostOpOperand::Number(n) => *n,
         PostOpOperand::Cell { sheet, row, col } => {
-            match mirror.get_cell_value_at(sheet, SheetPos::new(*row, *col)) {
+            match cell_store.get_cell_value_at(sheet, SheetPos::new(*row, *col)) {
                 Some(CellValue::Number(n)) => n.get(),
                 _ => return CellValue::Error(CellError::Value, None),
             }
@@ -191,11 +195,11 @@ impl super::ComputeCore {
     ///
     /// `already_evaluated` contains cells that have been evaluated in the current
     /// recalc epoch. Formula cells in data ranges are safe to read only if they
-    /// are in this set (their mirror values are fresh). Formula cells NOT in this
+    /// are in this set (their cell_store values are fresh). Formula cells NOT in this
     /// set may have stale snapshot values and trigger a bail to normal evaluation.
     ///
     /// Returns a tuple of:
-    /// - `Vec<(CellId, CellValue)>` — resolved cell values (caller applies to mirror)
+    /// - `Vec<(CellId, CellValue)>` — resolved cell values (caller applies to cell_store)
     /// - `Option<SumifsWarmData>` — pre-built SUMIFS cache entries to seed into
     ///   rayon worker threads (enables cross-thread cache sharing)
     ///
@@ -204,7 +208,7 @@ impl super::ComputeCore {
     /// - Any data column contains unevaluated formula cells (stale values risk)
     pub(super) fn run_agg_prepass(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         dirty_set: &FxHashSet<CellId>,
         already_evaluated: &FxHashSet<CellId>,
         sumifs_epoch: compute_functions::helpers::sumifs_result_cache::SumifsCacheEpoch,
@@ -229,24 +233,24 @@ impl super::ComputeCore {
             ast_cache.get(cell_id).map(|entry| &entry.ast)
         };
 
-        let groups = detect_agg_groups(dirty_set, get_ast, mirror, AGG_MIN_GROUP_SIZE);
+        let groups = detect_agg_groups(dirty_set, get_ast, cell_store, AGG_MIN_GROUP_SIZE);
 
         // Formula guard: check if any cell in a data column range has a formula
         // whose value might be stale.
         //
-        // A formula cell's mirror value is safe to read if it has been evaluated
+        // A formula cell's cell_store value is safe to read if it has been evaluated
         // in the current recalc epoch (present in `already_evaluated`). Formula
         // cells that have NOT been evaluated may have stale snapshot values —
         // e.g., `=TRUE` loaded from Excel with cached value Number(1.0) that
         // will become Boolean(true) after evaluation.
         //
         // Non-formula cells are always safe (plain data values).
-        // The mirror, ASTs, and evaluated set stay unchanged during this pass.
+        // The cell store, ASTs, and evaluated set stay unchanged during this pass.
         // Groups and cache warming can reuse answers for the same data range.
         let data_formula_checks = std::cell::RefCell::new(FxHashMap::<RangeInfo, bool>::default());
         let check_data_formulas =
             |sheet: &SheetId, col: u32, start_row: u32, end_row: u32| -> bool {
-                let Some(sh) = mirror.get_sheet(sheet) else {
+                let Some(sh) = cell_store.get_sheet(sheet) else {
                     return true;
                 };
                 let clamped_end = end_row.min(sh.rows);
@@ -256,7 +260,7 @@ impl super::ComputeCore {
                     .or_insert_with(|| {
                         for row in start_row..clamped_end {
                             if let Some(cell_id) =
-                                mirror.resolve_cell_id(sheet, SheetPos::new(row, col))
+                                cell_store.resolve_cell_id(sheet, SheetPos::new(row, col))
                                 && ast_cache.contains_key(&cell_id)
                                 && !already_evaluated.contains(&cell_id)
                             {
@@ -272,13 +276,14 @@ impl super::ComputeCore {
         // whose source formula hasn't been evaluated yet.
         let check_criteria_stale =
             |sheet: &SheetId, col: u32, start_row: u32, end_row: u32| -> bool {
-                let Some(sh) = mirror.get_sheet(sheet) else {
+                let Some(sh) = cell_store.get_sheet(sheet) else {
                     return true;
                 };
                 let clamped_end = end_row.min(sh.rows);
                 for row in start_row..clamped_end {
                     // Check 1: unevaluated formula cell at this position.
-                    if let Some(cell_id) = mirror.resolve_cell_id(sheet, SheetPos::new(row, col))
+                    if let Some(cell_id) =
+                        cell_store.resolve_cell_id(sheet, SheetPos::new(row, col))
                         && ast_cache.contains_key(&cell_id)
                         && !already_evaluated.contains(&cell_id)
                     {
@@ -287,7 +292,7 @@ impl super::ComputeCore {
                     // Check 2: stale spill projection — the position is covered by
                     // a projection whose source formula hasn't been evaluated yet.
                     if let Some((source_cell_id, _, _)) =
-                        mirror.projection_registry.resolve(sheet, row, col)
+                        cell_store.projection_registry.resolve(sheet, row, col)
                         && !already_evaluated.contains(&source_cell_id)
                     {
                         return true;
@@ -314,7 +319,7 @@ impl super::ComputeCore {
 
             for group in &groups {
                 if let Some(group_results) =
-                    execute_agg_group(group, mirror, check_data_formulas, check_criteria_stale)
+                    execute_agg_group(group, cell_store, check_data_formulas, check_criteria_stale)
                 {
                     for &(cell_id, _) in &group_results {
                         resolved_set.insert(cell_id);
@@ -332,12 +337,12 @@ impl super::ComputeCore {
         // the eval-time `sumifs_result_cache::sumifs_lookup()` will hit. This turns
         // O(N) per-formula scans into O(1) lookups during normal evaluation.
         let cache_only_patterns =
-            detect_cache_only_patterns(dirty_set, &resolved_set, get_ast, mirror);
+            detect_cache_only_patterns(dirty_set, &resolved_set, get_ast, cell_store);
 
         if !cache_only_patterns.is_empty() {
             let warmed = warm_sumifs_result_cache(
                 &cache_only_patterns,
-                mirror,
+                cell_store,
                 &check_data_formulas,
                 sumifs_epoch,
             );

@@ -2,11 +2,10 @@
 //!
 //! Two serialization paths, chosen by the caller at the IPC boundary:
 //! - **JSON path** ([`WorkbookSnapshot`]): String UUIDs, parsed at boundary via `uuid::Uuid`.
-//!   Used by Tauri commands (default).
 //! - **Bincode path** ([`WorkbookSnapshotBin`]): Raw u128 IDs directly, no UUID string
 //!   parsing overhead. Used for large workbooks where UUID parsing is measurable.
 //!
-//! Incremental updates use [`CellEdit`] (TS to Rust) and [`RecalcResult`] (Rust to TS).
+//! Incremental updates use [`CellEdit`] inbound and [`RecalcResult`] outbound.
 
 mod error;
 mod history;

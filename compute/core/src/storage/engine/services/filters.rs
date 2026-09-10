@@ -1,13 +1,14 @@
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::{ChangeKind, FilterChange, MutationResult, RuntimeOperationDiagnostic};
+use crate::storage::engine::filter_import_diagnostics::resolve_filter_cell_pos;
 use crate::storage::engine::services::filter_results::append_row_visibility_changes;
 use crate::storage::engine::services::resolved_formats;
 use crate::storage::engine::services::{imported_filter_runtime, imported_filters};
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::{dimensions, filters};
-use cell_types::{CellId, SheetId, SheetPos};
-use compute_document::hex::{hex_to_id, id_to_hex};
+use cell_types::{SheetId, SheetPos};
+use compute_document::hex::id_to_hex;
 use value_types::{CellValue, ComputeError, DateSystem};
 
 mod clear_all;
@@ -15,7 +16,7 @@ mod value_queries;
 
 pub(in crate::storage::engine) fn create_filter(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     config: serde_json::Value,
 ) -> Result<MutationResult, ComputeError> {
@@ -28,7 +29,7 @@ pub(in crate::storage::engine) fn create_filter(
     // row/col insert/delete. Empty corners need identity-only CellIds so the
     // storage-layer references are always resolvable without expanding data.
     let mut ensure = |row, col| {
-        super::cell_editing::ensure_cell_id_mirrored(stores, mirror, sheet_id, row, col).ok_or_else(
+        super::cell_editing::ensure_cell_id(stores, cell_store, sheet_id, row, col).ok_or_else(
             || ComputeError::SheetNotFound {
                 sheet_id: sheet_id.to_uuid_string(),
             },
@@ -58,7 +59,7 @@ pub(in crate::storage::engine) fn create_filter(
     if filter_state.filter_kind == filters::FilterKind::AutoFilter {
         imported_filters::upsert_sheet_auto_filter_binding(
             stores,
-            mirror,
+            cell_store,
             sheet_id,
             &filter_state,
             None,
@@ -94,7 +95,7 @@ fn filter_kind_wire(kind: &filters::FilterKind) -> &'static str {
 }
 
 fn table_filter_buttons_visible(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     filter: &filters::FilterState,
 ) -> bool {
@@ -102,7 +103,7 @@ fn table_filter_buttons_visible(
         return false;
     };
     let sheet_id = sheet_id.to_uuid_string();
-    mirror
+    cell_store
         .all_tables()
         .iter()
         .find(|table| {
@@ -230,26 +231,9 @@ fn unsupported_filter_apply_diagnostic(
     }
 }
 
-fn resolve_filter_cell_pos(
-    stores: &EngineStores,
-    mirror: &CellMirror,
-    sheet_id: &SheetId,
-    cell_id_hex: &str,
-) -> Option<(u32, u32)> {
-    let id = hex_to_id(cell_id_hex)?;
-    let cell_id = CellId::from_raw(id);
-    if let Some(pos) = mirror.resolve_position(&cell_id) {
-        return Some((pos.row(), pos.col()));
-    }
-    stores
-        .grid_indexes
-        .get(sheet_id)
-        .and_then(|grid| grid.cell_position(&cell_id))
-}
-
 pub(in crate::storage::engine) fn delete_filter(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Result<MutationResult, ComputeError> {
@@ -262,7 +246,7 @@ pub(in crate::storage::engine) fn delete_filter(
         filter_id,
         stores.grid_indexes.get(sheet_id),
     );
-    imported_filters::apply_visibility_transitions(stores, mirror, sheet_id, &transitions);
+    imported_filters::apply_visibility_transitions(stores, cell_store, sheet_id, &transitions);
     filters::delete_filter(&mut stores.storage, sheet_id, filter_id);
     filters::delete_filter_metadata_binding(&mut stores.storage, sheet_id, filter_id);
     if existing
@@ -295,34 +279,32 @@ pub(in crate::storage::engine) fn delete_filter(
 
 fn resolve_header_col(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     filter_id: &str,
     header_col: u32,
 ) -> Option<String> {
     let filter = filters::get_filter(&stores.storage, sheet_id, filter_id)?;
-    let header_pos =
-        resolve_filter_cell_pos(stores, mirror, sheet_id, &filter.header_start_cell_id)?;
-    let cell_id = stores
-        .grid_indexes
-        .get(sheet_id)?
-        .cell_id_at(header_pos.0, header_col)?;
+    let header_pos = resolve_filter_cell_pos(cell_store, sheet_id, &filter.header_start_cell_id)?;
+    let cell_id = cell_store.resolve_cell_id(
+        sheet_id,
+        cell_types::SheetPos::new(header_pos.0, header_col),
+    )?;
     Some(id_to_hex(cell_id.as_u128()).into())
 }
 
 fn ensure_header_col(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     filter_id: &str,
     header_col: u32,
 ) -> Option<String> {
     let filter = filters::get_filter(&stores.storage, sheet_id, filter_id)?;
-    let header_pos =
-        resolve_filter_cell_pos(stores, mirror, sheet_id, &filter.header_start_cell_id)?;
-    let cell_id = super::cell_editing::ensure_cell_id_mirrored(
+    let header_pos = resolve_filter_cell_pos(cell_store, sheet_id, &filter.header_start_cell_id)?;
+    let cell_id = super::cell_editing::ensure_cell_id(
         stores,
-        mirror,
+        cell_store,
         sheet_id,
         header_pos.0,
         header_col,
@@ -332,7 +314,7 @@ fn ensure_header_col(
 
 pub(in crate::storage::engine) fn set_column_filter(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     filter_id: &str,
@@ -340,7 +322,7 @@ pub(in crate::storage::engine) fn set_column_filter(
     criteria: filters::ColumnFilter,
 ) -> Result<MutationResult, ComputeError> {
     let header_cell_id =
-        ensure_header_col(stores, mirror, sheet_id, filter_id, header_col).unwrap_or_default();
+        ensure_header_col(stores, cell_store, sheet_id, filter_id, header_col).unwrap_or_default();
     filters::set_column_filter(
         &mut stores.storage,
         sheet_id,
@@ -349,11 +331,11 @@ pub(in crate::storage::engine) fn set_column_filter(
         criteria,
     );
     imported_filters::sync_imported_auto_filter_metadata_after_set_column(
-        stores, mirror, sheet_id, filter_id, header_col,
+        stores, cell_store, sheet_id, filter_id, header_col,
     );
     apply_filter_with_action(
         stores,
-        mirror,
+        cell_store,
         settings,
         sheet_id,
         filter_id,
@@ -364,31 +346,31 @@ pub(in crate::storage::engine) fn set_column_filter(
 
 pub(in crate::storage::engine) fn clear_column_filter(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     filter_id: &str,
     header_col: u32,
 ) -> Result<MutationResult, ComputeError> {
     let header_cell_id =
-        resolve_header_col(stores, mirror, sheet_id, filter_id, header_col).unwrap_or_default();
+        resolve_header_col(stores, cell_store, sheet_id, filter_id, header_col).unwrap_or_default();
     filters::clear_column_filter(&mut stores.storage, sheet_id, filter_id, &header_cell_id);
     imported_filters::sync_imported_auto_filter_metadata_after_clear_column(
-        stores, mirror, sheet_id, filter_id, header_col,
+        stores, cell_store, sheet_id, filter_id, header_col,
     );
     apply_filter_with_action(
-        stores, mirror, settings, sheet_id, filter_id, "cleared", None,
+        stores, cell_store, settings, sheet_id, filter_id, "cleared", None,
     )
 }
 
 pub(in crate::storage::engine) fn clear_all_column_filters(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    clear_all::clear_all_column_filters(stores, mirror, settings, sheet_id, filter_id)
+    clear_all::clear_all_column_filters(stores, cell_store, settings, sheet_id, filter_id)
 }
 
 pub(in crate::storage::engine) fn get_filter(
@@ -448,13 +430,13 @@ pub(in crate::storage::engine) fn get_filter_sort_state(
 
 pub(in crate::storage::engine) fn clear_all_filters(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
 ) -> Result<MutationResult, ComputeError> {
     let existing = filters::get_filters_in_sheet(&stores.storage, sheet_id);
     let mut result = MutationResult::empty();
     for filter in existing {
-        let mut deleted = delete_filter(stores, mirror, sheet_id, &filter.id)?;
+        let mut deleted = delete_filter(stores, cell_store, sheet_id, &filter.id)?;
         result
             .visibility_changes
             .append(&mut deleted.visibility_changes);
@@ -466,24 +448,24 @@ pub(in crate::storage::engine) fn clear_all_filters(
 
 pub(in crate::storage::engine) fn get_filters_in_sheet(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
 ) -> Vec<filters::FilterState> {
     let mut states = filters::get_filters_in_sheet(&stores.storage, sheet_id);
     for f in &mut states {
         if let Some((row, col)) =
-            resolve_filter_cell_pos(stores, mirror, sheet_id, &f.header_start_cell_id)
+            resolve_filter_cell_pos(cell_store, sheet_id, &f.header_start_cell_id)
         {
             f.start_row = Some(row);
             f.start_col = Some(col);
         }
         if let Some((_row, col)) =
-            resolve_filter_cell_pos(stores, mirror, sheet_id, &f.header_end_cell_id)
+            resolve_filter_cell_pos(cell_store, sheet_id, &f.header_end_cell_id)
         {
             f.end_col = Some(col);
         }
         if let Some((row, _col)) =
-            resolve_filter_cell_pos(stores, mirror, sheet_id, &f.data_end_cell_id)
+            resolve_filter_cell_pos(cell_store, sheet_id, &f.data_end_cell_id)
         {
             f.end_row = Some(row);
         }
@@ -493,14 +475,14 @@ pub(in crate::storage::engine) fn get_filters_in_sheet(
 
 pub(in crate::storage::engine) fn get_filter_header_info(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
 ) -> Vec<filters::FilterHeaderInfo> {
     let imported_auto_filter =
         imported_filters::read_imported_auto_filter_metadata(stores, sheet_id);
     let mut entries = Vec::new();
 
-    for filter in get_filters_in_sheet(stores, mirror, sheet_id) {
+    for filter in get_filters_in_sheet(stores, cell_store, sheet_id) {
         if filter.filter_kind == filters::FilterKind::AdvancedFilter {
             continue;
         }
@@ -524,16 +506,15 @@ pub(in crate::storage::engine) fn get_filter_header_info(
         };
 
         for col in start_col..=end_col {
-            let Some(header_cell_id) = resolve_header_cell_id_for_column(
-                stores, mirror, sheet_id, &filter, start_row, col,
-            ) else {
+            let Some(header_cell_id) =
+                resolve_header_cell_id_for_column(cell_store, sheet_id, &filter, start_row, col)
+            else {
                 continue;
             };
             let relative_col = col.saturating_sub(start_col);
             let has_active_filter =
                 column_has_active_filter(
-                    stores,
-                    mirror,
+                    cell_store,
                     sheet_id,
                     &filter,
                     &header_cell_id,
@@ -550,7 +531,7 @@ pub(in crate::storage::engine) fn get_filter_header_info(
                     }),
                 filters::FilterKind::TableFilter => (
                     false,
-                    table_filter_buttons_visible(mirror, sheet_id, &filter),
+                    table_filter_buttons_visible(cell_store, sheet_id, &filter),
                 ),
                 filters::FilterKind::AdvancedFilter => (false, true),
             };
@@ -593,31 +574,27 @@ pub(in crate::storage::engine) fn get_filter_header_info(
 }
 
 fn resolve_header_cell_id_for_column(
-    stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     filter: &filters::FilterState,
     header_row: u32,
     col: u32,
 ) -> Option<String> {
-    if let Some(cell_id) = stores
-        .grid_indexes
-        .get(sheet_id)
-        .and_then(|grid| grid.cell_id_at(header_row, col))
+    if let Some(cell_id) =
+        cell_store.resolve_cell_id(sheet_id, cell_types::SheetPos::new(header_row, col))
     {
         return Some(id_to_hex(cell_id.as_u128()).to_string());
     }
 
     filter.column_filters.keys().find_map(|header_cell_id| {
-        resolve_filter_cell_pos(stores, mirror, sheet_id, header_cell_id)
+        resolve_filter_cell_pos(cell_store, sheet_id, header_cell_id)
             .filter(|(row, resolved_col)| *row == header_row && *resolved_col == col)
             .map(|_| header_cell_id.clone())
     })
 }
 
 fn column_has_active_filter(
-    stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     filter: &filters::FilterState,
     header_cell_id: &str,
@@ -626,7 +603,7 @@ fn column_has_active_filter(
 ) -> bool {
     filter.column_filters.contains_key(header_cell_id)
         || filter.column_filters.keys().any(|candidate| {
-            resolve_filter_cell_pos(stores, mirror, sheet_id, candidate)
+            resolve_filter_cell_pos(cell_store, sheet_id, candidate)
                 .is_some_and(|(row, resolved_col)| row == header_row && resolved_col == col)
         })
 }
@@ -660,14 +637,14 @@ fn imported_filter_button_flags(
 
 pub(in crate::storage::engine) fn apply_filter(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Result<MutationResult, ComputeError> {
     apply_filter_with_action(
         stores,
-        mirror,
+        cell_store,
         settings,
         sheet_id,
         filter_id,
@@ -678,14 +655,14 @@ pub(in crate::storage::engine) fn apply_filter(
 
 pub(in crate::storage::engine) fn reapply_filter(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Result<MutationResult, ComputeError> {
     apply_filter_with_action(
         stores,
-        mirror,
+        cell_store,
         settings,
         sheet_id,
         filter_id,
@@ -696,7 +673,7 @@ pub(in crate::storage::engine) fn reapply_filter(
 
 fn apply_filter_with_action(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     filter_id: &str,
@@ -704,7 +681,7 @@ fn apply_filter_with_action(
     diagnostic_operation: Option<&'static str>,
 ) -> Result<MutationResult, ComputeError> {
     let filter = imported_filter_runtime::project_imported_date_group_filters_for_evaluation(
-        stores, mirror, sheet_id, filter_id,
+        stores, cell_store, sheet_id, filter_id,
     );
     let filter_kind = filter
         .as_ref()
@@ -745,23 +722,25 @@ fn apply_filter_with_action(
 
     let sid = *sheet_id;
     let icons = crate::storage::engine::services::cf_cache::evaluate_filter_icons(
-        stores, mirror, sheet_id, filter_id,
+        stores, cell_store, sheet_id, filter_id,
     );
     let results = filters::evaluate_filter_state_with_date_system(
         filter.as_ref(),
         |row, col| {
             let pos = SheetPos::new(row, col);
-            mirror
+            cell_store
                 .get_cell_value_at(&sid, pos)
                 .cloned()
                 .unwrap_or(CellValue::Null)
         },
         |row, col| {
-            resolved_formats::get_resolved_cell_format(stores, mirror, settings, sheet_id, row, col)
+            resolved_formats::get_resolved_cell_format(
+                stores, cell_store, settings, sheet_id, row, col,
+            )
         },
         |row, col| icons.get(&(row, col)).cloned(),
-        |hex| resolve_filter_cell_pos(stores, mirror, sheet_id, hex),
-        DateSystem::from_date1904(mirror.date1904),
+        |hex| resolve_filter_cell_pos(cell_store, sheet_id, hex),
+        DateSystem::from_date1904(cell_store.date1904),
     );
 
     let mut rows_to_hide = Vec::new();
@@ -782,7 +761,7 @@ fn apply_filter_with_action(
         &rows_to_unhide,
         stores.grid_indexes.get(sheet_id),
     );
-    imported_filters::apply_visibility_transitions(stores, mirror, sheet_id, &transitions);
+    imported_filters::apply_visibility_transitions(stores, cell_store, sheet_id, &transitions);
 
     let mut result = MutationResult::empty();
     append_row_visibility_changes(&mut result, sheet_id, &transitions);
@@ -820,22 +799,22 @@ fn binding_disallows_filter_ownership(binding: Option<&filters::FilterMetadataBi
 
 pub(in crate::storage::engine) fn get_unique_column_values(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     filter_id: &str,
     header_col: u32,
 ) -> Vec<CellValue> {
-    value_queries::get_unique_column_values(stores, mirror, sheet_id, filter_id, header_col)
+    value_queries::get_unique_column_values(stores, cell_store, sheet_id, filter_id, header_col)
 }
 
 pub(in crate::storage::engine) fn get_filtered_record_count(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Option<filters::FilterRecordCount> {
-    value_queries::get_filtered_record_count(stores, mirror, settings, sheet_id, filter_id)
+    value_queries::get_filtered_record_count(stores, cell_store, settings, sheet_id, filter_id)
 }
 
 #[cfg(test)]

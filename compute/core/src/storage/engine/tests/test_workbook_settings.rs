@@ -38,7 +38,7 @@ fn parse_input(text: &str) -> CellInput {
 
 fn number_at(engine: &ComputeEngine, row: u32, col: u32) -> f64 {
     match engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sheet_id(), SheetPos::new(row, col))
     {
         Some(CellValue::Number(n)) => n.get(),
@@ -48,7 +48,7 @@ fn number_at(engine: &ComputeEngine, row: u32, col: u32) -> f64 {
 
 fn assert_circular_error_at(engine: &ComputeEngine, row: u32, col: u32) {
     match engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sheet_id(), SheetPos::new(row, col))
     {
         Some(CellValue::Error(CellError::Circ, None)) => {}
@@ -108,7 +108,7 @@ fn set_workbook_settings_returns_workbook_settings_change() {
     next.show_horizontal_scrollbar = !pre.show_horizontal_scrollbar;
     next.theme_id = "dark".to_string();
 
-    let (_patches, result) = engine
+    let result = engine
         .set_workbook_settings(next)
         .expect("set_workbook_settings");
     assert_eq!(result.workbook_settings_changes.len(), 1);
@@ -139,7 +139,7 @@ fn set_custom_setting_returns_workbook_settings_change() {
     let mut engine = build_engine();
     let active_sheet = sheet_id().to_uuid_string();
 
-    let (_patches, result) = engine
+    let result = engine
         .set_custom_setting("mog.activeSheetId", Some(active_sheet.clone()))
         .expect("set custom setting");
     assert_eq!(result.workbook_settings_changes.len(), 1);
@@ -159,7 +159,7 @@ fn set_custom_setting_returns_workbook_settings_change() {
         Some(active_sheet.as_str())
     );
 
-    let (_patches, result) = engine
+    let result = engine
         .set_custom_setting("mog.activeSheetId", None)
         .expect("delete custom setting");
     assert_eq!(result.workbook_settings_changes.len(), 1);
@@ -190,7 +190,7 @@ fn reset_workbook_settings_returns_workbook_settings_change() {
         .set_workbook_settings(next)
         .expect("seed non-defaults");
 
-    let (_patches, result) = engine
+    let result = engine
         .reset_workbook_settings()
         .expect("reset_workbook_settings");
     assert_eq!(result.workbook_settings_changes.len(), 1);
@@ -227,7 +227,7 @@ fn set_workbook_settings_syncs_iterative_runtime_before_formula_recalc() {
         .set_workbook_settings(settings)
         .expect("set workbook settings");
 
-    let (_patches, result) = engine
+    let result = engine
         .batch_set_cells_by_position(
             vec![
                 (sid, 0, 0, parse_input("=B1+1")),

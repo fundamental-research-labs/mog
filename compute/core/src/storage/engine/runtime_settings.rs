@@ -35,8 +35,8 @@ impl ComputeEngine {
         let date1904 =
             crate::storage::workbook::settings::get_settings(&self.stores.storage.metadata)
                 .date1904;
-        if self.mirror.date1904 != date1904 {
-            self.mirror.date1904 = date1904;
+        if self.cell_store.date1904 != date1904 {
+            self.cell_store.date1904 = date1904;
             self.stores.compute.mark_dirty();
             // Calendar rules depend on the workbook epoch even when literal
             // date values stay unchanged, including during undo and redo.

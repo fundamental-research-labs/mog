@@ -76,7 +76,11 @@ fn merge_over_formula_fixture() -> WorkbookSnapshot {
 fn xlsx_merge_range_persists_on_export() {
     let bytes = xlsx_bytes_for(merge_over_formula_fixture());
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     engine
         .merge_range(&sid, 0, 0, 1, 1)
@@ -104,7 +108,11 @@ fn xlsx_unmerge_range_persists_on_export() {
     // then unmerge and export again to observe the unmerge round-trips.
     let bytes = xlsx_bytes_for(merge_over_formula_fixture());
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     engine
         .merge_range(&sid, 0, 0, 1, 1)
@@ -114,7 +122,11 @@ fn xlsx_unmerge_range_persists_on_export() {
     // Reload fully to exercise the hydration path again.
     let (mut engine2, _) =
         ComputeEngine::from_xlsx_bytes(&after_merge).expect("from_xlsx_bytes after merge");
-    let sid2 = *engine2.mirror().sheet_ids().next().expect("sheet present");
+    let sid2 = *engine2
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     engine2
         .unmerge_range(&sid2, 0, 0, 1, 1)

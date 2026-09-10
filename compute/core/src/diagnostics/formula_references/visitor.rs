@@ -4,7 +4,7 @@ use compute_parser::{ASTNode, AstVisitor, CellRefNode, ReferenceToken, Reference
 use formula_types::{CellRef, Scope, StructuredRef, StructuredRefSpecifier};
 use value_types::CellError;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 
 use super::edges::PendingEdge;
 use super::sources::SourceFormula;
@@ -13,18 +13,18 @@ use super::types::{
 };
 
 pub(super) fn collect_ast_edges(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     source: &SourceFormula,
     tokens: &[ReferenceToken],
     ast_node: &ASTNode,
 ) -> Vec<PendingEdge> {
-    let mut visitor = BrokenAstVisitor::new(mirror, source, tokens);
+    let mut visitor = BrokenAstVisitor::new(cell_store, source, tokens);
     visitor.visit(ast_node);
     visitor.edges
 }
 
 struct BrokenAstVisitor<'a> {
-    mirror: &'a CellMirror,
+    cell_store: &'a CellStore,
     source: &'a SourceFormula,
     tokens: &'a [ReferenceToken],
     token_cursor: usize,
@@ -34,12 +34,12 @@ struct BrokenAstVisitor<'a> {
 
 impl<'a> BrokenAstVisitor<'a> {
     fn new(
-        mirror: &'a CellMirror,
+        cell_store: &'a CellStore,
         source: &'a SourceFormula,
         tokens: &'a [ReferenceToken],
     ) -> Self {
         Self {
-            mirror,
+            cell_store,
             source,
             tokens,
             token_cursor: 0,
@@ -146,7 +146,7 @@ impl AstVisitor for BrokenAstVisitor<'_> {
 
     fn visit_cell_ref(&mut self, r: &CellRefNode) {
         if let CellRef::Resolved(id) = &r.reference
-            && self.mirror.resolve_position(id).is_none()
+            && self.cell_store.resolve_position(id).is_none()
             && let Some(token) = self.next_token(&[ReferenceTokenClass::CellOrRange])
         {
             let mut edge = PendingEdge::from_token(
@@ -157,7 +157,7 @@ impl AstVisitor for BrokenAstVisitor<'_> {
                 "cell identity target no longer has a position".to_string(),
             );
             edge.target_cell_id = Some(*id);
-            edge.target_sheet_id = self.mirror.sheet_for_cell(id);
+            edge.target_sheet_id = self.cell_store.sheet_for_cell(id);
             self.edges.push(edge);
         }
     }
@@ -170,7 +170,7 @@ impl AstVisitor for BrokenAstVisitor<'_> {
             Some(sheet) => vec![Scope::Sheet(sheet), Scope::Workbook],
             None => vec![Scope::Workbook],
         };
-        if self.mirror.resolve_variable(name, &chain).is_some() {
+        if self.cell_store.resolve_variable(name, &chain).is_some() {
             return;
         }
         if let Some(token) = self.next_token(&[ReferenceTokenClass::Name]) {
@@ -188,7 +188,7 @@ impl AstVisitor for BrokenAstVisitor<'_> {
     }
 
     fn visit_structured_ref(&mut self, r: &StructuredRef) {
-        let Some(table) = self.mirror.get_table(&r.table_name) else {
+        let Some(table) = self.cell_store.get_table(&r.table_name) else {
             if let Some(token) = self.next_token(&[ReferenceTokenClass::StructuredRef]) {
                 let mut edge = PendingEdge::from_token(
                     token,

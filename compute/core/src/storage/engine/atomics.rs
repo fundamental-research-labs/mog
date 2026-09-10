@@ -12,13 +12,12 @@ use crate::storage::properties;
 use crate::storage::sheet::settings as sheets;
 use bridge_core as bridge;
 use cell_types::SheetId;
-use compute_wire::mutation::serialize_multi_viewport_patches;
 use value_types::ComputeError;
 
 fn update_calculation_settings(
     engine: &mut ComputeEngine,
     update: impl FnOnce(&mut CalculationSettings),
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let mut settings = super::services::queries::get_workbook_settings(&engine.stores);
     let pre_calc = settings.calculation_settings.clone().unwrap_or_default();
     let mut post_calc = pre_calc.clone();
@@ -47,7 +46,7 @@ fn update_calculation_settings(
             });
     }
 
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 #[bridge::api(
@@ -66,10 +65,7 @@ impl ComputeEngine {
     ///
     /// Replaces the TS pattern: `getWorkbookSettings()` → merge → `setWorkbookSettings()`.
     #[bridge::write]
-    pub fn set_calculation_mode(
-        &mut self,
-        mode: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn set_calculation_mode(&mut self, mode: &str) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let calc_mode = match mode {
                 "auto" => CalcMode::Auto,
@@ -90,10 +86,7 @@ impl ComputeEngine {
 
     /// Atomically set the maximum iterations for iterative calculation.
     #[bridge::write]
-    pub fn set_max_iterations(
-        &mut self,
-        n: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn set_max_iterations(&mut self, n: u32) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             update_calculation_settings(engine, |calc| {
                 calc.max_iterations = n;
@@ -106,7 +99,7 @@ impl ComputeEngine {
     pub fn set_iterative_calculation(
         &mut self,
         enabled: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             update_calculation_settings(engine, |calc| {
                 calc.enable_iterative_calculation = enabled;
@@ -119,7 +112,7 @@ impl ComputeEngine {
     pub fn set_convergence_threshold(
         &mut self,
         threshold: f64,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             // The bridge `threshold: f64` parameter is preserved (not a boundary
             // type field); reject non-finite values explicitly so they never
@@ -140,7 +133,7 @@ impl ComputeEngine {
     pub fn set_use_precision_as_displayed(
         &mut self,
         enabled: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             update_calculation_settings(engine, |calc| {
                 calc.full_precision = !enabled;
@@ -167,19 +160,19 @@ impl ComputeEngine {
         end_row: u32,
         end_col: u32,
         mode: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             match mode {
                 "all" => {
                     // Clear contents (values + formulas)
-                    let (_patches1, mut r1) =
+                    let mut r1 =
                         engine.clear_range(sheet_id, start_row, start_col, end_row, end_col)?;
                     // Clear formats
                     let ranges = vec![(start_row, start_col, end_row, end_col)];
-                    let (_, r2) = {
+                    let r2 = {
                         super::services::formatting::clear_format_for_ranges(
                             &mut engine.stores,
-                            &mut engine.mirror,
+                            &mut engine.cell_store,
                             sheet_id,
                             &ranges,
                         )?
@@ -189,19 +182,14 @@ impl ComputeEngine {
                         sheet_id, start_row, start_col, end_row, end_col,
                     )?;
                     r1.property_changes.extend(r2.property_changes);
-                    let value_patches = engine.flush_viewport_patches();
-                    let format_patches = engine.produce_full_viewport_patches(sheet_id);
-                    let patches = compute_wire::mutation::concat_multi_viewport_patches(&[
-                        value_patches,
-                        format_patches,
-                    ]);
-                    Ok((patches, r1))
+
+                    Ok(r1)
                 }
                 "contents" => {
-                    let (_patches1, result) =
+                    let result =
                         engine.clear_range(sheet_id, start_row, start_col, end_row, end_col)?;
-                    let patches = engine.flush_viewport_patches();
-                    Ok((patches, result))
+
+                    Ok(result)
                 }
                 "formats" => engine
                     .clear_format_for_ranges(sheet_id, &[(start_row, start_col, end_row, end_col)]),
@@ -209,10 +197,7 @@ impl ComputeEngine {
                     engine.clear_hyperlinks_in_range(
                         sheet_id, start_row, start_col, end_row, end_col,
                     )?;
-                    Ok((
-                        serialize_multi_viewport_patches(&[]),
-                        MutationResult::empty(),
-                    ))
+                    Ok(MutationResult::empty())
                 }
                 _ => Err(ComputeError::Eval {
                     message: format!("Invalid clear mode: {mode}"),
@@ -232,7 +217,7 @@ impl ComputeEngine {
     #[bridge::read]
     pub fn can_edit_cell(&self, sheet_id: &SheetId, row: u32, col: u32) -> bool {
         if self
-            .mirror
+            .cell_store
             .find_pivot_table_at(sheet_id, row, col)
             .is_some()
         {
@@ -245,10 +230,12 @@ impl ComputeEngine {
 
         // Sheet is protected — check if cell is locked.
         // A cell with no format defaults to locked = true (Excel spec).
-        let cell_hex = super::services::queries::get_cell_id_at(&self.stores, sheet_id, row, col);
-        match cell_hex {
-            Some(hex) => {
-                let locked = properties::is_cell_locked(&self.stores.storage, sheet_id, &hex);
+        let cell_id = self
+            .cell_store
+            .resolve_cell_id(sheet_id, cell_types::SheetPos::new(row, col));
+        match cell_id {
+            Some(id) => {
+                let locked = properties::is_cell_locked_by_id(&self.stores.storage, sheet_id, &id);
                 !locked
             }
             // No cell at position — defaults to locked
@@ -300,12 +287,12 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         count: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let current =
                 super::services::queries::get_frozen_panes_query(&engine.stores, sheet_id);
-            let (_patches, result) = engine.set_frozen_panes(sheet_id, count, current.cols)?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            let result = engine.set_frozen_panes(sheet_id, count, current.cols)?;
+            Ok(result)
         })
     }
 
@@ -315,12 +302,12 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         count: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let current =
                 super::services::queries::get_frozen_panes_query(&engine.stores, sheet_id);
-            let (_patches, result) = engine.set_frozen_panes(sheet_id, current.rows, count)?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            let result = engine.set_frozen_panes(sheet_id, current.rows, count)?;
+            Ok(result)
         })
     }
 }
@@ -385,7 +372,7 @@ mod tests {
 
     fn number_at(engine: &ComputeEngine, row: u32, col: u32) -> f64 {
         match engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sheet_id(), SheetPos::new(row, col))
         {
             Some(CellValue::Number(n)) => n.get(),
@@ -395,7 +382,7 @@ mod tests {
 
     fn assert_circular_error_at(engine: &ComputeEngine, row: u32, col: u32) {
         match engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sheet_id(), SheetPos::new(row, col))
         {
             Some(CellValue::Error(CellError::Circ, None)) => {}

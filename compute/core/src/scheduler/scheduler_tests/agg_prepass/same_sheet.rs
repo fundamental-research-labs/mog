@@ -66,14 +66,14 @@ fn expected_agg_values() -> Vec<(f64, f64, f64)> {
 
 #[test]
 fn test_agg_prepass_same_sheet_countifs() {
-    let (core, mirror) = init_core(agg_same_sheet_snapshot());
+    let (core, cell_store) = init_core(agg_same_sheet_snapshot());
     let expected = expected_agg_values();
     let sheet_id = sid(1);
 
     for row in 0..10u32 {
         assert_number_at(
             &core,
-            &mirror,
+            &cell_store,
             &sheet_id,
             row,
             4,
@@ -85,14 +85,14 @@ fn test_agg_prepass_same_sheet_countifs() {
 
 #[test]
 fn test_agg_prepass_same_sheet_sumifs() {
-    let (core, mirror) = init_core(agg_same_sheet_snapshot());
+    let (core, cell_store) = init_core(agg_same_sheet_snapshot());
     let expected = expected_agg_values();
     let sheet_id = sid(1);
 
     for row in 0..10u32 {
         assert_number_at(
             &core,
-            &mirror,
+            &cell_store,
             &sheet_id,
             row,
             5,
@@ -104,14 +104,14 @@ fn test_agg_prepass_same_sheet_sumifs() {
 
 #[test]
 fn test_agg_prepass_same_sheet_averageifs() {
-    let (core, mirror) = init_core(agg_same_sheet_snapshot());
+    let (core, cell_store) = init_core(agg_same_sheet_snapshot());
     let expected = expected_agg_values();
     let sheet_id = sid(1);
 
     for row in 0..10u32 {
         assert_number_at(
             &core,
-            &mirror,
+            &cell_store,
             &sheet_id,
             row,
             6,
@@ -143,18 +143,18 @@ fn test_agg_prepass_return_boundary_flushes_subnormal() {
         ));
     }
 
-    let (mut core, mirror) = init_core(single_sheet_snapshot("Sheet1", 8, 4, cells));
+    let (mut core, cell_store) = init_core(single_sheet_snapshot("Sheet1", 8, 4, cells));
     let sheet_id = sid(1);
     let dirty = (0..8u32)
         .map(|row| {
-            mirror
+            cell_store
                 .resolve_cell_id(&sheet_id, cell_types::SheetPos::new(row, 3))
                 .expect("SUMIFS formula cell")
         })
         .collect::<rustc_hash::FxHashSet<_>>();
     let already_evaluated = rustc_hash::FxHashSet::default();
     let epoch = core.begin_sumifs_cache_epoch();
-    let (results, _) = core.run_agg_prepass(&mirror, &dirty, &already_evaluated, epoch);
+    let (results, _) = core.run_agg_prepass(&cell_store, &dirty, &already_evaluated, epoch);
 
     assert_eq!(results.len(), 8);
     assert!(

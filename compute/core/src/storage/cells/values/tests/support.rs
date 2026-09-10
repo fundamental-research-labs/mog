@@ -1,4 +1,5 @@
 use super::*;
+use cell_types::CellId;
 
 pub(super) fn make_sheet_id(n: u128) -> SheetId {
     SheetId::from_raw(n)
@@ -11,12 +12,12 @@ pub(super) fn make_cell_id(n: u128) -> CellId {
 /// Create a WorkbookStorage with a single sheet.
 ///
 /// `add_sheet()` creates native sheet metadata and compact axes.
-pub(super) fn storage_with_sheet() -> (WorkbookStorage, crate::mirror::CellMirror, SheetId) {
+pub(super) fn storage_with_sheet() -> (WorkbookStorage, crate::cells::CellStore, SheetId) {
     let mut storage = WorkbookStorage::new();
-    let mut mirror = crate::mirror::CellMirror::new();
+    let mut cell_store = crate::cells::CellStore::new();
     let sheet_id = make_sheet_id(1);
     storage
-        .add_sheet(&mut mirror, sheet_id, "Sheet1", 100, 26)
+        .add_sheet(&mut cell_store, sheet_id, "Sheet1", 100, 26)
         .unwrap();
-    (storage, mirror, sheet_id)
+    (storage, cell_store, sheet_id)
 }

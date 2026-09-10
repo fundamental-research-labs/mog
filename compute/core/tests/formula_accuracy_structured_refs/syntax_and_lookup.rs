@@ -57,7 +57,7 @@ fn test_structured_ref_case_insensitive() {
     assert!(
         err.is_none(),
         "Case-insensitive table lookup should work. Got error: {:?}. \
-         This indicates get_table() in mirror/mod.rs does case-sensitive matching.\n{}",
+         This indicates get_table() in eval_bridge/store_access.rs does case-sensitive matching.\n{}",
         err,
         format_recalc_diagnostics(&result)
     );

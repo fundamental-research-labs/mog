@@ -24,7 +24,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         object_id: &str,
         json: serde_json::Value,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let mut result = services::objects::set_floating_object(
                 &mut engine.stores,
@@ -34,12 +34,12 @@ impl ComputeEngine {
             )?;
             shared::sync_floating_anchors(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 sheet_id,
                 &mut result,
                 true,
             )?;
-            Ok(shared::with_empty_patches(result))
+            Ok(result)
         })
     }
 
@@ -65,10 +65,9 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         object_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::delete_floating_object(&mut engine.stores, sheet_id, object_id)
-                .map(shared::with_empty_patches)
         })
     }
 
@@ -79,18 +78,22 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         config: &serde_json::Value,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
-            let mut result =
-                services::objects::create_floating_object(&mut engine.stores, sheet_id, config)?;
+            let mut result = services::objects::create_floating_object(
+                &mut engine.stores,
+                &engine.cell_store,
+                sheet_id,
+                config,
+            )?;
             shared::sync_floating_anchors(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 sheet_id,
                 &mut result,
                 true,
             )?;
-            Ok(shared::with_empty_patches(result))
+            Ok(result)
         })
     }
 
@@ -101,7 +104,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         object_id: &str,
         updates: &serde_json::Value,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let mut result = services::objects::update_floating_object(
                 &mut engine.stores,
@@ -111,12 +114,12 @@ impl ComputeEngine {
             )?;
             shared::sync_floating_anchors(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 sheet_id,
                 &mut result,
                 shared::changes_anchor(updates),
             )?;
-            Ok(shared::with_empty_patches(result))
+            Ok(result)
         })
     }
 
@@ -126,17 +129,22 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         config: CreateShapeConfig,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
-            let mut result = services::objects::create_shape(&mut engine.stores, sheet_id, config)?;
+            let mut result = services::objects::create_shape(
+                &mut engine.stores,
+                &mut engine.cell_store,
+                sheet_id,
+                config,
+            )?;
             shared::sync_floating_anchors(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 sheet_id,
                 &mut result,
                 true,
             )?;
-            Ok(shared::with_empty_patches(result))
+            Ok(result)
         })
     }
 
@@ -147,22 +155,23 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         object_id: &str,
         target: MoveTarget,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let mut result = services::objects::move_floating_object_typed(
                 &mut engine.stores,
+                &mut engine.cell_store,
                 sheet_id,
                 object_id,
                 target,
             )?;
             shared::sync_floating_anchors(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 sheet_id,
                 &mut result,
                 true,
             )?;
-            Ok(shared::with_empty_patches(result))
+            Ok(result)
         })
     }
 
@@ -173,15 +182,15 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         object_id: &str,
         config: ResizeConfig,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::resize_floating_object_typed(
                 &mut engine.stores,
+                &engine.cell_store,
                 sheet_id,
                 object_id,
                 config,
             )
-            .map(shared::with_empty_patches)
         })
     }
 
@@ -192,15 +201,15 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         object_id: &str,
         rotation: f64,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::rotate_floating_object_typed(
                 &mut engine.stores,
+                &engine.cell_store,
                 sheet_id,
                 object_id,
                 rotation,
             )
-            .map(shared::with_empty_patches)
         })
     }
 
@@ -211,10 +220,9 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         object_id: &str,
         style: ShapeStyleUpdate,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::update_shape_style(&mut engine.stores, sheet_id, object_id, style)
-                .map(shared::with_empty_patches)
         })
     }
 
@@ -225,15 +233,15 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         object_id: &str,
         axis: FlipAxis,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::flip_floating_object_typed(
                 &mut engine.stores,
+                &engine.cell_store,
                 sheet_id,
                 object_id,
                 axis,
             )
-            .map(shared::with_empty_patches)
         })
     }
 
@@ -245,16 +253,16 @@ impl ComputeEngine {
         object_id: &str,
         offset_x: f64,
         offset_y: f64,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::duplicate_floating_object_typed(
                 &mut engine.stores,
+                &engine.cell_store,
                 sheet_id,
                 object_id,
                 offset_x,
                 offset_y,
             )
-            .map(shared::with_empty_patches)
         })
     }
 
@@ -300,7 +308,7 @@ impl ComputeEngine {
         &self,
         sheet_id: &SheetId,
     ) -> Vec<(String, FloatingObjectBounds)> {
-        services::objects::compute_all_object_bounds(&self.stores, sheet_id)
+        services::objects::compute_all_object_bounds(&self.stores, &self.cell_store, sheet_id)
     }
 
     // -------------------------------------------------------------------

@@ -3,13 +3,11 @@ use std::collections::HashMap;
 use cell_types::{CellId, SheetId, SheetPos};
 use value_types::{CellValue, ComputeError};
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::{CellChange, CellPosition, PolicyPreservedParseOutcome, RecalcResult};
 use crate::storage::cells::values::InputParseContext;
 use crate::storage::engine::mutation::CellInput;
-use crate::storage::engine::services::cell_editing::{
-    NO_OLD_FORMULA_SENTINEL, register_formula_cell_identities,
-};
+use crate::storage::engine::services::cell_editing::{NO_OLD_FORMULA_SENTINEL, sync_grid_axes};
 use crate::storage::engine::stores::EngineStores;
 
 use super::edits::{canonicalize_resolved_cell_inputs, validate_edit_bounds};
@@ -35,9 +33,9 @@ impl DirectEditRecord {
     }
 }
 
-fn resolved_post_edit_value(mirror: &CellMirror, record: &DirectEditRecord) -> CellValue {
+fn resolved_post_edit_value(cell_store: &CellStore, record: &DirectEditRecord) -> CellValue {
     if record.prepared_formula.is_some() {
-        mirror
+        cell_store
             .get_cell_value(&record.cell_id)
             .cloned()
             .unwrap_or(CellValue::Null)
@@ -48,7 +46,7 @@ fn resolved_post_edit_value(mirror: &CellMirror, record: &DirectEditRecord) -> C
 
 fn append_missing_direct_edit_changes(
     result: &mut RecalcResult,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     records: &[DirectEditRecord],
 ) {
     let mut changed_ids = rustc_hash::FxHashSet::default();
@@ -70,7 +68,7 @@ fn append_missing_direct_edit_changes(
             continue;
         }
 
-        let value = resolved_post_edit_value(mirror, record);
+        let value = resolved_post_edit_value(cell_store, record);
         let new_formula = record.new_formula();
         if record.old_value == value && record.old_formula == new_formula {
             continue;
@@ -131,7 +129,7 @@ fn patch_direct_edit_before_snapshots(
 /// Batch-set cells with full store synchronization.
 pub(in crate::storage::engine) fn mutation_set_cells(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     edits: Vec<(SheetId, CellId, u32, u32, CellInput)>,
     skip_cycle_check: bool,
 ) -> Result<RecalcResult, ComputeError> {
@@ -143,14 +141,14 @@ pub(in crate::storage::engine) fn mutation_set_cells(
     )?;
     stores
         .compute
-        .validate_region_partial_writes(mirror, &edits)?;
+        .validate_region_partial_writes(cell_store, &edits)?;
     // Viewport-only deferred imports reject graph construction. Check before
     // history, identity, and metadata state can be changed by this mutation.
     stores.compute.ensure_graph_construction_ready()?;
 
     for (sheet, cell, row, col, _) in &edits {
         crate::storage::engine::history::cells::capture_cell(
-            stores, mirror, *sheet, *cell, *row, *col,
+            stores, cell_store, *sheet, *cell, *row, *col,
         );
     }
 
@@ -163,29 +161,27 @@ pub(in crate::storage::engine) fn mutation_set_cells(
             }
             let grid = stores.grid_indexes.get(sheet_id)?;
             use crate::storage::properties;
-            let format = match grid.cell_id_at(*row, *col) {
-                Some(cid) => {
-                    let cell_hex = compute_document::hex::id_to_hex(cid.as_u128());
-                    properties::get_effective_format(
+            let format =
+                match cell_store.resolve_cell_id(sheet_id, cell_types::SheetPos::new(*row, *col)) {
+                    Some(cid) => properties::get_effective_format_by_id(
                         &stores.storage,
                         sheet_id,
-                        &cell_hex,
+                        Some(&cid),
                         *row,
                         *col,
                         None,
                         Some(grid),
-                        mirror.get_sheet(sheet_id),
-                    )
-                }
-                None => properties::get_positional_format(
-                    &stores.storage,
-                    sheet_id,
-                    *row,
-                    *col,
-                    Some(grid),
-                    mirror.get_sheet(sheet_id),
-                ),
-            };
+                        cell_store.get_sheet(sheet_id),
+                    ),
+                    None => properties::get_positional_format(
+                        &stores.storage,
+                        sheet_id,
+                        *row,
+                        *col,
+                        Some(grid),
+                        cell_store.get_sheet(sheet_id),
+                    ),
+                };
             format
                 .number_format
                 .as_deref()
@@ -254,12 +250,20 @@ pub(in crate::storage::engine) fn mutation_set_cells(
                 }
             }
         };
-        let old_value = mirror
+        let old_value = cell_store
             .get_cell_value(&cell_id)
-            .or_else(|| mirror.get_cell_value_at(sheet_id, SheetPos::new(row, col)))
+            .or_else(|| cell_store.get_cell_value_at(sheet_id, SheetPos::new(row, col)))
             .cloned()
             .unwrap_or(CellValue::Null);
-        let old_formula = stores.compute.get_formula(&cell_id).map(str::to_owned);
+        let old_formula = stores
+            .compute
+            .get_formula(&cell_id)
+            .or_else(|| {
+                cell_store
+                    .resolve_cell_id(sheet_id, SheetPos::new(row, col))
+                    .and_then(|id| stores.compute.get_formula(&id))
+            })
+            .map(str::to_owned);
         direct_edit_records.push(DirectEditRecord {
             sheet_id: *sheet_id,
             cell_id,
@@ -284,7 +288,7 @@ pub(in crate::storage::engine) fn mutation_set_cells(
 
     register_cell_positions(
         stores,
-        mirror,
+        cell_store,
         edits
             .iter()
             .map(|(sheet_id, cell_id, row, col, _)| (*sheet_id, *cell_id, *row, *col)),
@@ -294,7 +298,7 @@ pub(in crate::storage::engine) fn mutation_set_cells(
         stores.storage.clear_cell_metadata(*cell_id);
         // A single-cell imported CSE marker is runtime declaration state too.
         // Ordinary authored replacement must not retain its scalar-only behavior.
-        mirror.cse_single_cell.remove(cell_id);
+        cell_store.cse_single_cell.remove(cell_id);
         cache_metadata_cells
             .entry(*sheet_id)
             .or_default()
@@ -308,7 +312,11 @@ pub(in crate::storage::engine) fn mutation_set_cells(
         );
     }
 
-    crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
 
     // Imported dynamic-array children are package caches, not authored cells.
     // A direct replacement of their anchor must retire those old values before
@@ -318,7 +326,7 @@ pub(in crate::storage::engine) fn mutation_set_cells(
     // durable cache intact until the scheduler accepts the mutation, so a
     // later failed write can restore the exact imported-cache state.
     imported_array_caches::retire_for_positions(
-        mirror,
+        cell_store,
         edits
             .iter()
             .map(|(sheet_id, _, row, col, _)| (*sheet_id, *row, *col)),
@@ -328,24 +336,22 @@ pub(in crate::storage::engine) fn mutation_set_cells(
     // The scheduler owns the sole cell write and preserves iterative formula seeds.
     let mut result = match stores
         .compute
-        .set_cells(mirror, &prepared_edits, skip_cycle_check)
+        .set_cells(cell_store, &prepared_edits, skip_cycle_check)
     {
         Ok(result) => result,
         Err(error) => {
-            // Invalidating only the live mirror before scheduling avoids stale
+            // Invalidating only the live cell store before scheduling avoids stale
             // spill blockers. Restore it from the still-authoritative storage
             // sidecar if scheduling rejects the batch.
-            imported_array_caches::restore_after_rejection(stores, mirror);
+            imported_array_caches::restore_after_rejection(stores, cell_store);
             return Err(error);
         }
     };
-    imported_array_caches::commit(stores, mirror);
-    for (_, cell_id, _, _, _) in &edits {
-        register_formula_cell_identities(stores, mirror, *cell_id);
-    }
+    imported_array_caches::commit(stores, cell_store);
+    sync_grid_axes(stores, cell_store);
 
     patch_direct_edit_before_snapshots(&mut result, &direct_edit_records_by_cell);
-    append_missing_direct_edit_changes(&mut result, mirror, &direct_edit_records);
+    append_missing_direct_edit_changes(&mut result, cell_store, &direct_edit_records);
 
     attach_policy_preserved_outcomes(&mut result, preserved_outcomes);
     Ok(result)

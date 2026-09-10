@@ -1,6 +1,6 @@
 use super::*;
 
-/// Serializable OLE object output for WASM consumers.
+/// Serializable OLE object output.
 ///
 /// Mirrors the enriched CT_OleObject attributes plus objectPr child data
 /// and preview image paths for rendering on the TypeScript side.

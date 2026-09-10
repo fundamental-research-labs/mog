@@ -1,6 +1,6 @@
 //! Drawing anchor projection through the native identity grid.
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::WorkbookStorage;
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::{hex_to_id, id_to_hex};
@@ -15,7 +15,10 @@ fn cell_id(reference: &str) -> Option<CellId> {
 }
 
 /// Project durable anchor identities into the positions needed by drawing export.
-pub(crate) fn project_anchor_positions(object: &mut FloatingObject, grid: &GridIndex) {
+pub(crate) fn project_anchor_positions(
+    object: &mut FloatingObject,
+    grid: &crate::cells::SheetStore,
+) {
     let common = &mut object.common;
     if common.anchor.anchor_mode == AnchorMode::Absolute {
         return;
@@ -44,7 +47,7 @@ pub(crate) fn project_anchor_positions(object: &mut FloatingObject, grid: &GridI
 pub(crate) fn sync_after_structure(
     storage: &mut WorkbookStorage,
     grid: &mut GridIndex,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: SheetId,
     change: &StructureChange,
 ) {
@@ -82,7 +85,7 @@ pub(crate) fn sync_after_structure(
             if let Some((r, c)) = reference
                 .as_deref()
                 .and_then(cell_id)
-                .and_then(|id| grid.cell_position(&id))
+                .and_then(|id| cell_store.get_sheet(&sheet_id)?.cell_position(&id))
             {
                 *row = r;
                 *col = c;
@@ -110,11 +113,9 @@ pub(crate) fn sync_after_structure(
             *row = (*row).min(grid.row_count() - 1);
             *col = (*col).min(grid.col_count() - 1);
             let pos = SheetPos::new(*row, *col);
-            if let Some(id) = mirror.resolve_cell_id(&sheet_id, pos) {
-                grid.register_cell(id, *row, *col);
-            }
-            let id = grid.ensure_cell_id(*row, *col);
-            mirror.register_identity_position(sheet_id, pos, id);
+            let id = cell_store
+                .ensure_identity_at(&sheet_id, pos)
+                .expect("drawing sheet exists");
             *reference = Some(id_to_hex(id.as_u128()).to_string());
         };
         let common = &mut object.common;

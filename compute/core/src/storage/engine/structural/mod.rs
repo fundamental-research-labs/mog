@@ -37,7 +37,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         change: &StructureChange,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| engine.apply_structure_change_bridge(sheet_id, change))
     }
 
@@ -55,7 +55,7 @@ impl ComputeEngine {
         src_end_col: u32,
         target_row: u32,
         target_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             engine.apply_relocate_cells_values(
                 sheet_id,
@@ -80,7 +80,7 @@ impl ComputeEngine {
         row_count: u32,
         col_count: u32,
         shift_right: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             engine.apply_insert_cells_with_shift(
                 sheet_id,
@@ -103,7 +103,7 @@ impl ComputeEngine {
         row_count: u32,
         col_count: u32,
         shift_left: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             engine
                 .apply_delete_cells_with_shift(sheet_id, row, col, row_count, col_count, shift_left)
@@ -121,7 +121,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         row: u32,
         height_px: f64,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| engine.apply_set_row_height(sheet_id, row, height_px))
     }
 
@@ -132,7 +132,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         col: u32,
         width_px: f64,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| engine.apply_set_col_width(sheet_id, col, width_px))
     }
 
@@ -142,7 +142,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         widths: &[(u32, f64)],
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| engine.apply_set_col_widths(sheet_id, widths))
     }
 
@@ -153,7 +153,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         col: u32,
         width_chars: f64,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| engine.apply_set_col_width_chars(sheet_id, col, width_chars))
     }
 
@@ -163,7 +163,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         widths: &[(u32, f64)],
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| engine.apply_set_col_widths_chars(sheet_id, widths))
     }
 
@@ -173,7 +173,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         rows: &[u32],
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| engine.apply_hide_rows(sheet_id, rows))
     }
 
@@ -183,7 +183,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         rows: &[u32],
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| engine.apply_unhide_rows(sheet_id, rows))
     }
 
@@ -193,7 +193,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         cols: &[u32],
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| engine.apply_hide_columns(sheet_id, cols))
     }
 
@@ -203,7 +203,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         cols: &[u32],
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| engine.apply_unhide_columns(sheet_id, cols))
     }
 
@@ -220,7 +220,7 @@ impl ComputeEngine {
         start_col: u32,
         end_row: u32,
         end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             engine.apply_merge_range(sheet_id, start_row, start_col, end_row, end_col)
         })
@@ -235,7 +235,7 @@ impl ComputeEngine {
         start_col: u32,
         end_row: u32,
         end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             engine.apply_unmerge_range(sheet_id, start_row, start_col, end_row, end_col)
         })
@@ -250,7 +250,7 @@ impl ComputeEngine {
         start_col: u32,
         end_row: u32,
         end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             engine.apply_merge_across(sheet_id, start_row, start_col, end_row, end_col)
         })
@@ -265,7 +265,7 @@ impl ComputeEngine {
         start_col: u32,
         end_row: u32,
         end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             engine.apply_merge_and_center(sheet_id, start_row, start_col, end_row, end_col)
         })
@@ -292,10 +292,7 @@ impl ComputeEngine {
 
     /// Clear all merged regions for a sheet.
     #[bridge::write]
-    pub fn clear_all_merges(
-        &mut self,
-        sheet_id: &SheetId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn clear_all_merges(&mut self, sheet_id: &SheetId) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| engine.apply_clear_all_merges(sheet_id))
     }
 
@@ -305,7 +302,7 @@ impl ComputeEngine {
     pub fn validate_and_clean_merges(
         &mut self,
         sheet_id: &SheetId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| engine.apply_validate_and_clean_merges(sheet_id))
     }
 
@@ -322,7 +319,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         row: u32,
         col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.without_history(|engine| engine.apply_get_or_create_cell_id(sheet_id, row, col))
     }
 
@@ -334,7 +331,7 @@ impl ComputeEngine {
         cell_id_hex: &str,
         new_row: u32,
         new_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.without_history(|engine| {
             engine.apply_update_cell_position(sheet_id, cell_id_hex, new_row, new_col)
         })
@@ -350,20 +347,9 @@ impl ComputeEngine {
     /// Handles same-sheet and cross-sheet moves, overlapping ranges, and
     /// clears target cells that are not part of the move.
     ///
-    /// Routes through `apply_mutation()` for proper recalc + viewport patches.
+    /// Routes through `apply_mutation()` for recalculation and complete mutation results.
     /// Returns a `MutationResult` with `RelocateResult` in `data`.
     ///
-    /// Viewport patches (filter viewport R5.3): the relocation pipeline emits
-    /// (a) clear-patches for source cells (via `clear_cells` inside
-    /// `mutation_relocate_cells`), and (b) write-patches for every target
-    /// position (via `set_cells_raw`). Previously this method returned
-    /// empty patches because patches were stashed in
-    /// `pending_recalc` but never flushed — same-sheet cut-paste in the
-    /// kernel had to fall back to `executePaste` (creates new CellIds)
-    /// or call `forceRefreshAllViewports` cross-sheet to mask the gap.
-    /// Whenever the source and target sheets differ we additionally
-    /// rebuild full viewport binaries on both sheets so the cross-sheet
-    /// path no longer needs the kernel-side force-refresh.
     #[bridge::write]
     #[allow(clippy::too_many_arguments)]
     pub fn relocate_cells(
@@ -376,7 +362,7 @@ impl ComputeEngine {
         target_sheet_id: &SheetId,
         target_row: u32,
         target_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             engine.apply_relocate_cells(
                 source_sheet_id,

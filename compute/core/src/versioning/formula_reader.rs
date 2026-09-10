@@ -113,25 +113,25 @@ pub(super) fn canonical_formula_ref(
         IdentityFormulaRef::RectRange(range_ref) => {
             let sheet_key = canonical_sheet_key_for(sheet_keys, &range_ref.sheet_id)?;
             let (start_row_sheet, start_row) = engine
-                .mirror()
+                .cell_store()
                 .row_index_lookup(&range_ref.start_row_id)
                 .ok_or(FormulaRefUnsupported {
                     code: "unresolved-row-id",
                 })?;
             let (end_row_sheet, end_row) = engine
-                .mirror()
+                .cell_store()
                 .row_index_lookup(&range_ref.end_row_id)
                 .ok_or(FormulaRefUnsupported {
                     code: "unresolved-row-id",
                 })?;
             let (start_col_sheet, start_column) = engine
-                .mirror()
+                .cell_store()
                 .col_index_lookup(&range_ref.start_col_id)
                 .ok_or(FormulaRefUnsupported {
                     code: "unresolved-column-id",
                 })?;
             let (end_col_sheet, end_column) = engine
-                .mirror()
+                .cell_store()
                 .col_index_lookup(&range_ref.end_col_id)
                 .ok_or(FormulaRefUnsupported {
                     code: "unresolved-column-id",
@@ -167,13 +167,12 @@ pub(super) fn canonical_formula_ref(
             })
         }
         IdentityFormulaRef::FullRow(row_ref) => {
-            let (sheet_id, row) =
-                engine
-                    .mirror()
-                    .row_index_lookup(&row_ref.row_id)
-                    .ok_or(FormulaRefUnsupported {
-                        code: "unresolved-row-id",
-                    })?;
+            let (sheet_id, row) = engine
+                .cell_store()
+                .row_index_lookup(&row_ref.row_id)
+                .ok_or(FormulaRefUnsupported {
+                    code: "unresolved-row-id",
+                })?;
             let sheet_key = canonical_sheet_key_for(sheet_keys, &sheet_id)?;
             Ok(CanonicalFormulaRef::FullRow {
                 object_id: canonical_row_key(&sheet_key, row),
@@ -184,13 +183,13 @@ pub(super) fn canonical_formula_ref(
         }
         IdentityFormulaRef::RowRange(row_ref) => {
             let (start_sheet_id, start_row) = engine
-                .mirror()
+                .cell_store()
                 .row_index_lookup(&row_ref.start_row_id)
                 .ok_or(FormulaRefUnsupported {
                     code: "unresolved-row-id",
                 })?;
             let (end_sheet_id, end_row) = engine
-                .mirror()
+                .cell_store()
                 .row_index_lookup(&row_ref.end_row_id)
                 .ok_or(FormulaRefUnsupported {
                     code: "unresolved-row-id",
@@ -212,11 +211,12 @@ pub(super) fn canonical_formula_ref(
             })
         }
         IdentityFormulaRef::FullCol(column_ref) => {
-            let (sheet_id, column) = engine.mirror().col_index_lookup(&column_ref.col_id).ok_or(
-                FormulaRefUnsupported {
+            let (sheet_id, column) = engine
+                .cell_store()
+                .col_index_lookup(&column_ref.col_id)
+                .ok_or(FormulaRefUnsupported {
                     code: "unresolved-column-id",
-                },
-            )?;
+                })?;
             let sheet_key = canonical_sheet_key_for(sheet_keys, &sheet_id)?;
             Ok(CanonicalFormulaRef::FullColumn {
                 object_id: canonical_column_key(&sheet_key, column),
@@ -227,13 +227,13 @@ pub(super) fn canonical_formula_ref(
         }
         IdentityFormulaRef::ColRange(column_ref) => {
             let (start_sheet_id, start_column) = engine
-                .mirror()
+                .cell_store()
                 .col_index_lookup(&column_ref.start_col_id)
                 .ok_or(FormulaRefUnsupported {
                     code: "unresolved-column-id",
                 })?;
             let (end_sheet_id, end_column) = engine
-                .mirror()
+                .cell_store()
                 .col_index_lookup(&column_ref.end_col_id)
                 .ok_or(FormulaRefUnsupported {
                     code: "unresolved-column-id",
@@ -268,15 +268,16 @@ fn canonical_cell_ref_position(
     cell_id: &cell_types::CellId,
 ) -> Result<(String, u32, u32), FormulaRefUnsupported> {
     let sheet_id = engine
-        .mirror()
+        .cell_store()
         .sheet_for_cell(cell_id)
         .ok_or(FormulaRefUnsupported {
             code: "unresolved-cell-id",
         })?;
     let sheet_key = canonical_sheet_key_for(sheet_keys, &sheet_id)?;
     let (row, column) = engine
-        .grid_index(&sheet_id)
-        .and_then(|grid| grid.cell_position(cell_id))
+        .cell_store()
+        .get_sheet(&sheet_id)
+        .and_then(|sheet| sheet.cell_position(cell_id))
         .ok_or(FormulaRefUnsupported {
             code: "unresolved-cell-position",
         })?;

@@ -8,7 +8,7 @@ use super::ast_transform::shift_ast_for_cf;
 use super::*;
 
 use crate::eval::Evaluator;
-use crate::eval_bridge::MirrorContext;
+use crate::eval_bridge::EvalContext;
 use cell_types::CellId;
 use compute_parser::ASTNode;
 use compute_parser::parse_formula;
@@ -21,17 +21,17 @@ type ApplicableCFEntry<'a> = (
 );
 
 impl ComputeCore {
-    /// Evaluate all CF rules for a sheet. Pure computation: reads from CellMirror.
+    /// Evaluate all CF rules for a sheet. Pure computation: reads from CellStore.
     ///
-    /// Called via IPC (Tauri) or WASM (web). Each rule carries its own applies-to
-    /// ranges as `Vec<RangePos>` (position-native, resolved at read time by the
-    /// engine boundary layer). Stats are computed per-rule.
+    /// Each rule carries its own applies-to ranges as `Vec<RangePos>`
+    /// (position-native, resolved at read time by the engine boundary layer).
+    /// Stats are computed per-rule.
     ///
     /// Returns fully resolved visual properties for each cell that matches at
-    /// least one rule. The TS bridge caches these, the renderer reads from cache.
+    /// least one rule.
     pub fn eval_cf(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         sheet_id: &SheetId,
         rules: &[crate::cf::types::CFRule],
     ) -> Vec<crate::cf::types::CellCFResult> {
@@ -43,12 +43,12 @@ impl ComputeCore {
         } else {
             crate::eval::clock::RecalcClock::for_recalc(None)
         };
-        self.eval_cf_with_clock(mirror, sheet_id, rules, clock)
+        self.eval_cf_with_clock(cell_store, sheet_id, rules, clock)
     }
 
     pub(crate) fn eval_cf_with_clock(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         sheet_id: &SheetId,
         rules: &[crate::cf::types::CFRule],
         clock: crate::eval::clock::RecalcClock,
@@ -56,7 +56,7 @@ impl ComputeCore {
         use crate::cf::stats::compute_range_stats;
         use cell_types::RangePos;
 
-        let sheet = match mirror.get_sheet(sheet_id) {
+        let sheet = match cell_store.get_sheet(sheet_id) {
             Some(s) => s,
             None => return Vec::new(),
         };
@@ -65,7 +65,7 @@ impl ComputeCore {
         // injected clock so cloud workers honor the session userTimezone.
         let context = crate::cf::evaluator::CFEvaluationContext {
             now: clock.current_calendar_date(),
-            date_system: value_types::DateSystem::from_date1904(mirror.date1904),
+            date_system: value_types::DateSystem::from_date1904(cell_store.date1904),
         };
 
         // 1. Process each rule's RangePos ranges: clamp to sheet bounds,
@@ -105,9 +105,9 @@ impl ComputeCore {
                     * (clamped_end_col as u64 - rp.start_col() as u64 + 1);
                 if total_cells > 1_000_000 {
                     // For very large ranges, iterate only over cells that
-                    // actually exist in the mirror rather than the full grid.
-                    let range_stats = compute_range_stats_from_mirror(
-                        mirror,
+                    // actually exist in the cell store rather than the full grid.
+                    let range_stats = compute_range_stats_from_store(
+                        cell_store,
                         sheet_id,
                         rp,
                         clamped_end_row,
@@ -121,11 +121,13 @@ impl ComputeCore {
                 let effective_end_row = clamped_end_row;
                 let effective_end_col = clamped_end_col;
 
-                // Collect cell values from the mirror for this range
+                // Collect cell values from the cell store for this range
                 let mut range_values: Vec<value_types::CellValue> = Vec::new();
                 for r in rp.start_row()..=effective_end_row {
                     for c in rp.start_col()..=effective_end_col {
-                        if let Some(cv) = mirror.get_cell_value_at(sheet_id, SheetPos::new(r, c)) {
+                        if let Some(cv) =
+                            cell_store.get_cell_value_at(sheet_id, SheetPos::new(r, c))
+                        {
                             range_values.push(cv.clone());
                         }
                     }
@@ -265,13 +267,13 @@ impl ComputeCore {
                 _ => continue,
             };
 
-            let value = mirror
+            let value = cell_store
                 .get_cell_value_at(sheet_id, SheetPos::new(row, col))
                 .cloned()
                 .unwrap_or(value_types::CellValue::Null);
-            let has_formula = mirror
+            let has_formula = cell_store
                 .resolve_cell_id(sheet_id, SheetPos::new(row, col))
-                .is_some_and(|cell_id| mirror.get_formula(&cell_id).is_some());
+                .is_some_and(|cell_id| cell_store.get_formula(&cell_id).is_some());
 
             // Sort applicable rules by priority (lower number = higher priority = first)
             applicable.sort_by_key(|(r, _, _)| r.priority);
@@ -293,11 +295,11 @@ impl ComputeCore {
                         let col_delta = col as i64 - *origin_col as i64;
                         let shifted_ast = shift_ast_for_cf(ast, row_delta, col_delta, *sheet_id);
 
-                        let cell_id = mirror
+                        let cell_id = cell_store
                             .resolve_cell_id(sheet_id, SheetPos::new(row, col))
                             .unwrap_or(CellId::from_raw(0));
-                        let ctx =
-                            MirrorContext::new(mirror, cell_id, *sheet_id).with_recalc_clock(clock);
+                        let ctx = EvalContext::new(cell_store, cell_id, *sheet_id)
+                            .with_recalc_clock(clock);
 
                         crate::eval::sync_block_on(Evaluator::evaluate(&shifted_ast, &ctx, &ctx))
                             .ok()
@@ -330,8 +332,8 @@ impl ComputeCore {
 /// using dense column storage, avoiding the O(rows × cols) full-grid scan.
 ///
 /// Only cells within the clamped range that have non-null values are included.
-fn compute_range_stats_from_mirror(
-    mirror: &crate::mirror::CellMirror,
+fn compute_range_stats_from_store(
+    cell_store: &crate::cells::CellStore,
     sheet_id: &SheetId,
     rp: &cell_types::RangePos,
     clamped_end_row: u32,
@@ -339,7 +341,7 @@ fn compute_range_stats_from_mirror(
 ) -> crate::cf::stats::RangeStatistics {
     use crate::cf::stats::compute_range_stats;
 
-    let sheet = match mirror.get_sheet(sheet_id) {
+    let sheet = match cell_store.get_sheet(sheet_id) {
         Some(s) => s,
         None => return crate::cf::stats::RangeStatistics::default(),
     };

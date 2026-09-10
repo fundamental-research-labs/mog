@@ -118,7 +118,7 @@ fn formula_result_modes_reset_on_authored_edit_and_native_rebuild() {
     engine.recalculate().unwrap();
     let sheet = engine.storage().sheet_order()[0];
     let id = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&sheet, SheetPos::new(0, 3))
         .unwrap();
     engine
@@ -228,7 +228,7 @@ fn formula_result_modes_author_dynamic_arrays_without_existing_metadata() {
 
 #[test]
 fn imported_formula_result_modes_survive_native_undo_redo() {
-    use crate::mirror::cell_metadata::FormulaResultMode;
+    use crate::cells::cell_metadata::FormulaResultMode;
 
     for (row, expected_mode) in [
         (0, FormulaResultMode::LegacyScalar),
@@ -239,12 +239,12 @@ fn imported_formula_result_modes_survive_native_undo_redo() {
         engine.recalculate().unwrap();
         let sheet = engine.storage().sheet_order()[0];
         let id = engine
-            .mirror()
+            .cell_store()
             .resolve_cell_id(&sheet, SheetPos::new(row, 3))
             .unwrap();
         let original = cell_value_at(&engine, &sheet, row, 3);
         assert_eq!(
-            engine.mirror().formula_result_mode(&id),
+            engine.cell_store().formula_result_mode(&id),
             Some(expected_mode)
         );
 
@@ -253,19 +253,19 @@ fn imported_formula_result_modes_survive_native_undo_redo() {
             cell_value_at(&engine, &sheet, row, 3),
             CellValue::number(42.0)
         );
-        assert_eq!(engine.mirror().formula_result_mode(&id), None);
+        assert_eq!(engine.cell_store().formula_result_mode(&id), None);
 
         for _ in 0..2 {
             engine.undo().unwrap();
             engine.recalculate().unwrap();
             assert_eq!(
-                engine.mirror().formula_result_mode(&id),
+                engine.cell_store().formula_result_mode(&id),
                 Some(expected_mode)
             );
             assert_eq!(cell_value_at(&engine, &sheet, row, 3), original);
             engine.redo().unwrap();
             engine.recalculate().unwrap();
-            assert_eq!(engine.mirror().formula_result_mode(&id), None);
+            assert_eq!(engine.cell_store().formula_result_mode(&id), None);
             assert_eq!(
                 cell_value_at(&engine, &sheet, row, 3),
                 CellValue::number(42.0)
@@ -276,7 +276,7 @@ fn imported_formula_result_modes_survive_native_undo_redo() {
 
 #[test]
 fn authored_cse_replaces_imported_result_modes_before_evaluation() {
-    use crate::mirror::cell_metadata::FormulaResultMode;
+    use crate::cells::cell_metadata::FormulaResultMode;
 
     for (row, col) in [(0, 3), (0, 9)] {
         let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&workbook()).unwrap();
@@ -286,11 +286,11 @@ fn authored_cse_replaces_imported_result_modes_before_evaluation() {
             .set_array_formula(&sheet, row, col, row, col + 1, "=TRANSPOSE(A1:B2)".into())
             .unwrap();
         let id = engine
-            .mirror()
+            .cell_store()
             .resolve_cell_id(&sheet, SheetPos::new(row, col))
             .unwrap();
         assert_eq!(
-            engine.mirror().formula_result_mode(&id),
+            engine.cell_store().formula_result_mode(&id),
             Some(FormulaResultMode::Cse)
         );
         assert_eq!(
@@ -319,13 +319,13 @@ fn authored_cse_replaces_imported_result_modes_before_evaluation() {
 
 #[test]
 fn rejected_authored_cse_preserves_imported_declaration() {
-    use crate::mirror::cell_metadata::FormulaResultMode;
+    use crate::cells::cell_metadata::FormulaResultMode;
 
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&workbook()).unwrap();
     engine.recalculate().unwrap();
     let sheet = engine.storage().sheet_order()[0];
     let id = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&sheet, SheetPos::new(3, 3))
         .unwrap();
     let original_metadata = engine.storage().cell_metadata(&id).cloned();
@@ -343,7 +343,7 @@ fn rejected_authored_cse_preserves_imported_declaration() {
         original_metadata.as_ref()
     );
     assert_eq!(
-        engine.mirror().formula_result_mode(&id),
+        engine.cell_store().formula_result_mode(&id),
         Some(FormulaResultMode::LegacyScalar)
     );
     engine.recalculate().unwrap();

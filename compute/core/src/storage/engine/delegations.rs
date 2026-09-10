@@ -36,7 +36,7 @@ impl ComputeEngine {
     pub fn create_scenario(
         &mut self,
         input: ScenarioCreateInput,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| scenarios_bindings::create_scenario(engine, input))
     }
 
@@ -45,15 +45,12 @@ impl ComputeEngine {
         &mut self,
         scenario_id: &str,
         input: ScenarioUpdateInput,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| scenarios_bindings::update_scenario(engine, scenario_id, input))
     }
 
     #[bridge::write]
-    pub fn remove_scenario(
-        &mut self,
-        scenario_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn remove_scenario(&mut self, scenario_id: &str) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| scenarios_bindings::remove_scenario(engine, scenario_id))
     }
 
@@ -68,18 +65,12 @@ impl ComputeEngine {
     }
 
     #[bridge::write]
-    pub fn apply_scenario(
-        &mut self,
-        scenario_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn apply_scenario(&mut self, scenario_id: &str) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| scenarios_bindings::apply_scenario(engine, scenario_id))
     }
 
     #[bridge::write]
-    pub fn restore_scenario(
-        &mut self,
-        baseline_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn restore_scenario(&mut self, baseline_id: &str) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| scenarios_bindings::restore_scenario(engine, baseline_id))
     }
 
@@ -88,7 +79,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         binding: bindings::CreateBindingInput,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| scenarios_bindings::create_binding(engine, sheet_id, binding))
     }
 
@@ -98,7 +89,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         binding_id: &str,
         updates: bindings::UpdateBindingFields,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             scenarios_bindings::update_binding(engine, sheet_id, binding_id, updates)
         })
@@ -109,7 +100,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         binding_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| scenarios_bindings::remove_binding(engine, sheet_id, binding_id))
     }
 
@@ -142,7 +133,7 @@ impl ComputeEngine {
         binding_id: &str,
         last_refresh: i64,
         last_row_count: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             scenarios_bindings::update_refresh_metadata(
                 engine,
@@ -158,7 +149,7 @@ impl ComputeEngine {
     pub fn remove_bindings_for_connection(
         &mut self,
         connection_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             scenarios_bindings::remove_bindings_for_connection(engine, connection_id)
         })
@@ -169,7 +160,7 @@ impl ComputeEngine {
         &mut self,
         edits: Vec<(SheetId, CellId, u32, u32, super::mutation::CellInput)>,
         skip_cycle_check: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| batch_cells::batch_set_cells(engine, edits, skip_cycle_check))
     }
 
@@ -177,7 +168,7 @@ impl ComputeEngine {
     pub fn batch_clear_cells(
         &mut self,
         cell_ids: Vec<CellId>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| batch_cells::batch_clear_cells(engine, cell_ids))
     }
 
@@ -186,7 +177,7 @@ impl ComputeEngine {
         &mut self,
         edits: Vec<(SheetId, u32, u32, super::mutation::CellInput)>,
         skip_cycle_check: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             batch_cells::batch_set_cells_by_position(engine, edits, skip_cycle_check)
         })
@@ -210,7 +201,7 @@ impl ComputeEngine {
         year: i32,
         month: u32,
         day: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             batch_cells::set_date_value(engine, sheet_id, row, col, year, month, day)
         })
@@ -225,7 +216,7 @@ impl ComputeEngine {
         hours: u32,
         minutes: u32,
         seconds: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             batch_cells::set_time_value(engine, sheet_id, row, col, hours, minutes, seconds)
         })
@@ -239,7 +230,7 @@ impl ComputeEngine {
         start_col: u32,
         end_row: u32,
         end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             batch_cells::clear_range_by_position(
                 engine, sheet_id, start_row, start_col, end_row, end_col,
@@ -252,7 +243,7 @@ impl ComputeEngine {
         &mut self,
         changes: Vec<CellEdit>,
         skip_cycle_check: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| batch_cells::apply_changes(engine, changes, skip_cycle_check))
     }
 
@@ -260,7 +251,7 @@ impl ComputeEngine {
     pub fn add_compute_sheet(
         &mut self,
         snapshot: SheetSnapshot,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.without_history(|engine| compute_sheets_named::add_compute_sheet(engine, snapshot))
     }
 
@@ -268,7 +259,7 @@ impl ComputeEngine {
     pub fn remove_compute_sheet(
         &mut self,
         sheet_id: &SheetId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.without_history(|engine| compute_sheets_named::remove_compute_sheet(engine, sheet_id))
     }
 
@@ -278,7 +269,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         name: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             compute_sheets_named::rename_compute_sheet(engine, sheet_id, name)
         })
@@ -289,15 +280,12 @@ impl ComputeEngine {
         &mut self,
         name: String,
         def: NamedRangeDef,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| compute_sheets_named::set_named_range(engine, name, def))
     }
 
     #[bridge::write]
-    pub fn remove_named_range(
-        &mut self,
-        name: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn remove_named_range(&mut self, name: &str) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| compute_sheets_named::remove_named_range(engine, name))
     }
 
@@ -379,7 +367,7 @@ impl ComputeEngine {
         end_row: u32,
         end_col: u32,
         input: &crate::data_table::CreateDataTableInput,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             what_if::create_data_table(
                 engine, sheet_id, start_row, start_col, end_row, end_col, input,
@@ -436,10 +424,7 @@ impl ComputeEngine {
 
     #[bridge::skip(ts_bridge)]
     #[bridge::structural]
-    pub fn delete_sheet(
-        &mut self,
-        sheet_id: &SheetId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn delete_sheet(&mut self, sheet_id: &SheetId) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| sheet_lifecycle::delete_sheet(engine, sheet_id))
     }
 
@@ -447,7 +432,7 @@ impl ComputeEngine {
     pub fn reorder_sheets(
         &mut self,
         new_order: Vec<String>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| sheet_lifecycle::reorder_sheets(engine, new_order))
     }
 
@@ -467,7 +452,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         rows: u32,
         cols: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| sheet_lifecycle::set_frozen_panes(engine, sheet_id, rows, cols))
     }
 
@@ -477,7 +462,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         key: &str,
         value: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| sheet_lifecycle::set_view_option(engine, sheet_id, key, value))
     }
 
@@ -487,7 +472,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         top_row: u32,
         left_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.without_history(|engine| {
             sheet_lifecycle::set_scroll_position(engine, sheet_id, top_row, left_col)
         })
@@ -498,7 +483,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         new_index: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| sheet_lifecycle::move_sheet(engine, sheet_id, new_index))
     }
 
@@ -507,7 +492,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         color: Option<String>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| sheet_lifecycle::set_tab_color(engine, sheet_id, color))
     }
 
@@ -516,7 +501,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         hidden: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| sheet_lifecycle::set_sheet_hidden(engine, sheet_id, hidden))
     }
 
@@ -525,7 +510,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         enabled: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             sheet_lifecycle::set_sheet_enable_calculation(engine, sheet_id, enabled)
         })
@@ -536,7 +521,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         state: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| sheet_lifecycle::set_sheet_visibility(engine, sheet_id, state))
     }
 
@@ -556,7 +541,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         key: &str,
         value: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             sheet_settings_print::set_sheet_setting(engine, sheet_id, key, value)
         })
@@ -567,7 +552,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         password_hash: Option<String>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             sheet_settings_print::protect_sheet(engine, sheet_id, password_hash)
         })
@@ -579,7 +564,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         password_hash: Option<String>,
         options: SheetProtectionOptions,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             sheet_settings_print::protect_sheet_with_options(
                 engine,
@@ -595,7 +580,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         options: SheetProtectionOptions,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             sheet_settings_print::set_sheet_protection_options(engine, sheet_id, options)
         })
@@ -606,7 +591,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         password_hash: Option<String>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             sheet_settings_print::unprotect_sheet(engine, sheet_id, password_hash)
         })
@@ -622,7 +607,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         row: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             sheet_settings_print::add_horizontal_page_break(engine, sheet_id, row)
         })
@@ -633,7 +618,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         row: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             sheet_settings_print::remove_horizontal_page_break(engine, sheet_id, row)
         })
@@ -644,7 +629,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             sheet_settings_print::add_vertical_page_break(engine, sheet_id, col)
         })
@@ -655,7 +640,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             sheet_settings_print::remove_vertical_page_break(engine, sheet_id, col)
         })
@@ -665,7 +650,7 @@ impl ComputeEngine {
     pub fn clear_all_page_breaks(
         &mut self,
         sheet_id: &SheetId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| sheet_settings_print::clear_all_page_breaks(engine, sheet_id))
     }
 
@@ -679,7 +664,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         area: Option<PrintRange>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| sheet_settings_print::set_print_area(engine, sheet_id, area))
     }
 
@@ -693,7 +678,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         titles: PrintTitles,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| sheet_settings_print::set_print_titles(engine, sheet_id, titles))
     }
 
@@ -707,7 +692,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         config: Option<SplitViewConfig>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| sheet_settings_print::set_split_config(engine, sheet_id, config))
     }
 
@@ -715,7 +700,7 @@ impl ComputeEngine {
     pub fn create_named_range(
         &mut self,
         input: named_ranges::DefinedNameInput,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| defined_names_print_cells::create_named_range(engine, input))
     }
 
@@ -724,17 +709,14 @@ impl ComputeEngine {
         &mut self,
         id: &str,
         updates: named_ranges::NamedRangeUpdate,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             defined_names_print_cells::update_named_range(engine, id, updates)
         })
     }
 
     #[bridge::write]
-    pub fn remove_named_range_by_id(
-        &mut self,
-        id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn remove_named_range_by_id(&mut self, id: &str) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| defined_names_print_cells::remove_named_range_by_id(engine, id))
     }
 
@@ -742,7 +724,7 @@ impl ComputeEngine {
     pub fn remove_named_ranges_by_scope(
         &mut self,
         scope: Option<String>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             defined_names_print_cells::remove_named_ranges_by_scope(engine, scope)
         })
@@ -753,7 +735,7 @@ impl ComputeEngine {
     pub fn import_named_ranges(
         &mut self,
         names: Vec<named_ranges::DefinedName>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| defined_names_print_cells::import_named_ranges(engine, names))
     }
 
@@ -762,7 +744,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         settings: domain_types::domain::print::PrintSettings,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             defined_names_print_cells::set_print_settings(engine, sheet_id, settings)
         })
@@ -773,7 +755,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         info: domain_types::domain::print::HeaderFooterImageInfo,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| defined_names_print_cells::set_hf_image(engine, sheet_id, info))
     }
 
@@ -782,7 +764,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         position: domain_types::domain::print::HfImagePosition,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             defined_names_print_cells::remove_hf_image(engine, sheet_id, position)
         })
@@ -796,7 +778,7 @@ impl ComputeEngine {
         start_col: u32,
         end_row: u32,
         end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             defined_names_print_cells::clear_range(
                 engine, sheet_id, start_row, start_col, end_row, end_col,
@@ -812,7 +794,7 @@ impl ComputeEngine {
         start_col: u32,
         end_row: u32,
         end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             defined_names_print_cells::clear_range_and_return_ids(
                 engine, sheet_id, start_row, start_col, end_row, end_col,
@@ -832,7 +814,7 @@ impl ComputeEngine {
         text: String,
         replacement: String,
         options: crate::engine_types::queries::FindInRangeOptions,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             defined_names_print_cells::replace_all_in_range(
                 engine,

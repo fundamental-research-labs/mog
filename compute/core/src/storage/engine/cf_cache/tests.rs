@@ -466,8 +466,7 @@ fn data_bar_resolves_authored_colors_in_every_role_at_render_boundary() {
             }
         }))
         .unwrap();
-        let rules =
-            convert_cf_formats_to_rules(&[make_format(vec![rule])], None, &palette);
+        let rules = convert_cf_formats_to_rules(&[make_format(vec![rule])], None, &palette);
         assert_eq!(
             rules.len(),
             1,

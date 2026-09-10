@@ -4,11 +4,11 @@ use value_types::CellValue;
 use crate::snapshot::{CellChange, CellPosition, RecalcResult};
 
 /// Merge `other` into `dest` in place, deduplicating `changed_cells` by
-/// (sheet_id, position). `other`'s entries replace any existing entries
-/// at the same position; remaining `other` entries are appended.
+/// (sheet_id, position). Existing entries
+/// at the same position are retained from `dest`; other entries are appended.
 ///
 /// Used by `mutation_relocate_cells` to combine the source-clear and
-/// target-write recalcs into one viewport-patch payload (filter viewport R5.3).
+/// target-write recalcs into one mutation result.
 pub(super) fn merge_recalc_results(dest: &mut RecalcResult, other: RecalcResult) {
     use rustc_hash::FxHashSet;
     if other.changed_cells.is_empty()

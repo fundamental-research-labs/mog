@@ -1,4 +1,3 @@
-use super::shared;
 use crate::engine_types::ZOrderEntry;
 use crate::snapshot::MutationResult;
 use crate::storage::engine::ComputeEngine;
@@ -21,14 +20,13 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         object_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::bring_floating_object_to_front(
                 &mut engine.stores,
                 sheet_id,
                 object_id,
             )
-            .map(shared::with_empty_patches)
         })
     }
 
@@ -38,10 +36,9 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         object_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::send_floating_object_to_back(&mut engine.stores, sheet_id, object_id)
-                .map(shared::with_empty_patches)
         })
     }
 
@@ -51,14 +48,13 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         object_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::bring_floating_object_forward(
                 &mut engine.stores,
                 sheet_id,
                 object_id,
             )
-            .map(shared::with_empty_patches)
         })
     }
 
@@ -68,14 +64,13 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         object_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::send_floating_object_backward(
                 &mut engine.stores,
                 sheet_id,
                 object_id,
             )
-            .map(shared::with_empty_patches)
         })
     }
 

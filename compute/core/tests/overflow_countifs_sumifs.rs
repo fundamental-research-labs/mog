@@ -9,7 +9,7 @@
 //! Run:
 //!   cd os && cargo test -p compute-core --test overflow_countifs_sumifs
 
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::CellValue;
@@ -125,10 +125,10 @@ fn countifs_full_column_no_overflow() {
     let formulas = vec![(6, 2, r#"COUNTIFS(A:A,">=2",B:B,"yes")"#)];
     let snapshot = build_snapshot_with_formulas(data, formulas, 10, 3);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let val = find_formula_value(&result, 0);
@@ -157,10 +157,10 @@ fn sumifs_full_column_no_overflow() {
     let formulas = vec![(6, 2, r#"SUMIFS(B:B,A:A,"x")"#)];
     let snapshot = build_snapshot_with_formulas(data, formulas, 10, 3);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let val = find_formula_value(&result, 0);
@@ -183,10 +183,10 @@ fn countif_full_column_no_overflow() {
     let formulas = vec![(6, 1, r#"COUNTIF(A:A,"apple")"#)];
     let snapshot = build_snapshot_with_formulas(data, formulas, 10, 2);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let val = find_formula_value(&result, 0);
@@ -210,10 +210,10 @@ fn sumif_full_column_no_overflow() {
     let formulas = vec![(4, 2, r#"SUMIF(A:A,"a",B:B)"#)];
     let snapshot = build_snapshot_with_formulas(data, formulas, 8, 3);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let val = find_formula_value(&result, 0);
@@ -229,10 +229,10 @@ fn countifs_empty_sheet_no_overflow() {
     let formulas = vec![(0, 1, r#"COUNTIFS(A:A,">=1")"#)];
     let snapshot = build_snapshot_with_formulas(vec![], formulas, 1, 2);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let val = find_formula_value(&result, 0);
@@ -258,10 +258,10 @@ fn averageifs_full_column_no_overflow() {
     let formulas = vec![(5, 2, r#"AVERAGEIFS(B:B,A:A,"x")"#)];
     let snapshot = build_snapshot_with_formulas(data, formulas, 8, 3);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     let val = find_formula_value(&result, 0);

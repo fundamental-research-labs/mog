@@ -26,7 +26,7 @@ fn element_body_bounds(xml: &[u8], parent_name: &[u8]) -> Option<(usize, usize)>
     Some((open_end + 1, close_start))
 }
 
-fn find_direct_child_start(body: &[u8], child_name: &[u8]) -> Option<usize> {
+pub(crate) fn find_direct_child_start(body: &[u8], child_name: &[u8]) -> Option<usize> {
     let mut pos = 0;
     while pos < body.len() {
         let lt = memchr::memchr(b'<', &body[pos..])? + pos;

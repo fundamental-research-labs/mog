@@ -12,7 +12,7 @@
 //!
 //! Identity formula conversion happens later — the scheduler's
 //! `bulk_parse_and_register()` converts A1 formulas to identity formulas
-//! using the live `CellMirror` after snapshot loading.
+//! using the live `CellStore` after snapshot loading.
 //!
 //! # Module layout (W3.0 pre-split)
 //!
@@ -35,7 +35,7 @@ use snapshot_types::{SheetSnapshot, WorkbookSnapshot};
 
 use crate::storage::infra::hydration::HydrationIdMap;
 
-// Re-export so external consumers (formula-eval, integration tests) can access
+// Re-export so integration tests can access
 // the allocator type required by `parse_output_to_workbook_snapshot`.
 pub use crate::storage::infra::hydration::DefaultIdAllocator;
 
@@ -70,7 +70,9 @@ pub fn parse_output_to_workbook_snapshot(
     let mut sheets = sheet_lowering::convert_sheets(&output.sheets, id_map);
     let resolver = SheetResolver::new(&sheets);
     let mut named_ranges = name_lowering::convert_named_ranges(
-        &output.named_ranges, &resolver, &output.workbook_sheet_inventory,
+        &output.named_ranges,
+        &resolver,
+        &output.workbook_sheet_inventory,
     );
     let tables = table_lowering::convert_tables_from_sheets(&output.sheets, &resolver);
     let pivot_tables = pivot_lowering::convert_pivot_tables(output, &resolver);

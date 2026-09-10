@@ -32,7 +32,7 @@ pub use bridge_delegate_macros::__expand;
 ///
 /// This generates:
 /// 1. `impl ComputeService { ... }` with delegate methods for each descriptor method
-/// 2. New descriptor macros `__bridge_descriptor_ComputeService_*` that WASM/NAPI can consume
+/// 2. New descriptor macros `__bridge_descriptor_ComputeService_*`
 ///
 /// Delegates preserve the original parameters and return type. Borrowed inputs
 /// are owned before dispatching to the engine thread.

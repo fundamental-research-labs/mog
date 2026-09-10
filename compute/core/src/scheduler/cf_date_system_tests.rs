@@ -15,22 +15,27 @@ fn calendar_rule(period: DatePeriod) -> CFRule {
     }
 }
 
-fn date_core(date1904: bool, serials: &[f64; 5]) -> (ComputeCore, CellMirror) {
+fn date_core(date1904: bool, serials: &[f64; 5]) -> (ComputeCore, CellStore) {
     let mut snapshot = make_cf_snapshot();
     for (cell, serial) in snapshot.sheets[0].cells.iter_mut().zip(serials) {
         cell.value = CellValue::number(*serial);
     }
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
-    mirror.date1904 = date1904;
-    (core, mirror)
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
+    cell_store.date1904 = date1904;
+    (core, cell_store)
 }
 
-fn matched_rows(core: &ComputeCore, mirror: &CellMirror, rule: CFRule, now: NaiveDate) -> Vec<u32> {
+fn matched_rows(
+    core: &ComputeCore,
+    cell_store: &CellStore,
+    rule: CFRule,
+    now: NaiveDate,
+) -> Vec<u32> {
     let clock = RecalcClock::for_recalc(Some(date_to_serial(&now) + 0.75));
     let mut rows: Vec<_> = core
-        .eval_cf_with_clock(mirror, &sheet_id(), &[rule], clock)
+        .eval_cf_with_clock(cell_store, &sheet_id(), &[rule], clock)
         .into_iter()
         .map(|result| result.row)
         .collect();
@@ -54,7 +59,7 @@ fn cf_calendar_today_month_year_use_workbook_date_system() {
                 - if date1904 { 1462.0 } else { 0.0 }
                 + 0.5
         });
-        let (core, mirror) = date_core(date1904, &serials);
+        let (core, cell_store) = date_core(date1904, &serials);
         for (period, expected) in [
             (DatePeriod::Today, vec![0]),
             (DatePeriod::ThisMonth, vec![0, 1]),
@@ -63,7 +68,7 @@ fn cf_calendar_today_month_year_use_workbook_date_system() {
             (DatePeriod::NextYear, vec![4]),
         ] {
             assert_eq!(
-                matched_rows(&core, &mirror, calendar_rule(period), now),
+                matched_rows(&core, &cell_store, calendar_rule(period), now),
                 expected,
                 "date1904={date1904}, period={period:?}"
             );
@@ -75,9 +80,14 @@ fn cf_calendar_today_month_year_use_workbook_date_system() {
 fn cf_calendar_serial_zero_is_1904_epoch_and_numeric_comparisons_stay_raw() {
     let epoch1904 = NaiveDate::from_ymd_opt(1904, 1, 1).unwrap();
     for date1904 in [false, true] {
-        let (core, mirror) = date_core(date1904, &[0.0, 0.5, -1.0, 1.0, 1462.0]);
+        let (core, cell_store) = date_core(date1904, &[0.0, 0.5, -1.0, 1.0, 1462.0]);
         assert_eq!(
-            matched_rows(&core, &mirror, calendar_rule(DatePeriod::Today), epoch1904),
+            matched_rows(
+                &core,
+                &cell_store,
+                calendar_rule(DatePeriod::Today),
+                epoch1904
+            ),
             if date1904 { vec![0, 1] } else { vec![4] },
         );
         // The 1900 compatibility entrypoint excludes serial zero, even when
@@ -86,7 +96,7 @@ fn cf_calendar_serial_zero_is_1904_epoch_and_numeric_comparisons_stay_raw() {
             assert!(
                 matched_rows(
                     &core,
-                    &mirror,
+                    &cell_store,
                     calendar_rule(DatePeriod::Today),
                     NaiveDate::from_ymd_opt(1899, 12, 31).unwrap()
                 )
@@ -104,7 +114,7 @@ fn cf_calendar_serial_zero_is_1904_epoch_and_numeric_comparisons_stay_raw() {
                     },
                 },
             };
-            assert_eq!(matched_rows(&core, &mirror, rule, epoch1904), expected);
+            assert_eq!(matched_rows(&core, &cell_store, rule, epoch1904), expected);
         }
     }
 }

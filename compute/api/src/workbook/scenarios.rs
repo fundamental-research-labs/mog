@@ -20,7 +20,7 @@ impl WorkbookScenarios {
         input: ScenarioCreateInput,
     ) -> Result<MutationResult, ComputeApiError> {
         self.dispatch
-            .call_engine(move |e| e.create_scenario(input).map(|(_, r)| r))
+            .call_engine(move |e| e.create_scenario(input))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -32,7 +32,7 @@ impl WorkbookScenarios {
     ) -> Result<MutationResult, ComputeApiError> {
         let owned_id = scenario_id.to_owned();
         self.dispatch
-            .call_engine(move |e| e.update_scenario(&owned_id, input).map(|(_, r)| r))
+            .call_engine(move |e| e.update_scenario(&owned_id, input))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -40,7 +40,7 @@ impl WorkbookScenarios {
     pub fn remove_scenario(&self, scenario_id: &str) -> Result<MutationResult, ComputeApiError> {
         let owned_id = scenario_id.to_owned();
         self.dispatch
-            .call_engine(move |e| e.remove_scenario(&owned_id).map(|(_, r)| r))
+            .call_engine(move |e| e.remove_scenario(&owned_id))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 

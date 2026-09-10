@@ -60,11 +60,10 @@ pub mod fixtures {
 pub mod layout {
     use compute_wire::constants::{
         CELL_STRIDE, DATA_BAR_ENTRY_STRIDE, DIM_STRIDE, ICON_ENTRY_STRIDE, MERGE_STRIDE,
-        MUTATION_HEADER_SIZE, PATCH_STRIDE, POSITION_ENTRY_SIZE, VIEWPORT_HEADER_SIZE,
+        POSITION_ENTRY_SIZE, VIEWPORT_HEADER_SIZE,
     };
-    use compute_wire::flags::{MUT_HAS_ERRORS, MUT_HAS_PROJECTION_CHANGES};
 
-    use super::wire::{read_u8, read_u16, read_u32};
+    use super::wire::{read_u16, read_u32};
 
     pub struct ViewportLayout {
         pub cell_count: usize,
@@ -144,63 +143,6 @@ pub mod layout {
 
         pub fn icon_base(&self, index: usize) -> usize {
             self.icons_start + index * ICON_ENTRY_STRIDE
-        }
-    }
-
-    pub struct MutationLayout {
-        pub patch_count: usize,
-        pub string_pool_bytes: usize,
-        pub sheet_id_len: usize,
-        pub sheet_id_start: usize,
-        pub patches_start: usize,
-        pub string_pool_start: usize,
-        pub spill_section_start: Option<usize>,
-        pub errors_section_start: Option<usize>,
-    }
-
-    impl MutationLayout {
-        pub fn new(buf: &[u8]) -> Self {
-            let patch_count = read_u32(buf, 0) as usize;
-            let string_pool_bytes = read_u32(buf, 4) as usize;
-            let sheet_id_len = read_u16(buf, 8) as usize;
-            let flags = read_u8(buf, 10);
-            let sheet_id_start = MUTATION_HEADER_SIZE;
-            let patches_start = sheet_id_start + sheet_id_len;
-            let string_pool_start = patches_start + patch_count * PATCH_STRIDE;
-            let optional_start = string_pool_start + string_pool_bytes;
-            let spill_section_start =
-                (flags & MUT_HAS_PROJECTION_CHANGES != 0).then_some(optional_start);
-            let errors_section_start = if flags & MUT_HAS_ERRORS != 0 {
-                let spill_bytes = spill_section_start
-                    .map(|start| 4 + read_u32(buf, start) as usize * PATCH_STRIDE)
-                    .unwrap_or(0);
-                Some(optional_start + spill_bytes)
-            } else {
-                None
-            };
-
-            Self {
-                patch_count,
-                string_pool_bytes,
-                sheet_id_len,
-                sheet_id_start,
-                patches_start,
-                string_pool_start,
-                spill_section_start,
-                errors_section_start,
-            }
-        }
-
-        pub fn patch_base(&self, index: usize) -> usize {
-            self.patches_start + index * PATCH_STRIDE
-        }
-
-        pub fn patch_cell_base(&self, index: usize) -> usize {
-            self.patch_base(index) + 8
-        }
-
-        pub fn spill_patch_base(&self, index: usize) -> usize {
-            self.spill_section_start.expect("missing spill section") + 4 + index * PATCH_STRIDE
         }
     }
 }

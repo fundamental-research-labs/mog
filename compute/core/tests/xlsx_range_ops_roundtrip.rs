@@ -80,7 +80,11 @@ fn basic_fixture() -> WorkbookSnapshot {
 fn xlsx_set_range_writes_multiple_cells() {
     let bytes = xlsx_bytes_for(basic_fixture());
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     // Simulate set_range via the production batch-set path.
     let updates = vec![
@@ -125,7 +129,11 @@ fn xlsx_set_range_writes_multiple_cells() {
 fn xlsx_copy_range_duplicates_formulas_with_ref_shift() {
     let bytes = xlsx_bytes_for(basic_fixture());
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     // Copy A1:C1 → A3 (so row 0 contents land on row 2).
     engine
@@ -168,7 +176,11 @@ fn xlsx_move_range_relocates_values() {
     // values to the target). Formulas are not preserved, per its doc comment.
     let bytes = xlsx_bytes_for(basic_fixture());
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     // Move A1:B1 → A5:B5.
     engine

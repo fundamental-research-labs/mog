@@ -5,10 +5,10 @@ use domain_types::{AuthoredStyleRun, CellFormat, DocumentFormat};
 use rustc_hash::FxHashMap;
 use value_types::CellValue;
 
+use crate::cells::CellStore;
 use crate::import::parse_output_to_snapshot::{
     DefaultIdAllocator, parse_output_to_workbook_snapshot,
 };
-use crate::mirror::CellMirror;
 use crate::scheduler::ComputeCore;
 use crate::snapshot::{SheetSnapshot, WorkbookSnapshot};
 use crate::storage::WorkbookStorage;
@@ -95,10 +95,11 @@ fn engine_from_parse_output(output: &domain_types::ParseOutput) -> (ComputeEngin
     let mut snapshot_allocator = DefaultIdAllocator::new();
     let snapshot =
         parse_output_to_workbook_snapshot(output, Some(&id_map), &mut snapshot_allocator);
-    let mut mirror = CellMirror::from_snapshot(snapshot.clone()).expect("mirror from snapshot");
+    let mut cell_store =
+        CellStore::from_snapshot(snapshot.clone()).expect("cell_store from snapshot");
     let mut compute = ComputeCore::new();
     compute
-        .init_from_snapshot_no_recalc(&mut mirror, snapshot.clone())
+        .init_from_snapshot_no_recalc(&mut cell_store, snapshot.clone())
         .expect("compute init");
     let sheet_id = id_map.sheet_ids[0];
     let formats = crate::storage::engine::construction::collect_imported_formats(
@@ -106,9 +107,9 @@ fn engine_from_parse_output(output: &domain_types::ParseOutput) -> (ComputeEngin
         &id_map.sheet_ids,
         &[],
     );
-    let mut engine = assemble_engine(storage, mirror, compute, &snapshot).expect("engine");
+    let mut engine = assemble_engine(storage, cell_store, compute, &snapshot).expect("engine");
     crate::storage::engine::construction::install_imported_formats(
-        &mut engine.mirror,
+        &mut engine.cell_store,
         &engine.stores.storage.metadata.style_palette,
         &formats,
     );
@@ -208,29 +209,24 @@ fn imported_cell_xf_lineage_output() -> domain_types::ParseOutput {
 fn authored_style_runs_hydrate_as_format_ranges_without_blank_cells() {
     let output = authored_style_run_output();
     let (engine, sheet_id) = engine_from_parse_output(&output);
-    let grid = engine
-        .stores
-        .grid_indexes
-        .get(&sheet_id)
-        .expect("grid index");
-    let sheet_mirror = engine.mirror.get_sheet(&sheet_id).expect("sheet mirror");
+    let sheet_store = engine.cell_store.get_sheet(&sheet_id).expect("sheet store");
 
-    assert_eq!(grid.cells().count(), 1);
-    assert_eq!(sheet_mirror.format_ranges().len(), 1);
+    assert_eq!(sheet_store.cells().count(), 1);
+    assert_eq!(sheet_store.format_ranges().len(), 1);
 
     let positional = crate::storage::properties::get_positional_format(
         &engine.stores.storage,
         &sheet_id,
         1,
         0,
-        Some(grid),
-        Some(sheet_mirror),
+        engine.grid_index(&sheet_id),
+        Some(sheet_store),
     );
     assert_eq!(positional.background_color.as_deref(), Some("#FFEE00"));
 
     let mut palette = Vec::new();
     let palette = LocalPalette::from_vec(&mut palette);
-    let cells = export_cells_for_sheet(&engine.stores, &engine.mirror, &sheet_id, &palette);
+    let cells = export_cells_for_sheet(&engine.stores, &engine.cell_store, &sheet_id, &palette);
     assert_eq!(
         cells.len(),
         1,
@@ -246,8 +242,12 @@ fn authored_style_runs_hydrate_as_format_ranges_without_blank_cells() {
         .expect("overlapping value cell should export");
     assert_eq!(value_cell.style_id, Some(1));
 
-    let exported_runs =
-        export_authored_style_runs_for_sheet(&engine.stores, &engine.mirror, &sheet_id, &palette);
+    let exported_runs = export_authored_style_runs_for_sheet(
+        &engine.stores,
+        &engine.cell_store,
+        &sheet_id,
+        &palette,
+    );
     assert_eq!(exported_runs, output.sheets[0].authored_style_runs);
 }
 
@@ -320,8 +320,11 @@ fn imported_cell_xf_lineage_survives_native_storage_and_live_edits_use_generated
         source.style_palette
     );
 
-    let cell_id = engine.stores.grid_indexes[&sheet_id]
-        .cell_id_at(0, 0)
+    let cell_id = engine
+        .cell_store()
+        .get_sheet(&sheet_id)
+        .unwrap()
+        .cell_id_at(SheetPos::new(0, 0))
         .expect("A1 identity");
     engine
         .set_cell_format(
@@ -405,8 +408,11 @@ fn inline_cell_xfs_snapshot_inherited_row_and_column_fills_and_explicit_no_fill(
     };
     let (mut engine, sheet_id) = engine_from_parse_output(&output);
     let cell_id_at = |engine: &ComputeEngine, row, col| {
-        engine.stores.grid_indexes[&sheet_id]
-            .cell_id_at(row, col)
+        engine
+            .cell_store()
+            .get_sheet(&sheet_id)
+            .unwrap()
+            .cell_id_at(SheetPos::new(row, col))
             .expect("cell identity")
     };
     let a1_id = cell_id_at(&engine, 0, 0);
@@ -489,8 +495,11 @@ fn inline_cell_xfs_snapshot_inherited_row_and_column_fills_and_explicit_no_fill(
     let (reimported, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("reimport XLSX");
     let reimported_sheet_id = reimported.stores.storage.sheet_order()[0];
     let reimported_format_at = |row, col| {
-        let cell_id = reimported.stores.grid_indexes[&reimported_sheet_id]
-            .cell_id_at(row, col)
+        let cell_id = reimported
+            .cell_store()
+            .get_sheet(&reimported_sheet_id)
+            .unwrap()
+            .cell_id_at(SheetPos::new(row, col))
             .expect("reimported cell identity");
         reimported.get_cell_format(&reimported_sheet_id, &cell_id, row, col)
     };
@@ -537,7 +546,7 @@ fn imported_style_only_blank_cells_do_not_export_as_cells() {
 
     let exported = build_cell_data_for_cell_id(
         &engine.stores,
-        &engine.mirror,
+        &engine.cell_store,
         &sheet_id,
         &blank_cell_id,
         1,
@@ -563,18 +572,18 @@ fn explicit_blank_cell_export_ignores_col_data_effective_value() {
     let (mut engine, _) =
         ComputeEngine::from_snapshot(workbook(&sheet_id, vec![])).expect("engine should build");
     engine
-        .mirror
+        .cell_store
         .register_identity_only(&sheet_id, SheetPos::new(0, 0), blank_cell_id);
     engine
-        .mirror
+        .cell_store
         .get_sheet_mut(&sheet_id)
-        .expect("sheet mirror")
+        .expect("sheet store")
         .generated_values
         .insert(SheetPos::new(0, 0), number(88.0));
 
     assert_eq!(
         engine
-            .mirror
+            .cell_store
             .get_cell_value_in_sheet(&sheet_id, &blank_cell_id)
             .cloned(),
         Some(number(88.0)),
@@ -589,7 +598,7 @@ fn explicit_blank_cell_export_ignores_col_data_effective_value() {
     let palette = LocalPalette::from_vec(&mut palette);
     let exported = build_cell_data_for_cell_id(
         &engine.stores,
-        &engine.mirror,
+        &engine.cell_store,
         &sheet_id,
         &blank_cell_id,
         0,
@@ -650,7 +659,7 @@ fn cached_shared_string_metadata_survives_hydration_export() {
 
     let mut palette = Vec::new();
     let palette = LocalPalette::from_vec(&mut palette);
-    let cells = export_cells_for_sheet(&engine.stores, &engine.mirror, &sheet_id, &palette);
+    let cells = export_cells_for_sheet(&engine.stores, &engine.cell_store, &sheet_id, &palette);
     let exported = cells
         .iter()
         .find(|cell| cell.row == 0 && cell.col == 0)
@@ -693,19 +702,16 @@ fn spill_target_metadata_identity_does_not_author_cached_value() {
 
     let (engine, sheet_id) = engine_from_parse_output(&output);
     let grid = engine
-        .stores
-        .grid_indexes
-        .get(&sheet_id)
+        .cell_store()
+        .get_sheet(&sheet_id)
         .expect("grid index");
     let (spill_id, _, _) = grid
         .cells()
         .find(|(_, row, col)| *row == 0 && *col == 1)
         .expect("spill metadata retains a positional identity");
-    let sheet = engine.mirror.get_sheet(&sheet_id).expect("sheet mirror");
+    let sheet = engine.cell_store.get_sheet(&sheet_id).expect("sheet store");
     assert!(
-        sheet
-            .get_cell(&spill_id)
-            .is_none_or(|entry| entry.is_ghost()),
+        sheet.is_ghost(&spill_id),
         "metadata identity must not become an authored spill blocker"
     );
 
@@ -763,9 +769,8 @@ fn edited_formula_export_does_not_replay_stale_shared_group_metadata() {
     };
     let (mut engine, sheet_id) = engine_from_parse_output(&output);
     let cell_id = engine
-        .stores
-        .grid_indexes
-        .get(&sheet_id)
+        .cell_store()
+        .get_sheet(&sheet_id)
         .and_then(|grid| {
             grid.cells()
                 .find_map(|(cell_id, row, col)| (row == 0 && col == 0).then_some(cell_id))
@@ -821,9 +826,8 @@ fn edited_formula_export_does_not_replay_stale_array_group_metadata() {
     };
     let (mut engine, sheet_id) = engine_from_parse_output(&output);
     let cell_id = engine
-        .stores
-        .grid_indexes
-        .get(&sheet_id)
+        .cell_store()
+        .get_sheet(&sheet_id)
         .and_then(|grid| {
             grid.cells()
                 .find_map(|(cell_id, row, col)| (row == 0 && col == 0).then_some(cell_id))
@@ -905,9 +909,9 @@ fn one_value_pivot_result(value: CellValue) -> PivotTableResult {
 fn register_rendered_pivot(engine: &mut ComputeEngine, sheet_id: &SheetId, value: CellValue) {
     let result = one_value_pivot_result(value);
     engine
-        .mirror
+        .cell_store
         .materialize_pivot(sheet_id, 0, 0, &result, &["Region".to_string()]);
-    engine.mirror.upsert_pivot_table_def(PivotTableDef {
+    engine.cell_store.upsert_pivot_table_def(PivotTableDef {
         grand_total_cells: Vec::new(),
         id: "pivot-1".to_string(),
         name: "Pivot1".to_string(),
@@ -941,7 +945,7 @@ fn export_cells_includes_pivot_overlay_without_grid_index() {
 
     let mut palette = Vec::new();
     let palette = LocalPalette::from_vec(&mut palette);
-    let cells = export_cells_for_sheet(&engine.stores, &engine.mirror, &sheet_id, &palette);
+    let cells = export_cells_for_sheet(&engine.stores, &engine.cell_store, &sheet_id, &palette);
 
     assert!(
         cells
@@ -972,7 +976,7 @@ fn export_cells_preserves_explicit_cell_over_pivot_overlay() {
 
     let mut palette = Vec::new();
     let palette = LocalPalette::from_vec(&mut palette);
-    let cells = export_cells_for_sheet(&engine.stores, &engine.mirror, &sheet_id, &palette);
+    let cells = export_cells_for_sheet(&engine.stores, &engine.cell_store, &sheet_id, &palette);
     let exported = cells
         .iter()
         .find(|cell| cell.row == 1 && cell.col == 1)
@@ -988,9 +992,9 @@ fn export_cells_does_not_emit_empty_pivot_overlay_at_origin() {
         ComputeEngine::from_snapshot(workbook(&sheet_id, vec![])).expect("engine");
     let result = one_value_pivot_result(number(10.0));
     engine
-        .mirror
+        .cell_store
         .materialize_pivot(&sheet_id, 0, 0, &result, &["Region".to_string()]);
-    engine.mirror.upsert_pivot_table_def(PivotTableDef {
+    engine.cell_store.upsert_pivot_table_def(PivotTableDef {
         grand_total_cells: Vec::new(),
         id: "empty-pivot".to_string(),
         name: "EmptyPivot".to_string(),
@@ -1016,7 +1020,7 @@ fn export_cells_does_not_emit_empty_pivot_overlay_at_origin() {
 
     let mut palette = Vec::new();
     let palette = LocalPalette::from_vec(&mut palette);
-    let cells = export_cells_for_sheet(&engine.stores, &engine.mirror, &sheet_id, &palette);
+    let cells = export_cells_for_sheet(&engine.stores, &engine.cell_store, &sheet_id, &palette);
 
     assert!(
         cells
@@ -1094,7 +1098,7 @@ fn native_cell_metadata_is_sparse_and_survives_copy_and_authored_replacement() {
         "imported formulas retain their declared result mode alongside rich text and arrays"
     );
     let ordinary_value_id = engine
-        .mirror
+        .cell_store
         .resolve_cell_id(&sheet_id, SheetPos::new(0, 0))
         .unwrap();
     assert!(
@@ -1105,7 +1109,7 @@ fn native_cell_metadata_is_sparse_and_survives_copy_and_authored_replacement() {
             .is_none()
     );
     let ordinary_formula_id = engine
-        .mirror
+        .cell_store
         .resolve_cell_id(&sheet_id, SheetPos::new(0, 1))
         .unwrap();
     assert_eq!(
@@ -1115,7 +1119,7 @@ fn native_cell_metadata_is_sparse_and_survives_copy_and_authored_replacement() {
             .cell_metadata(&ordinary_formula_id)
             .unwrap()
             .formula_result_mode,
-        Some(crate::mirror::cell_metadata::FormulaResultMode::LegacyScalar),
+        Some(crate::cells::cell_metadata::FormulaResultMode::LegacyScalar),
     );
     // Authored replacement discards the imported declaration even when formula
     // text is unchanged. Ordinary authored formulas retain the native sparse
@@ -1133,13 +1137,13 @@ fn native_cell_metadata_is_sparse_and_survives_copy_and_authored_replacement() {
     assert_eq!(engine.get_cell_value(&sheet_id, 0, 1), number(8.0));
     assert_eq!(engine.stores.storage.cell_metadata.len(), 2);
     let original_rich_id = engine
-        .mirror
+        .cell_store
         .resolve_cell_id(&sheet_id, SheetPos::new(0, 2))
         .unwrap();
     let (copied_id, _) = engine.copy_sheet(&sheet_id, "Copy").unwrap();
     let copied_id = SheetId::from_uuid_str(&copied_id).unwrap();
     let copied_rich_id = engine
-        .mirror
+        .cell_store
         .resolve_cell_id(&copied_id, SheetPos::new(0, 2))
         .unwrap();
     assert_ne!(original_rich_id, copied_rich_id);

@@ -38,9 +38,9 @@ fn test_two_horizontal_transposes_no_conflict() {
             (7, 4, CellValue::Null, None), // E8 - SUM
         ],
     )]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
     let c6 = CellId::from_uuid_str(&cell_uuid(0, 5, 2)).expect("c6");
@@ -50,42 +50,42 @@ fn test_two_horizontal_transposes_no_conflict() {
     let e8 = CellId::from_uuid_str(&cell_uuid(0, 7, 4)).expect("e8");
 
     // C6 = TRANSPOSE(A1:A5) → 1×5 horizontal spill: C6=0, D6=0, E6=1, F6=7, G6=192
-    core.set_cell(&mut mirror, &sid, c6, 5, 2, "=TRANSPOSE(A1:A5)")
+    core.set_cell(&mut cell_store, &sid, c6, 5, 2, "=TRANSPOSE(A1:A5)")
         .expect("set C6");
     // C7 = TRANSPOSE(B1:B5) → 1×5 horizontal spill: C7=197, D7=448, E7=475, F7=529, G7=377
-    core.set_cell(&mut mirror, &sid, c7, 6, 2, "=TRANSPOSE(B1:B5)")
+    core.set_cell(&mut cell_store, &sid, c7, 6, 2, "=TRANSPOSE(B1:B5)")
         .expect("set C7");
 
     // Verify no #SPILL! — both should succeed
-    assert_mirror_number(&mirror, &c6, 0.0, "C6 TRANSPOSE source (row 5)");
-    assert_mirror_number(&mirror, &c7, 197.0, "C7 TRANSPOSE source (row 6)");
+    assert_store_number(&cell_store, &c6, 0.0, "C6 TRANSPOSE source (row 5)");
+    assert_store_number(&cell_store, &c7, 197.0, "C7 TRANSPOSE source (row 6)");
 
     // Verify spill targets for row 5 (C6:G6)
-    assert_col_data_number(&mirror, &sid, 5, 3, 0.0, "D6 spill");
-    assert_col_data_number(&mirror, &sid, 5, 4, 1.0, "E6 spill");
-    assert_col_data_number(&mirror, &sid, 5, 5, 7.0, "F6 spill");
-    assert_col_data_number(&mirror, &sid, 5, 6, 192.0, "G6 spill");
+    assert_col_data_number(&cell_store, &sid, 5, 3, 0.0, "D6 spill");
+    assert_col_data_number(&cell_store, &sid, 5, 4, 1.0, "E6 spill");
+    assert_col_data_number(&cell_store, &sid, 5, 5, 7.0, "F6 spill");
+    assert_col_data_number(&cell_store, &sid, 5, 6, 192.0, "G6 spill");
 
     // Verify spill targets for row 6 (C7:G7)
-    assert_col_data_number(&mirror, &sid, 6, 3, 448.0, "D7 spill");
-    assert_col_data_number(&mirror, &sid, 6, 4, 475.0, "E7 spill");
-    assert_col_data_number(&mirror, &sid, 6, 5, 529.0, "F7 spill");
-    assert_col_data_number(&mirror, &sid, 6, 6, 377.0, "G7 spill");
+    assert_col_data_number(&cell_store, &sid, 6, 3, 448.0, "D7 spill");
+    assert_col_data_number(&cell_store, &sid, 6, 4, 475.0, "E7 spill");
+    assert_col_data_number(&cell_store, &sid, 6, 5, 529.0, "F7 spill");
+    assert_col_data_number(&cell_store, &sid, 6, 6, 377.0, "G7 spill");
 
     // SUM over columns — single-column ranges (Tier 1 in range_store)
-    core.set_cell(&mut mirror, &sid, c8, 7, 2, "=SUM(C6:C7)")
+    core.set_cell(&mut cell_store, &sid, c8, 7, 2, "=SUM(C6:C7)")
         .expect("set C8");
-    core.set_cell(&mut mirror, &sid, d8, 7, 3, "=SUM(D6:D7)")
+    core.set_cell(&mut cell_store, &sid, d8, 7, 3, "=SUM(D6:D7)")
         .expect("set D8");
-    core.set_cell(&mut mirror, &sid, e8, 7, 4, "=SUM(E6:E7)")
+    core.set_cell(&mut cell_store, &sid, e8, 7, 4, "=SUM(E6:E7)")
         .expect("set E8");
 
     // C8 = SUM(C6:C7) = 0 + 197 = 197
-    assert_mirror_number(&mirror, &c8, 197.0, "C8 SUM(C6:C7)");
+    assert_store_number(&cell_store, &c8, 197.0, "C8 SUM(C6:C7)");
     // D8 = SUM(D6:D7) = 0 + 448 = 448
-    assert_mirror_number(&mirror, &d8, 448.0, "D8 SUM(D6:D7)");
+    assert_store_number(&cell_store, &d8, 448.0, "D8 SUM(D6:D7)");
     // E8 = SUM(E6:E7) = 1 + 475 = 476
-    assert_mirror_number(&mirror, &e8, 476.0, "E8 SUM(E6:E7)");
+    assert_store_number(&cell_store, &e8, 476.0, "E8 SUM(E6:E7)");
 }
 
 /// H6b: Two horizontal TRANSPOSEs + SUM via snapshot path (no interactive).
@@ -114,9 +114,9 @@ fn test_two_horizontal_transposes_in_snapshot() {
             (5, 3, CellValue::Null, Some("SUM(D4:D5)")),
         ],
     )]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let _sid = SheetId::from_uuid_str(&sheet_uuid(0)).expect("sid");
     let c4 = CellId::from_uuid_str(&cell_uuid(0, 3, 2)).expect("c4");
@@ -124,12 +124,12 @@ fn test_two_horizontal_transposes_in_snapshot() {
     let c6 = CellId::from_uuid_str(&cell_uuid(0, 5, 2)).expect("c6");
     let d6 = CellId::from_uuid_str(&cell_uuid(0, 5, 3)).expect("d6");
 
-    assert_mirror_number(&mirror, &c4, 10.0, "C4 TRANSPOSE source");
-    assert_mirror_number(&mirror, &c5, 40.0, "C5 TRANSPOSE source");
+    assert_store_number(&cell_store, &c4, 10.0, "C4 TRANSPOSE source");
+    assert_store_number(&cell_store, &c5, 40.0, "C5 TRANSPOSE source");
     // SUM(C4:C5) = 10 + 40 = 50
-    assert_mirror_number(&mirror, &c6, 50.0, "C6 SUM(C4:C5)");
+    assert_store_number(&cell_store, &c6, 50.0, "C6 SUM(C4:C5)");
     // SUM(D4:D5) = 20 + 50 = 70
-    assert_mirror_number(&mirror, &d6, 70.0, "D6 SUM(D4:D5)");
+    assert_store_number(&cell_store, &d6, 70.0, "D6 SUM(D4:D5)");
 }
 
 /// H7: Cross-sheet TRANSPOSE with horizontal spill.
@@ -164,23 +164,23 @@ fn test_transpose_cross_sheet_spill() {
             ],
         ),
     ]);
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
-    core.init_from_snapshot(&mut mirror, snapshot)
+    core.init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
     let sid1 = SheetId::from_uuid_str(&sheet_uuid(1)).expect("sid1");
     let b1 = CellId::from_uuid_str(&cell_uuid(1, 0, 1)).expect("b1");
     let g1 = CellId::from_uuid_str(&cell_uuid(1, 0, 6)).expect("g1");
 
     // B1 source = 10 (first value)
-    assert_mirror_number(&mirror, &b1, 10.0, "Output B1 TRANSPOSE source");
+    assert_store_number(&cell_store, &b1, 10.0, "Output B1 TRANSPOSE source");
 
     // Spill targets on Output sheet
-    assert_col_data_number(&mirror, &sid1, 0, 2, 20.0, "Output C1 spill");
-    assert_col_data_number(&mirror, &sid1, 0, 3, 30.0, "Output D1 spill");
-    assert_col_data_number(&mirror, &sid1, 0, 4, 40.0, "Output E1 spill");
-    assert_col_data_number(&mirror, &sid1, 0, 5, 50.0, "Output F1 spill");
+    assert_col_data_number(&cell_store, &sid1, 0, 2, 20.0, "Output C1 spill");
+    assert_col_data_number(&cell_store, &sid1, 0, 3, 30.0, "Output D1 spill");
+    assert_col_data_number(&cell_store, &sid1, 0, 4, 40.0, "Output E1 spill");
+    assert_col_data_number(&cell_store, &sid1, 0, 5, 50.0, "Output F1 spill");
 
     // SUM(B1:F1) = 10+20+30+40+50 = 150
-    assert_mirror_number(&mirror, &g1, 150.0, "Output G1 SUM cross-sheet spill");
+    assert_store_number(&cell_store, &g1, 150.0, "Output G1 SUM cross-sheet spill");
 }

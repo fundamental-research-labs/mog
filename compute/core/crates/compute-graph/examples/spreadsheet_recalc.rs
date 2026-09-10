@@ -51,7 +51,7 @@ fn main() {
     // This will find: A1 -> B1 -> C1 -> E1 (but misses D1, which uses a range).
 
     // Full path with position resolution (catches range deps too):
-    // In production, positions come from CellMirror. Here we hardcode A1's position.
+    // In production, positions come from CellStore. Here we hardcode A1's position.
     let resolver = |cell: &CellId| -> Option<CellPosition> {
         if *cell == a1 {
             Some(CellPosition {

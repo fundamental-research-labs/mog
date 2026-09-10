@@ -4,7 +4,7 @@ mod stress_common;
 use stress_common::*;
 
 use cell_types::{CellId, SheetId};
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, CellEdit, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellError, CellValue};
@@ -36,24 +36,24 @@ fn test_unrelated_edit_skips_cycle_reeval() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // Cycle converges to FP = 2.0
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 2.0, 0.01); // A1
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 2.0, 0.01); // B1
-    assert_mirror_number(&mirror, 0, 0, 2, 100.0); // C1
+    assert_store_number_tol(&cell_store, 0, 0, 0, 2.0, 0.01); // A1
+    assert_store_number_tol(&cell_store, 0, 0, 1, 2.0, 0.01); // B1
+    assert_store_number(&cell_store, 0, 0, 2, 100.0); // C1
 
     // Record pre-edit cycle values
-    let a1_before = read_mirror_number(&mirror, 0, 0, 0);
-    let b1_before = read_mirror_number(&mirror, 0, 0, 1);
+    let a1_before = read_store_number(&cell_store, 0, 0, 0);
+    let b1_before = read_store_number(&cell_store, 0, 0, 1);
 
     // Set C1 = 200 (unrelated to the cycle)
-    let _result2 = set(&mut core, &mut mirror, 0, 0, 2, "200");
+    let _result2 = set(&mut core, &mut cell_store, 0, 0, 2, "200");
 
     // Cycle values must be unchanged
-    let a1_after = read_mirror_number(&mirror, 0, 0, 0);
-    let b1_after = read_mirror_number(&mirror, 0, 0, 1);
+    let a1_after = read_store_number(&cell_store, 0, 0, 0);
+    let b1_after = read_store_number(&cell_store, 0, 0, 1);
     assert!(
         (a1_after - a1_before).abs() < 1e-12,
         "A1 changed from {} to {} after unrelated edit",
@@ -66,7 +66,7 @@ fn test_unrelated_edit_skips_cycle_reeval() {
         b1_before,
         b1_after
     );
-    assert_mirror_number(&mirror, 0, 0, 2, 200.0); // C1 updated
+    assert_store_number(&cell_store, 0, 0, 2, 200.0); // C1 updated
 }
 
 /// Test 2: Max_iterations change allows convergence.
@@ -95,12 +95,12 @@ fn test_max_iterations_affects_convergence() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // With only 10 iterations, A1 should be far from 1.0
     // After n iters from seed 0: A1 = 1 - 0.99^n. At n=10: A1 ≈ 0.0956
-    let a1_low_iters = read_mirror_number(&mirror, 0, 0, 0);
+    let a1_low_iters = read_store_number(&cell_store, 0, 0, 0);
     assert!(
         (a1_low_iters - 1.0).abs() > 0.1,
         "A1 = {} should be far from 1.0 with only 10 iterations",
@@ -118,10 +118,10 @@ fn test_max_iterations_affects_convergence() {
             text: "=A1*0.99+0.01".to_string(),
         },
     )];
-    let _result2 = core.set_cells(&mut mirror, &edits, true).unwrap();
+    let _result2 = core.set_cells(&mut cell_store, &edits, true).unwrap();
 
     // Now should converge to 1.0
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 1.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 0, 1.0, 0.01);
 }
 
 /// Test 3: Max_change threshold affects iteration count.
@@ -147,12 +147,12 @@ fn test_max_change_threshold() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // Tight threshold → converges accurately to 2.0
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 2.0, 0.01); // A1
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 2.0, 0.01); // B1
+    assert_store_number_tol(&cell_store, 0, 0, 0, 2.0, 0.01); // A1
+    assert_store_number_tol(&cell_store, 0, 0, 1, 2.0, 0.01); // B1
 
     // Switch to loose threshold and re-trigger
     core.set_max_change(0.1);
@@ -176,11 +176,11 @@ fn test_max_change_threshold() {
             },
         ),
     ];
-    let result2 = core.set_cells(&mut mirror, &edits, true).unwrap();
+    let result2 = core.set_cells(&mut cell_store, &edits, true).unwrap();
 
     // Still converges to 2.0 (loose threshold just means fewer iterations)
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 2.0, 0.01); // A1
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 2.0, 0.01); // B1
+    assert_store_number_tol(&cell_store, 0, 0, 0, 2.0, 0.01); // A1
+    assert_store_number_tol(&cell_store, 0, 0, 1, 2.0, 0.01); // B1
 
     // With loose threshold, should need fewer iterations
     assert!(
@@ -214,12 +214,12 @@ fn test_toggle_iterative_calc_flag() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let result1 = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let result1 = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // FP = 2.0 with iterative_calc=true
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 2.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 2.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 0, 2.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 1, 2.0, 0.01);
     assert!(result1.metrics.has_circular_refs);
 
     // Disable iterative_calc and re-trigger (same formulas → seed preserved)
@@ -244,10 +244,10 @@ fn test_toggle_iterative_calc_flag() {
             },
         ),
     ];
-    let result2 = core.set_cells(&mut mirror, &edits, true).unwrap();
+    let result2 = core.set_cells(&mut cell_store, &edits, true).unwrap();
 
-    assert_mirror_error(&mirror, 0, 0, 0, CellError::Circ);
-    assert_mirror_error(&mirror, 0, 0, 1, CellError::Circ);
+    assert_store_error(&cell_store, 0, 0, 0, CellError::Circ);
+    assert_store_error(&cell_store, 0, 0, 1, CellError::Circ);
 
     // Iterative metrics should NOT be populated (flag is off)
     assert_eq!(result2.metrics.iterative_iterations, 0);
@@ -279,8 +279,8 @@ fn test_type_changing_cycle_false_convergence() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // Key regression assertion: must NOT falsely converge
     assert!(
@@ -329,12 +329,12 @@ fn test_text_value_convergence() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // Both should converge to text "done"
-    assert_mirror_text(&mirror, 0, 0, 0, "done"); // A1
-    assert_mirror_text(&mirror, 0, 0, 1, "done"); // B1
+    assert_store_text(&cell_store, 0, 0, 0, "done"); // A1
+    assert_store_text(&cell_store, 0, 0, 1, "done"); // B1
 }
 
 /// Test 7: Shifting fixed points as parameters change.
@@ -363,26 +363,26 @@ fn test_shifting_fixed_points_via_feeder() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // C1=10: A1 = 40/3 ≈ 13.3333, B1 = 20/3 ≈ 6.6667
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 40.0 / 3.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 20.0 / 3.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 0, 40.0 / 3.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 1, 20.0 / 3.0, 0.01);
 
     // Set C1 = 20
-    let _r2 = set(&mut core, &mut mirror, 0, 0, 2, "20");
+    let _r2 = set(&mut core, &mut cell_store, 0, 0, 2, "20");
 
     // C1=20: A1 = 80/3 ≈ 26.6667, B1 = 40/3 ≈ 13.3333
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 80.0 / 3.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 40.0 / 3.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 0, 80.0 / 3.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 1, 40.0 / 3.0, 0.01);
 
     // Set C1 = 30
-    let _r3 = set(&mut core, &mut mirror, 0, 0, 2, "30");
+    let _r3 = set(&mut core, &mut cell_store, 0, 0, 2, "30");
 
     // C1=30: A1 = 120/3 = 40.0, B1 = 60/3 = 20.0
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 40.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 20.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 0, 40.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 1, 20.0, 0.01);
 }
 
 /// Test 8: Error-producing cycle.
@@ -407,12 +407,12 @@ fn test_div_zero_cycle_stabilizes() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // Both cells should stabilize to #DIV/0!
-    assert_mirror_error(&mirror, 0, 0, 0, CellError::Div0); // A1
-    assert_mirror_error(&mirror, 0, 0, 1, CellError::Div0); // B1
+    assert_store_error(&cell_store, 0, 0, 0, CellError::Div0); // A1
+    assert_store_error(&cell_store, 0, 0, 1, CellError::Div0); // B1
 }
 
 /// Test 9: Convergence survives structural change.
@@ -436,19 +436,19 @@ fn test_convergence_survives_structure_change() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 2.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 2.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 0, 2.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 1, 2.0, 0.01);
 
     // Structural change triggers full recalc (None = observer-rebuild
-    // path; mirror was just (re-)hydrated, no positional shift to apply).
-    let _result2 = core.structure_change(&mut mirror, None).unwrap();
+    // path; cell_store was just (re-)hydrated, no positional shift to apply).
+    let _result2 = core.structure_change(&mut cell_store, None).unwrap();
 
     // Values must remain at the fixed point
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 2.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 2.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 0, 2.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 1, 2.0, 0.01);
 }
 
 /// Test 10: Deep chain feeding into a convergent cycle.
@@ -481,26 +481,26 @@ fn test_deep_chain_feeds_convergent_cycle() {
     );
 
     let mut core = ComputeCore::default();
-    let mut mirror = CellMirror::default();
-    let _result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let mut cell_store = CellStore::default();
+    let _result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // Chain: E1=1, D1=2, C1=3
-    assert_mirror_number(&mirror, 0, 0, 4, 1.0); // E1
-    assert_mirror_number(&mirror, 0, 0, 3, 2.0); // D1
-    assert_mirror_number(&mirror, 0, 0, 2, 3.0); // C1
+    assert_store_number(&cell_store, 0, 0, 4, 1.0); // E1
+    assert_store_number(&cell_store, 0, 0, 3, 2.0); // D1
+    assert_store_number(&cell_store, 0, 0, 2, 3.0); // C1
 
     // Cycle FP: A1 = 2*C1 = 6.0, B1 = C1 = 3.0
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 6.0, 0.01); // A1
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 3.0, 0.01); // B1
+    assert_store_number_tol(&cell_store, 0, 0, 0, 6.0, 0.01); // A1
+    assert_store_number_tol(&cell_store, 0, 0, 1, 3.0, 0.01); // B1
 
     // Set E1 = 100 → chain recalculates: D1=101, C1=102
-    let _r2 = set(&mut core, &mut mirror, 0, 0, 4, "100");
+    let _r2 = set(&mut core, &mut cell_store, 0, 0, 4, "100");
 
-    assert_mirror_number(&mirror, 0, 0, 4, 100.0); // E1
-    assert_mirror_number(&mirror, 0, 0, 3, 101.0); // D1
-    assert_mirror_number(&mirror, 0, 0, 2, 102.0); // C1
+    assert_store_number(&cell_store, 0, 0, 4, 100.0); // E1
+    assert_store_number(&cell_store, 0, 0, 3, 101.0); // D1
+    assert_store_number(&cell_store, 0, 0, 2, 102.0); // C1
 
     // New FP: A1 = 2*102 = 204.0, B1 = 102.0
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 204.0, 0.01); // A1
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 102.0, 0.01); // B1
+    assert_store_number_tol(&cell_store, 0, 0, 0, 204.0, 0.01); // A1
+    assert_store_number_tol(&cell_store, 0, 0, 1, 102.0, 0.01); // B1
 }

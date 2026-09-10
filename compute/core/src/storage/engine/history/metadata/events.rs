@@ -24,7 +24,7 @@ impl MetadataEvents {
         &mut self,
         key: &MetadataKey,
         storage: &WorkbookStorage,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
     ) {
         self.0.entry(key.clone()).or_insert_with(|| {
             let mut before = Before::default();
@@ -59,7 +59,7 @@ impl MetadataEvents {
                 }
                 MetadataKey::SheetField(sid, "merges") => {
                     if let (Some(meta), Some(sheet)) =
-                        (storage.sheet_metadata.get(sid), mirror.get_sheet(sid))
+                        (storage.sheet_metadata.get(sid), cell_store.get_sheet(sid))
                     {
                         before.merges = meta
                             .merges
@@ -132,8 +132,8 @@ fn kind(exists: bool) -> ChangeKind {
         ChangeKind::Removed
     }
 }
-fn position(mirror: &CellMirror, sheet: SheetId, cell: CellId) -> Option<CellPosition> {
-    mirror
+fn position(cell_store: &CellStore, sheet: SheetId, cell: CellId) -> Option<CellPosition> {
+    cell_store
         .get_sheet(&sheet)?
         .position_of(&cell)
         .map(|pos| CellPosition {
@@ -163,7 +163,7 @@ fn sheet_change(sid: SheetId, field: SheetChangeField) -> SheetChange {
 
 pub(crate) fn emit_events(
     storage: &WorkbookStorage,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     grids: &FxHashMap<SheetId, GridIndex>,
     metrics: LayoutMetrics,
     effects: &mut HistoryEffects,
@@ -173,11 +173,11 @@ pub(crate) fn emit_events(
     for (key, before) in events {
         match key {
             MetadataKey::CellProperties(sid, id) => {
-                let format = properties::get_cell_format(storage, &sid, &id.to_uuid_string());
+                let format = properties::get_cell_format_by_id(storage, &sid, &id);
                 effects.result.property_changes.push(PropertyChange {
                     sheet_id: sid.to_uuid_string(),
                     cell_id: id.to_uuid_string(),
-                    position: position(mirror, sid, id).or_else(|| {
+                    position: position(cell_store, sid, id).or_else(|| {
                         effects.cells.get(&id).map(|(_, row, col)| CellPosition {
                             row: *row,
                             col: *col,
@@ -299,7 +299,7 @@ pub(crate) fn emit_events(
                             effects.result.comment_changes.push(CommentChange {
                                 sheet_id: sid.to_uuid_string(),
                                 cell_id: cell.to_uuid_string(),
-                                position: position(mirror, sid, cell),
+                                position: position(cell_store, sid, cell),
                                 kind: kind(comment.is_some()),
                             });
                         }
@@ -309,8 +309,8 @@ pub(crate) fn emit_events(
                         if let Some((row, col)) =
                             item.map(|v| (v.cell.row, v.cell.col)).or(before.position)
                         {
-                            let cell =
-                                mirror.resolve_cell_id(&sid, cell_types::SheetPos::new(row, col));
+                            let cell = cell_store
+                                .resolve_cell_id(&sid, cell_types::SheetPos::new(row, col));
                             effects.result.sparkline_changes.push(SparklineChange {
                                 sheet_id: sid.to_uuid_string(),
                                 cell_id: cell.map(|id| id.to_uuid_string()).unwrap_or_default(),
@@ -400,8 +400,8 @@ pub(crate) fn emit_events(
                 match field {
                     "merges" => {
                         let old: FxHashSet<_> = before.merges.into_iter().collect();
-                        let current: FxHashSet<_> = grids
-                            .get(&sid)
+                        let current: FxHashSet<_> = cell_store
+                            .get_sheet(&sid)
                             .map(|grid| {
                                 meta.merges
                                     .iter()
@@ -563,7 +563,7 @@ pub(crate) fn emit_events(
                             | "properties"
                     ) {
                         effects.format_rects.extend(
-                            mirror
+                            cell_store
                                 .sheet_ids()
                                 .map(|sid| (*sid, 0, 0, u32::MAX, u32::MAX)),
                         );
@@ -575,7 +575,7 @@ pub(crate) fn emit_events(
                 _,
             ) => {
                 effects.format_rects.extend(
-                    mirror
+                    cell_store
                         .sheet_ids()
                         .map(|sid| (*sid, 0, 0, u32::MAX, u32::MAX)),
                 );

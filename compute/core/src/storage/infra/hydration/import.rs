@@ -34,7 +34,7 @@ use super::{HydrationIdMap, IdAllocator};
 
 impl WorkbookStorage {
     /// Hydrate typed native metadata and allocate identities shared with the
-    /// snapshot builder. Cell values are installed in the mirror by the caller.
+    /// snapshot builder. Cell values are installed in the cell store by the caller.
     #[tracing::instrument(name = "hydrate_from_parse_output", skip_all)]
     pub fn hydrate_from_parse_output(
         &mut self,
@@ -226,7 +226,7 @@ impl WorkbookStorage {
     }
 
     /// Hydrate metadata using identities already assigned during compact range
-    /// classification. The mirror owns the range values directly.
+    /// classification. The cell store owns the range values directly.
     #[tracing::instrument(name = "hydrate_from_parse_output_with_ranges", skip_all)]
     pub(crate) fn hydrate_from_parse_output_with_ranges(
         &mut self,

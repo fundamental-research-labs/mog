@@ -83,7 +83,11 @@ fn formula_fixture() -> WorkbookSnapshot {
 fn xlsx_insert_row_shifts_formula_refs() {
     let bytes = xlsx_bytes_for(formula_fixture());
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     // Insert one row at row 0 (pushes everything down by 1).
     engine
@@ -135,7 +139,11 @@ fn xlsx_insert_row_shifts_formula_refs() {
 fn xlsx_delete_row_shifts_formula_refs() {
     let bytes = xlsx_bytes_for(formula_fixture());
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     // Delete row 0 (the A1=1 row).
     engine
@@ -186,7 +194,11 @@ fn xlsx_delete_row_shifts_formula_refs() {
 fn xlsx_insert_col_shifts_formula_refs() {
     let bytes = xlsx_bytes_for(formula_fixture());
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     // Insert one col at col 0 (A shifts to B, etc.).
     engine
@@ -250,7 +262,11 @@ fn xlsx_delete_col_shifts_formula_refs() {
 
     let bytes = xlsx_bytes_for(one_sheet_snapshot("DelCol", 10, 5, cells));
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
-    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let sid = *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present");
 
     // Delete col B (col index 1) — harmless column, so SUM(A1:A5) should remain
     // pointing at A1:A5 (col A not touched), but the formula cell moves from D1

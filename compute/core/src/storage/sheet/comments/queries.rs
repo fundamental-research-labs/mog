@@ -30,6 +30,17 @@ pub fn has_comments(storage: &WorkbookStorage, sheet: &SheetId, cell: &str) -> b
 pub fn get_all_comments(storage: &WorkbookStorage, sheet: &SheetId) -> Vec<Comment> {
     comments(storage, sheet).iter().map(wire).collect()
 }
+/// Native comment anchors for internal scans; unresolved wire anchors are omitted.
+pub(crate) fn cell_ids_with_comments(
+    storage: &WorkbookStorage,
+    sheet: &SheetId,
+) -> Vec<cell_types::CellId> {
+    comments(storage, sheet)
+        .iter()
+        .filter_map(|comment| comment.cell_ref.cell())
+        .collect()
+}
+
 pub fn get_cell_ids_with_comments(storage: &WorkbookStorage, sheet: &SheetId) -> Vec<String> {
     comments(storage, sheet)
         .iter()

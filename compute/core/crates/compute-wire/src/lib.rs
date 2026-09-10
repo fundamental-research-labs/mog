@@ -1,15 +1,15 @@
 //! Wire format definitions and binary serializers for the Rust↔TypeScript
-//! viewport and mutation protocols.
+//! viewport protocol.
 //!
 //! # Overview
 //!
 //! `compute-wire` is the **single source of truth** for the binary protocol
-//! used by the compute engine for viewport and mutation payloads. It owns:
+//! used by the compute engine for explicit viewport snapshots. It owns:
 //!
 //! - **Constants** ([`constants`]) — header sizes, strides, byte offsets, sentinels.
-//! - **Flags** ([`flags`]) — cell flag bits, [`flags::ValueType`] enum, mutation header flags.
+//! - **Flags** ([`flags`]) — cell flag bits, [`flags::ValueType`] enum.
 //! - **Types** ([`types`]) — render-only structs (`ViewportRenderData`, `CellCFExtras`, …).
-//! - **Serializers** ([`viewport`], [`mutation`]) — binary encoders for viewport and mutation blobs.
+//! - **Serializers** ([`viewport`]) — binary encoder for viewport snapshots.
 //! - **Palette** ([`palette::FormatPalette`]) — append-only format deduplication.
 //!
 //! # Wire Protocol (all little-endian)
@@ -37,22 +37,6 @@
 //! └─────────────────────────────────────────────────────────────┘
 //! ```
 //!
-//! ## Mutation binary (`serialize_mutation_result`)
-//!
-//! ```text
-//! ┌─────────────────────────────────────────────────────────────┐
-//! │ Header              16 B                                    │
-//! │   patch_count(u32) string_bytes(u32)                       │
-//! │   sheet_id_len(u16) flags(u8) generation(u8) reserved(u32)│
-//! ├─────────────────────────────────────────────────────────────┤
-//! │ Sheet ID            variable   (UTF-8)                     │
-//! │ Cell Patches        N × 40 B  (row+col+32B cell record)   │
-//! │ String Pool         variable                               │
-//! │ Spill Section       optional   (u32 count + patches)       │
-//! │ Palette Section     optional   (u16 idx + u32 len + binary)│
-//! └─────────────────────────────────────────────────────────────┘
-//! ```
-//!
 //! ## Protocol versioning
 //!
 //! The viewport header flags byte embeds [`constants::WIRE_VERSION`] in bits 4-7.
@@ -72,7 +56,6 @@
 
 pub mod constants;
 pub mod flags;
-pub mod mutation;
 pub mod palette;
 pub mod palette_binary;
 pub mod types;
@@ -165,10 +148,6 @@ pub fn cell_format_json_fields() -> Vec<String> {
 // Re-export key items at crate root for convenience
 pub use constants::*;
 pub use flags::*;
-pub use mutation::CfColorOverrides;
-pub use mutation::serialize_multi_viewport_patches;
-pub use mutation::serialize_mutation_result;
-pub use mutation::serialize_mutation_result_for_viewport;
 pub use palette::FormatPalette;
 pub use palette::PaletteFullError;
 pub use palette_binary::{

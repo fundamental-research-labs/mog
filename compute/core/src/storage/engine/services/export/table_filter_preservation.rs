@@ -7,7 +7,7 @@ use cell_types::SheetId;
 use domain_types::domain::table::TableSpec;
 use value_types::DateSystem;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::construction::table_filter_spec_to_column_filter;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::filters;
@@ -18,7 +18,7 @@ use crate::storage::sheet::filters;
 /// the intentionally smaller runtime `ColumnFilter` shape.
 pub(super) fn imported_table_filter_runtime_matches_spec(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     table_id: &str,
     spec: &TableSpec,
@@ -40,7 +40,7 @@ pub(super) fn imported_table_filter_runtime_matches_spec(
         return false;
     }
 
-    let date_system = DateSystem::from_date1904(mirror.date1904);
+    let date_system = DateSystem::from_date1904(cell_store.date1904);
     let mut expected = HashMap::new();
     for column in &spec.filter_columns {
         let Some(header_cell_id) = binding.col_id_to_header_cell_id.get(&column.col_id) else {
@@ -54,7 +54,7 @@ pub(super) fn imported_table_filter_runtime_matches_spec(
     }
     let projected =
         super::super::imported_filter_runtime::project_imported_date_group_filters_for_evaluation(
-            stores, mirror, sheet_id, &filter.id,
+            stores, cell_store, sheet_id, &filter.id,
         );
     projected.is_some_and(|filter| expected == filter.column_filters)
 }

@@ -155,9 +155,16 @@ impl PageSetup {
     /// # Returns
     /// Parsed PageSetup struct, or None if no pageSetup element found
     pub fn parse(xml: &[u8]) -> Option<Self> {
-        let tag_start = find_tag_simd(xml, b"pageSetup", 0)?;
-        let tag_end = find_gt_simd(xml, tag_start)?;
-        let element = &xml[tag_start..tag_end + 1];
+        // Full worksheet XML and the post-sheetData fragment are both accepted.
+        // A customSheetView can contain its own pageSetup before the main one.
+        let children = if let Some(start) = find_tag_simd(xml, b"worksheet", 0) {
+            &xml[find_gt_simd(xml, start)? + 1..]
+        } else {
+            xml
+        };
+        let tag_start = crate::infra::xml::find_direct_child_start(children, b"pageSetup")?;
+        let tag_end = find_gt_simd(children, tag_start)?;
+        let element = &children[tag_start..tag_end + 1];
 
         let mut setup = PageSetup::default();
 

@@ -3,7 +3,7 @@
 // ===========================================================================
 
 use super::*;
-use crate::mirror::{CellEntry, SheetMirror};
+use crate::cells::{CellEntry, SheetStore};
 use value_types::CellValue;
 
 fn make_cell_id(n: u128) -> CellId {
@@ -14,19 +14,18 @@ fn make_sheet_id(n: u128) -> SheetId {
     SheetId::from_raw(n)
 }
 
-/// Create a mirror with a single sheet containing the given cells.
-fn make_mirror(sheet_id: SheetId, cells: Vec<(CellId, u32, u32)>) -> CellMirror {
-    let mut mirror = CellMirror::new();
-    let sheet_mirror = SheetMirror::new(sheet_id, "Sheet1".to_string(), 100, 26);
-    mirror.add_sheet_mirror(sheet_id, "Sheet1".to_string(), sheet_mirror);
+/// Create a cell store with a single sheet containing the given cells.
+fn make_store(sheet_id: SheetId, cells: Vec<(CellId, u32, u32)>) -> CellStore {
+    let mut cell_store = CellStore::new();
+    let sheet_store = SheetStore::new(sheet_id, "Sheet1".to_string(), 100, 26);
+    cell_store.add_sheet_store(sheet_id, "Sheet1".to_string(), sheet_store);
     for (cell_id, row, col) in cells {
         let entry = CellEntry {
             value: CellValue::Null,
-            formula: None,
         };
-        mirror.insert_cell(&sheet_id, cell_id, SheetPos::new(row, col), entry);
+        cell_store.insert_cell(&sheet_id, cell_id, SheetPos::new(row, col), entry);
     }
-    mirror
+    cell_store
 }
 
 // -----------------------------------------------------------------------
@@ -36,7 +35,7 @@ fn make_mirror(sheet_id: SheetId, cells: Vec<(CellId, u32, u32)>) -> CellMirror 
 #[test]
 fn test_positional_ref_no_projection() {
     let sheet = make_sheet_id(1);
-    let mirror = make_mirror(sheet, vec![]);
+    let cell_store = make_store(sheet, vec![]);
 
     let cell_ref = CellRef::Positional {
         sheet,
@@ -45,8 +44,12 @@ fn test_positional_ref_no_projection() {
     };
 
     // With empty registry
-    let targets =
-        cell_ref_to_dep_targets(&cell_ref, &mirror, Some(&mirror.projection_registry), None);
+    let targets = cell_ref_to_dep_targets(
+        &cell_ref,
+        &cell_store,
+        Some(&cell_store.projection_registry),
+        None,
+    );
 
     assert_eq!(targets.len(), 1, "should produce exactly 1 dep target");
     assert_eq!(
@@ -63,10 +66,10 @@ fn test_positional_ref_no_projection() {
 fn test_positional_ref_inside_projection() {
     let sheet = make_sheet_id(1);
     let source = make_cell_id(100);
-    let mut mirror = make_mirror(sheet, vec![(source, 0, 0)]);
+    let mut cell_store = make_store(sheet, vec![(source, 0, 0)]);
 
     // Register a projection: source at (0,0), 5 rows x 1 col
-    mirror
+    cell_store
         .projection_registry
         .register(source, sheet, 0, 0, 5, 1);
 
@@ -77,8 +80,12 @@ fn test_positional_ref_inside_projection() {
         col: 0,
     };
 
-    let targets =
-        cell_ref_to_dep_targets(&cell_ref, &mirror, Some(&mirror.projection_registry), None);
+    let targets = cell_ref_to_dep_targets(
+        &cell_ref,
+        &cell_store,
+        Some(&cell_store.projection_registry),
+        None,
+    );
 
     assert_eq!(targets.len(), 2, "should produce Range + Cell(source)");
     // First: the 1x1 range dep (safety net)
@@ -99,18 +106,22 @@ fn test_resolved_ref_inside_projection() {
     let sheet = make_sheet_id(1);
     let source = make_cell_id(100);
     let phantom = make_cell_id(200);
-    let mut mirror = make_mirror(sheet, vec![(source, 0, 0), (phantom, 2, 0)]);
+    let mut cell_store = make_store(sheet, vec![(source, 0, 0), (phantom, 2, 0)]);
 
     // Register projection: source at (0,0), 5 rows x 1 col
-    mirror
+    cell_store
         .projection_registry
         .register(source, sheet, 0, 0, 5, 1);
 
     // Resolved ref to the phantom cell at position (2, 0)
     let cell_ref = CellRef::Resolved(phantom);
 
-    let targets =
-        cell_ref_to_dep_targets(&cell_ref, &mirror, Some(&mirror.projection_registry), None);
+    let targets = cell_ref_to_dep_targets(
+        &cell_ref,
+        &cell_store,
+        Some(&cell_store.projection_registry),
+        None,
+    );
 
     assert_eq!(
         targets.len(),
@@ -129,13 +140,13 @@ fn test_resolved_ref_inside_projection() {
 fn test_projection_removed_reverts_to_range_only() {
     let sheet = make_sheet_id(1);
     let source = make_cell_id(100);
-    let mut mirror = make_mirror(sheet, vec![(source, 0, 0)]);
+    let mut cell_store = make_store(sheet, vec![(source, 0, 0)]);
 
     // Register and then remove projection
-    mirror
+    cell_store
         .projection_registry
         .register(source, sheet, 0, 0, 5, 1);
-    mirror.projection_registry.remove(&source);
+    cell_store.projection_registry.remove(&source);
 
     // Positional ref to what was projected position
     let cell_ref = CellRef::Positional {
@@ -144,8 +155,12 @@ fn test_projection_removed_reverts_to_range_only() {
         col: 0,
     };
 
-    let targets =
-        cell_ref_to_dep_targets(&cell_ref, &mirror, Some(&mirror.projection_registry), None);
+    let targets = cell_ref_to_dep_targets(
+        &cell_ref,
+        &cell_store,
+        Some(&cell_store.projection_registry),
+        None,
+    );
 
     assert_eq!(targets.len(), 1, "after removal, should produce Range only");
     assert!(matches!(targets[0], DepTarget::Range(_, _)));
@@ -159,10 +174,10 @@ fn test_projection_removed_reverts_to_range_only() {
 fn test_self_reference_no_extra_dep() {
     let sheet = make_sheet_id(1);
     let source = make_cell_id(100);
-    let mut mirror = make_mirror(sheet, vec![(source, 0, 0)]);
+    let mut cell_store = make_store(sheet, vec![(source, 0, 0)]);
 
     // Register projection from source
-    mirror
+    cell_store
         .projection_registry
         .register(source, sheet, 0, 0, 5, 1);
 
@@ -175,8 +190,8 @@ fn test_self_reference_no_extra_dep() {
 
     let targets = cell_ref_to_dep_targets(
         &cell_ref,
-        &mirror,
-        Some(&mirror.projection_registry),
+        &cell_store,
+        Some(&cell_store.projection_registry),
         Some(&source), // current_cell == source
     );
 
@@ -196,18 +211,22 @@ fn test_self_reference_no_extra_dep() {
 fn test_resolved_ref_at_projection_origin() {
     let sheet = make_sheet_id(1);
     let source = make_cell_id(100);
-    let mut mirror = make_mirror(sheet, vec![(source, 0, 0)]);
+    let mut cell_store = make_store(sheet, vec![(source, 0, 0)]);
 
     // Register projection: source at (0,0)
-    mirror
+    cell_store
         .projection_registry
         .register(source, sheet, 0, 0, 5, 1);
 
     // Resolved ref directly to source cell
     let cell_ref = CellRef::Resolved(source);
 
-    let targets =
-        cell_ref_to_dep_targets(&cell_ref, &mirror, Some(&mirror.projection_registry), None);
+    let targets = cell_ref_to_dep_targets(
+        &cell_ref,
+        &cell_store,
+        Some(&cell_store.projection_registry),
+        None,
+    );
 
     // source == id, so no extra Cell(source) dep should be added
     assert_eq!(
@@ -256,8 +275,8 @@ fn range_ref_node(sheet: SheetId, r1: u32, c1: u32, r2: u32, c2: u32) -> ASTNode
 
 /// Helper: extract deps from an AST using the production path.
 fn deps_from_ast(ast: &ASTNode, sheet: &SheetId) -> Vec<DepTarget> {
-    let mirror = CellMirror::new();
-    extract_deps_and_volatility(ast, sheet, &mirror, &[], None).value_deps
+    let cell_store = CellStore::new();
+    extract_deps_and_volatility(ast, sheet, &cell_store, &[], None).value_deps
 }
 
 #[test]
@@ -429,7 +448,7 @@ fn test_column_indirect_does_extract_deps() {
             args: vec![ASTNode::Text("D40".to_string())],
         }],
     };
-    let extracted = extract_deps_and_volatility(&ast, &sheet, &CellMirror::new(), &[], None);
+    let extracted = extract_deps_and_volatility(&ast, &sheet, &CellStore::new(), &[], None);
     // INDIRECT is volatile, so is_volatile should be true
     assert!(
         extracted.is_volatile,
@@ -569,9 +588,9 @@ fn test_column_identifier_does_extract_deps() {
         name: "COLUMN".into(),
         args: vec![ASTNode::Identifier("MyRange".to_string())],
     };
-    // Identifier won't resolve in an empty mirror, but the point is we don't skip it
+    // Identifier won't resolve in an empty cell_store, but the point is we don't skip it
     let _deps = deps_from_ast(&ast, &sheet);
-    // With empty mirror, identifier won't resolve, so deps may be empty.
+    // With empty cell_store, identifier won't resolve, so deps may be empty.
     // The important thing is is_static_ref returns false for Identifier,
     // so the code path falls through to normal extraction (not skipped).
     // We test this indirectly via the is_static_ref unit test below.
@@ -603,7 +622,7 @@ fn test_is_static_ref() {
 fn test_registry_none_backwards_compatible() {
     let sheet = make_sheet_id(1);
     let source = make_cell_id(100);
-    let mirror = make_mirror(sheet, vec![(source, 0, 0)]);
+    let cell_store = make_store(sheet, vec![(source, 0, 0)]);
 
     // Positional ref
     let cell_ref = CellRef::Positional {
@@ -612,14 +631,14 @@ fn test_registry_none_backwards_compatible() {
         col: 0,
     };
 
-    let targets = cell_ref_to_dep_targets(&cell_ref, &mirror, None, None);
+    let targets = cell_ref_to_dep_targets(&cell_ref, &cell_store, None, None);
 
     assert_eq!(targets.len(), 1, "no registry: Range only");
     assert!(matches!(targets[0], DepTarget::Range(_, _)));
 
     // Resolved ref
     let cell_ref = CellRef::Resolved(source);
-    let targets = cell_ref_to_dep_targets(&cell_ref, &mirror, None, None);
+    let targets = cell_ref_to_dep_targets(&cell_ref, &cell_store, None, None);
 
     assert_eq!(targets.len(), 1, "no registry: Cell only");
     assert_eq!(targets[0], DepTarget::Cell(source));
@@ -682,7 +701,7 @@ fn test_selective_case_insensitive() {
 #[test]
 fn test_small_selective_range_not_expanded() {
     let sheet = make_sheet_id(1);
-    let mirror = make_mirror(
+    let cell_store = make_store(
         sheet,
         vec![
             (make_cell_id(101), 0, 0),
@@ -695,7 +714,7 @@ fn test_small_selective_range_not_expanded() {
         args: vec![range_ref_node(sheet, 0, 0, 2, 0), ASTNode::Number(1.0)],
     };
 
-    let deps = extract_deps_and_volatility(&ast, &sheet, &mirror, &[], None).value_deps;
+    let deps = extract_deps_and_volatility(&ast, &sheet, &cell_store, &[], None).value_deps;
 
     assert_eq!(
         deps,
@@ -746,7 +765,7 @@ fn test_three_d_ref_expands_reversed_bounds_by_ordered_sheets() {
     let deps = extract_deps_and_volatility(
         &ast,
         &sheet1,
-        &CellMirror::new(),
+        &CellStore::new(),
         &[sheet1, sheet2, sheet3],
         None,
     )
@@ -770,9 +789,9 @@ fn test_formulatext_named_range_emits_binding_and_top_left() {
 
     let sheet = make_sheet_id(1);
     let cell = make_cell_id(200);
-    let mut mirror = make_mirror(sheet, vec![(cell, 4, 2)]);
+    let mut cell_store = make_store(sheet, vec![(cell, 4, 2)]);
     let scope = Scope::Workbook;
-    mirror.variables.insert(
+    cell_store.variables.insert(
         scope.clone(),
         "DisplayName".to_string(),
         NamedRangeDef {
@@ -798,7 +817,7 @@ fn test_formulatext_named_range_emits_binding_and_top_left() {
         args: vec![ASTNode::Identifier("DisplayName".to_string())],
     };
 
-    let deps = extract_deps_and_volatility(&ast, &sheet, &mirror, &[], None).formula_text_deps;
+    let deps = extract_deps_and_volatility(&ast, &sheet, &cell_store, &[], None).formula_text_deps;
 
     assert!(deps.contains(&FormulaTextDepTarget::NameBinding {
         scope,
@@ -829,10 +848,20 @@ fn test_named_rect_range_preserves_resolved_range_dep() {
         ColId::from_raw(21),
         ColId::from_raw(22),
     ];
-    let mut mirror = make_mirror(sheet, vec![]);
-    mirror.install_row_col_indexes([(sheet, rows.clone(), cols.clone())]);
+    let mut cell_store = make_store(sheet, vec![]);
+    cell_store.install_sheet_axes(
+        sheet,
+        std::sync::Arc::new(compute_document::identity::AxisIndex::new(
+            sheet,
+            cell_types::AxisIdentityStore::Explicit(rows.clone()),
+        )),
+        std::sync::Arc::new(compute_document::identity::AxisIndex::new(
+            sheet,
+            cell_types::AxisIdentityStore::Explicit(cols.clone()),
+        )),
+    );
     let scope = Scope::Workbook;
-    mirror.variables.insert(
+    cell_store.variables.insert(
         scope.clone(),
         "Block".to_string(),
         NamedRangeDef {
@@ -866,13 +895,13 @@ fn test_named_rect_range_preserves_resolved_range_dep() {
             RangePos::new(sheet, 0, 0, 2, 2),
             RangeAccess::Aggregate,
         )),
-        "empty helper mirror should not resolve rect range"
+        "empty helper cell_store should not resolve rect range"
     );
 
     let deps = extract_deps_and_volatility(
         &ASTNode::Identifier("Block".to_string()),
         &sheet,
-        &mirror,
+        &cell_store,
         &[],
         None,
     )
@@ -889,7 +918,7 @@ fn test_structured_ref_under_selective_context_skips_cell_expansion() {
     use formula_types::{StructuredRef, StructuredRefSpecifier};
 
     let sheet = make_sheet_id(1);
-    let mut mirror = make_mirror(
+    let mut cell_store = make_store(
         sheet,
         vec![
             (make_cell_id(301), 1, 0),
@@ -897,7 +926,7 @@ fn test_structured_ref_under_selective_context_skips_cell_expansion() {
             (make_cell_id(303), 3, 0),
         ],
     );
-    mirror.set_table(CanonicalTable {
+    cell_store.set_table(CanonicalTable {
         id: "Sales".to_string(),
         name: "Sales".to_string(),
         display_name: "Sales".to_string(),
@@ -937,7 +966,7 @@ fn test_structured_ref_under_selective_context_skips_cell_expansion() {
         ],
     };
 
-    let deps = extract_deps_and_volatility(&ast, &sheet, &mirror, &[], Some(1)).value_deps;
+    let deps = extract_deps_and_volatility(&ast, &sheet, &cell_store, &[], Some(1)).value_deps;
 
     assert!(
         deps.iter()

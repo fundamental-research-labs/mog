@@ -31,9 +31,9 @@ fn assert_mixed_grid_visible(engine: &ComputeEngine, sheet_id: &SheetId, rows: u
 
 fn assert_mixed_cbor_ranges(engine: &ComputeEngine, sheet_id: &SheetId, rows: u32, cols: u32) {
     let sheet = engine
-        .mirror()
+        .cell_store()
         .get_sheet(sheet_id)
-        .expect("mixed-cbor sheet should exist in mirror");
+        .expect("mixed-cbor sheet should exist in cell_store");
     let mixed_ranges: Vec<_> = sheet
         .iter_ranges()
         .map(|(_, range)| range)
@@ -53,7 +53,7 @@ fn assert_mixed_cbor_ranges(engine: &ComputeEngine, sheet_id: &SheetId, rows: u3
 
 fn assert_mixed_counta_formula(engine: &mut ComputeEngine, sheet_id: &SheetId, rows: u32) {
     let col_len = engine
-        .mirror()
+        .cell_store()
         .get_sheet(sheet_id)
         .and_then(|sheet| sheet.get_column_view(0))
         .map(|col| col.len())
@@ -217,9 +217,9 @@ fn deferred_xlsx_import_materializes_range_data_on_non_critical_sheet() {
         .expect("RangeBacked sheet should exist");
     let sheet_id = SheetId::from_uuid_str(&sheet_id_hex).unwrap();
     let sheet = engine
-        .mirror()
+        .cell_store()
         .get_sheet(&sheet_id)
-        .expect("RangeBacked mirror sheet should exist");
+        .expect("RangeBacked cell_store sheet should exist");
 
     assert_eq!(
         engine.get_cell_value(&sheet_id, 3821, 16),

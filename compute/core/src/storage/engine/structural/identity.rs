@@ -2,25 +2,42 @@ use super::super::ComputeEngine;
 use super::super::mutation::{EngineMutation, MutationOutput};
 use super::super::services;
 use crate::snapshot::MutationResult;
-use cell_types::SheetId;
-use compute_wire::mutation::{concat_multi_viewport_patches, serialize_multi_viewport_patches};
+use cell_types::{CellId, SheetId};
 use value_types::ComputeError;
 
 impl ComputeEngine {
+    /// Resolve or allocate a native cell identity without a string/JSON round trip.
+    /// Uses the same untracked identity lifetime as `get_or_create_cell_id`.
+    pub fn ensure_cell_id_at(
+        &mut self,
+        sheet_id: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> Result<CellId, ComputeError> {
+        self.without_history(|engine| {
+            services::structural::ensure_cell_id_at(
+                &mut engine.stores,
+                &mut engine.cell_store,
+                sheet_id,
+                row,
+                col,
+            )
+        })
+    }
+
     pub(super) fn apply_get_or_create_cell_id(
         &mut self,
         sheet_id: &SheetId,
         row: u32,
         col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         services::structural::get_or_create_cell_id(
             &mut self.stores,
-            &mut self.mirror,
+            &mut self.cell_store,
             sheet_id,
             row,
             col,
         )
-        .map(|r| (serialize_multi_viewport_patches(&[]), r))
     }
 
     pub(super) fn apply_update_cell_position(
@@ -29,16 +46,15 @@ impl ComputeEngine {
         cell_id_hex: &str,
         new_row: u32,
         new_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         services::structural::update_cell_position(
             &mut self.stores,
-            &mut self.mirror,
+            &mut self.cell_store,
             sheet_id,
             cell_id_hex,
             new_row,
             new_col,
         )
-        .map(|r| (serialize_multi_viewport_patches(&[]), r))
     }
 
     pub(super) fn apply_relocate_cells(
@@ -51,7 +67,7 @@ impl ComputeEngine {
         target_sheet_id: &SheetId,
         target_row: u32,
         target_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         match self.apply_mutation(EngineMutation::RelocateCells {
             source_sheet_id: *source_sheet_id,
             src_start_row,
@@ -63,7 +79,7 @@ impl ComputeEngine {
             target_col,
         })? {
             MutationOutput::Recalc(result) => {
-                // A relocated pivot's output cells live in the mirror's
+                // A relocated pivot's output cells live in the cell store's
                 // `col_data` (written only by `materialize_all_pivots`), not in
                 // the grid index, so the cell-relocation patches don't cover
                 // them. Re-materialize here: this clears each pivot's stale
@@ -72,33 +88,9 @@ impl ComputeEngine {
                 if pivots_moved {
                     self.materialize_all_pivots();
                 }
-                // Flush incremental recalc patches (clears for source +
-                // writes for targets, both produced by
-                // `mutation_relocate_cells`).
-                let mut patches = self.flush_viewport_patches();
-                // Cross-sheet: incremental patches only cover the sheet
-                // the recalc touched. Rebuild the *other* sheet's
-                // viewport binary so vacated source cells (cross-sheet
-                // case) and freshly-written target cells (each from
-                // their own sheet's perspective) are both up-to-date.
-                if source_sheet_id != target_sheet_id {
-                    let source_full = self.produce_full_viewport_patches(source_sheet_id);
-                    let target_full = self.produce_full_viewport_patches(target_sheet_id);
-                    patches = concat_multi_viewport_patches(&[patches, source_full, target_full]);
-                } else if pivots_moved {
-                    // Same-sheet pivot move: the materialized `col_data` writes
-                    // (old region cleared, new region drawn) aren't in the
-                    // incremental patch stream. Rebuild the sheet's viewport so
-                    // both land in the binary the client applies.
-                    let source_full = self.produce_full_viewport_patches(source_sheet_id);
-                    patches = concat_multi_viewport_patches(&[patches, source_full]);
-                }
-                Ok((patches, result))
+                Ok(result)
             }
-            _ => Ok((
-                serialize_multi_viewport_patches(&[]),
-                MutationResult::empty(),
-            )),
+            _ => Ok(MutationResult::empty()),
         }
     }
 }

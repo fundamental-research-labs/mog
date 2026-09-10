@@ -1,7 +1,7 @@
 use cell_types::{CellId, SheetId};
 use value_types::ComputeError;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::RecalcResult;
 use crate::storage::engine::mutation::CellInput;
 use crate::storage::engine::stores::EngineStores;
@@ -10,7 +10,7 @@ use super::super::mutation_handlers::{mutation_set_cells, mutation_set_cells_by_
 
 pub(in crate::storage::engine) fn set_cell_value_parsed(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -23,14 +23,19 @@ pub(in crate::storage::engine) fn set_cell_value_parsed(
             text: raw_input.to_owned(),
         }
     };
-    mutation_set_cells_by_position(stores, mirror, vec![(*sheet_id, row, col, input)], false)
+    mutation_set_cells_by_position(
+        stores,
+        cell_store,
+        vec![(*sheet_id, row, col, input)],
+        false,
+    )
 }
 
 /// Force text after stripping the optional Excel apostrophe prefix.
 /// Empty input clears the cell; an explicit Literal("") retains empty text.
 pub(in crate::storage::engine) fn set_cell_value_as_text(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -43,12 +48,17 @@ pub(in crate::storage::engine) fn set_cell_value_as_text(
             text: value.strip_prefix('\'').unwrap_or(value).to_owned(),
         }
     };
-    mutation_set_cells_by_position(stores, mirror, vec![(*sheet_id, row, col, input)], false)
+    mutation_set_cells_by_position(
+        stores,
+        cell_store,
+        vec![(*sheet_id, row, col, input)],
+        false,
+    )
 }
 
 pub(in crate::storage::engine) fn set_cell(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     cell_id: CellId,
     row: u32,
@@ -57,7 +67,7 @@ pub(in crate::storage::engine) fn set_cell(
 ) -> Result<RecalcResult, ComputeError> {
     mutation_set_cells(
         stores,
-        mirror,
+        cell_store,
         vec![(*sheet_id, cell_id, row, col, input.clone())],
         false,
     )

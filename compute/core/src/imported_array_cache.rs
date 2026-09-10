@@ -18,7 +18,7 @@ pub(crate) struct ImportedArrayCache {
     /// Imported spill positions are not authored cells, so their package
     /// coordinates cannot be used as durable keys across row/column edits.
     /// The source identity lets the cache recover its current position from
-    /// the mirror's identity map after a structural operation or rebuild.
+    /// the cell store's identity map after a structural operation or rebuild.
     pub(crate) source_id: CellId,
     /// Declared spill bounds, inclusive.
     pub(crate) start: SheetPos,
@@ -27,7 +27,7 @@ pub(crate) struct ImportedArrayCache {
     pub(crate) cells: Vec<domain_types::CellData>,
     /// Stable identities for the cached package cells, parallel to `cells`.
     /// These identities are retained as metadata-only positions by hydration;
-    /// they never become authored value/formula entries in the live mirror.
+    /// they never become authored value/formula entries in the live cell store.
     pub(crate) cell_ids: Vec<CellId>,
     /// Whether the cached values still represent the current live workbook.
     /// Metadata remains useful after recalc even when values are stale.
@@ -179,14 +179,7 @@ fn map_boundary(pos: SheetPos, change: &StructureChange, upper: bool) -> SheetPo
         StructureChange::DeleteRows { at, count, .. } => {
             let end = at.saturating_add(*count);
             if pos.row() >= *at && pos.row() < end {
-                SheetPos::new(
-                    if upper {
-                        at.saturating_sub(1)
-                    } else {
-                        *at
-                    },
-                    pos.col(),
-                )
+                SheetPos::new(if upper { at.saturating_sub(1) } else { *at }, pos.col())
             } else {
                 map_position(pos, change).unwrap_or(pos)
             }
@@ -194,14 +187,7 @@ fn map_boundary(pos: SheetPos, change: &StructureChange, upper: bool) -> SheetPo
         StructureChange::DeleteCols { at, count, .. } => {
             let end = at.saturating_add(*count);
             if pos.col() >= *at && pos.col() < end {
-                SheetPos::new(
-                    pos.row(),
-                    if upper {
-                        at.saturating_sub(1)
-                    } else {
-                        *at
-                    },
-                )
+                SheetPos::new(pos.row(), if upper { at.saturating_sub(1) } else { *at })
             } else {
                 map_position(pos, change).unwrap_or(pos)
             }

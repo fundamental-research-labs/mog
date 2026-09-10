@@ -1,4 +1,3 @@
-use super::shared;
 use crate::snapshot::MutationResult;
 use crate::storage::engine::ComputeEngine;
 use crate::storage::engine::services;
@@ -23,17 +22,16 @@ impl ComputeEngine {
         row: u32,
         col: u32,
         url: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::set_hyperlink(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 sheet_id,
                 row,
                 col,
                 url,
             )
-            .map(shared::with_empty_patches)
         })
     }
 
@@ -44,29 +42,28 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         row: u32,
         col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::remove_hyperlink(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 sheet_id,
                 row,
                 col,
             )
-            .map(shared::with_empty_patches)
         })
     }
 
     /// Get the hyperlink URL for a cell at the given position.
     #[bridge::read]
     pub fn get_hyperlink(&self, sheet_id: &SheetId, row: u32, col: u32) -> Option<String> {
-        services::objects::get_hyperlink(&self.stores, &self.mirror, sheet_id, row, col)
+        services::objects::get_hyperlink(&self.stores, &self.cell_store, sheet_id, row, col)
     }
 
     /// Get full hyperlink metadata for all hyperlinks on a worksheet.
     #[bridge::read]
     pub fn get_hyperlinks(&self, sheet_id: &SheetId) -> Vec<Hyperlink> {
-        let Some(grid) = self.stores.grid_indexes.get(sheet_id) else {
+        let Some(grid) = self.cell_store.get_sheet(sheet_id) else {
             return Vec::new();
         };
         hyperlinks::get_all_hyperlinks(&self.stores.storage, sheet_id, grid)
@@ -81,9 +78,9 @@ impl ComputeEngine {
         start_col: u32,
         end_row: u32,
         end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
-            if let Some(grid) = engine.stores.grid_indexes.get(sheet_id) {
+            if let Some(grid) = engine.cell_store.get_sheet(sheet_id) {
                 hyperlinks::clear_hyperlinks_in_range(
                     &mut engine.stores.storage,
                     sheet_id,
@@ -94,7 +91,7 @@ impl ComputeEngine {
                     end_col,
                 );
             }
-            Ok((shared::empty_patches(), MutationResult::empty()))
+            Ok(MutationResult::empty())
         })
     }
 }

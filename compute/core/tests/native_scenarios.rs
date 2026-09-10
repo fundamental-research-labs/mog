@@ -21,12 +21,12 @@ fn native_scenario_apply_and_restore_preserve_formulas_after_definition_removal(
     engine.set_cell_value_parsed(&sheet, 0, 0, "=2+3").unwrap();
     engine.set_cell_value_parsed(&sheet, 0, 1, "=A1*2").unwrap();
     let input = engine
-        .mirror()
+        .cell_store()
         .get_sheet(&sheet)
         .unwrap()
         .cell_id_at(SheetPos::new(0, 0))
         .unwrap();
-    let (_, result) = engine
+    let result = engine
         .create_scenario(ScenarioCreateInput {
             name: "Higher input".into(),
             comment: "Native scenario".into(),
@@ -38,14 +38,14 @@ fn native_scenario_apply_and_restore_preserve_formulas_after_definition_removal(
     let created: ScenarioCreateResult = serde_json::from_value(result.data.unwrap()).unwrap();
     assert!(created.success);
     let scenario = created.scenario_id.unwrap();
-    let (_, result) = engine.apply_scenario(&scenario).unwrap();
+    let result = engine.apply_scenario(&scenario).unwrap();
     let applied: ScenarioApplyResult = serde_json::from_value(result.data.unwrap()).unwrap();
     assert!(applied.success);
     assert_eq!(applied.cells_updated, 1);
     assert_eq!(engine.get_raw_value(&sheet, 0, 0), "10");
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sheet, SheetPos::new(0, 1)),
         Some(&CellValue::Number(FiniteF64::must(20.0)))
     );
@@ -57,7 +57,7 @@ fn native_scenario_apply_and_restore_preserve_formulas_after_definition_removal(
     assert_eq!(engine.get_raw_value(&sheet, 0, 0), "=2+3");
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sheet, SheetPos::new(0, 1)),
         Some(&CellValue::Number(FiniteF64::must(10.0)))
     );

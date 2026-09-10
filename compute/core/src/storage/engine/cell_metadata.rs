@@ -4,8 +4,8 @@
 //! the formatting, visibility and formula declaration metadata used here is
 //! copied; cell values, history and unrelated workbook package data stay owned
 //! by their canonical stores. Unchanged metadata retains its revision.
-use crate::mirror::{
-    CellMirror,
+use crate::cells::{
+    CellStore,
     cell_metadata::{CellMetadataProvider, CellReferenceMetadata, FormulaResultMode},
 };
 use crate::storage::{WorkbookStorage, properties, sheet::dimensions};
@@ -96,17 +96,17 @@ pub(crate) fn provider(
 /// revision comparison is O(1); a replacement copies only metadata.
 pub(crate) fn refresh(
     storage: &WorkbookStorage,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     layout_metrics: domain_types::units::LayoutMetrics,
 ) {
-    let unchanged = mirror
+    let unchanged = cell_store
         .cell_metadata_provider
         .as_ref()
         .and_then(|provider| provider.as_any())
         .and_then(|provider| provider.downcast_ref::<StorageCellMetadata>())
         .is_some_and(|provider| provider.matches(storage, layout_metrics));
     if !unchanged {
-        mirror.install_cell_metadata_provider(provider(storage, layout_metrics));
+        cell_store.install_cell_metadata_provider(provider(storage, layout_metrics));
     }
 }
 
@@ -127,9 +127,9 @@ impl CellMetadataProvider for StorageCellMetadata {
         self.revision
     }
 
-    fn row_hidden(&self, mirror: &CellMirror, sheet: &SheetId, row: u32) -> Option<bool> {
+    fn row_hidden(&self, cell_store: &CellStore, sheet: &SheetId, row: u32) -> Option<bool> {
         let metadata = self.storage.sheet_metadata.get(sheet)?;
-        let manually_or_filter_hidden = mirror
+        let manually_or_filter_hidden = cell_store
             .row_id_lookup(sheet, row)
             .is_some_and(|id| metadata.dimensions.row_hidden(&id));
         Some(
@@ -142,47 +142,47 @@ impl CellMetadataProvider for StorageCellMetadata {
         )
     }
 
-    fn is_row_filtered(&self, mirror: &CellMirror, sheet: &SheetId, row: u32) -> bool {
+    fn is_row_filtered(&self, cell_store: &CellStore, sheet: &SheetId, row: u32) -> bool {
         dimensions::is_row_hidden_by_any_filter_id(
             &self.storage,
             sheet,
-            mirror.row_id_lookup(sheet, row),
+            cell_store.row_id_lookup(sheet, row),
         )
     }
 
     fn rich_shared_string(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         sheet: &SheetId,
         row: u32,
         col: u32,
     ) -> Option<RichSharedString> {
-        let cell = mirror.resolve_cell_id(sheet, SheetPos::new(row, col))?;
+        let cell = cell_store.resolve_cell_id(sheet, SheetPos::new(row, col))?;
         self.rich_strings.get(&cell).cloned()
     }
 
     fn query(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         sheet: &SheetId,
         row: u32,
         col: u32,
     ) -> Option<CellReferenceMetadata> {
-        let sheet_mirror = mirror.get_sheet(sheet)?;
+        let sheet_store = cell_store.get_sheet(sheet)?;
         let storage = &self.storage;
         let base = properties::get_workbook_base_format(storage);
-        let row_format = mirror
+        let row_format = cell_store
             .row_id_lookup(sheet, row)
             .and_then(|id| properties::get_row_format_by_id(storage, sheet, id));
-        let col_format = mirror
+        let col_format = cell_store
             .col_id_lookup(sheet, col)
             .and_then(|id| properties::get_col_format_by_id(storage, sheet, id));
-        let props = mirror
+        let props = cell_store
             .resolve_cell_id(sheet, SheetPos::new(row, col))
             .and_then(|id| properties::get_properties(storage, sheet, &id_to_hex(id.as_u128())));
         let cell_format = properties::materialize_cell_layer_format(props.as_ref());
         let structured =
-            super::services::resolve_structured_format_at_cell(mirror, sheet, row, col);
+            super::services::resolve_structured_format_at_cell(cell_store, sheet, row, col);
         let format = properties::get_effective_format_from_preloaded_layers(
             &base,
             col_format.as_ref(),
@@ -191,10 +191,10 @@ impl CellMetadataProvider for StorageCellMetadata {
             col,
             structured.as_ref(),
             Some(&cell_format),
-            Some(sheet_mirror),
+            Some(sheet_store),
             false,
         );
-        let column_id = mirror.col_id_lookup(sheet, col);
+        let column_id = cell_store.col_id_lookup(sheet, col);
         let explicit_width =
             column_id.and_then(|id| dimensions::get_col_width_by_id(storage, sheet, id));
         let hidden = column_id.is_some_and(|id| {
@@ -264,13 +264,21 @@ mod native_metadata_tests {
     #[test]
     fn refresh_retains_revision_until_formula_metadata_changes() {
         let mut storage = WorkbookStorage::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let metrics = domain_types::units::LayoutMetrics::from_column_width_mdw(7.0).unwrap();
-        refresh(&storage, &mut mirror, metrics);
-        let first = mirror.cell_metadata_provider.as_ref().unwrap().revision();
-        refresh(&storage, &mut mirror, metrics);
+        refresh(&storage, &mut cell_store, metrics);
+        let first = cell_store
+            .cell_metadata_provider
+            .as_ref()
+            .unwrap()
+            .revision();
+        refresh(&storage, &mut cell_store, metrics);
         assert_eq!(
-            mirror.cell_metadata_provider.as_ref().unwrap().revision(),
+            cell_store
+                .cell_metadata_provider
+                .as_ref()
+                .unwrap()
+                .revision(),
             first
         );
 
@@ -283,8 +291,8 @@ mod native_metadata_tests {
                 ..Default::default()
             },
         );
-        refresh(&storage, &mut mirror, metrics);
-        let provider = mirror.cell_metadata_provider.as_ref().unwrap();
+        refresh(&storage, &mut cell_store, metrics);
+        let provider = cell_store.cell_metadata_provider.as_ref().unwrap();
         assert_ne!(provider.revision(), first);
         assert_eq!(
             provider.formula_result_mode(&SheetId::from_raw(1), &cell),
@@ -301,13 +309,13 @@ mod native_metadata_tests {
     #[test]
     fn rich_string_projection_refreshes_after_replacement_and_clear() {
         let mut storage = WorkbookStorage::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let sheet = SheetId::from_raw(1);
         let cell = CellId::from_raw(2);
         storage
-            .add_sheet(&mut mirror, sheet, "Sheet1", 10, 10)
+            .add_sheet(&mut cell_store, sheet, "Sheet1", 10, 10)
             .unwrap();
-        mirror.apply_edit(
+        cell_store.apply_edit(
             &sheet,
             cell,
             SheetPos::new(0, 0),
@@ -326,9 +334,9 @@ mod native_metadata_tests {
                     ..Default::default()
                 },
             );
-            refresh(&storage, &mut mirror, metrics);
+            refresh(&storage, &mut cell_store, metrics);
             assert_eq!(
-                mirror
+                cell_store
                     .phonetic_shared_string(&sheet, 0, 0)
                     .unwrap()
                     .plain_text,
@@ -336,8 +344,8 @@ mod native_metadata_tests {
             );
         }
         storage.clear_cell_metadata(cell);
-        refresh(&storage, &mut mirror, metrics);
-        assert!(mirror.phonetic_shared_string(&sheet, 0, 0).is_none());
+        refresh(&storage, &mut cell_store, metrics);
+        assert!(cell_store.phonetic_shared_string(&sheet, 0, 0).is_none());
     }
 
     #[test]
@@ -369,7 +377,7 @@ mod native_metadata_tests {
         let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
         engine.recalculate().unwrap();
         let revision = engine
-            .mirror
+            .cell_store
             .cell_metadata_provider
             .as_ref()
             .unwrap()
@@ -385,7 +393,7 @@ mod native_metadata_tests {
             .unwrap();
         assert_eq!(
             engine
-                .mirror
+                .cell_store
                 .cell_metadata_provider
                 .as_ref()
                 .unwrap()
@@ -396,7 +404,7 @@ mod native_metadata_tests {
         engine.undo().unwrap();
         assert_eq!(
             engine
-                .mirror
+                .cell_store
                 .cell_metadata_provider
                 .as_ref()
                 .unwrap()
@@ -480,11 +488,11 @@ mod native_metadata_tests {
         engine.recalculate().unwrap();
         let header_format = |engine: &ComputeEngine| {
             engine
-                .mirror
+                .cell_store
                 .cell_metadata_provider
                 .as_ref()
                 .unwrap()
-                .query(&engine.mirror, &sheet, 0, 0)
+                .query(&engine.cell_store, &sheet, 0, 0)
                 .unwrap()
                 .format
         };

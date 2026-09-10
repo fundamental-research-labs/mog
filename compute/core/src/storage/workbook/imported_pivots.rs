@@ -579,12 +579,11 @@ fn unsupported_reason_wire_value(reason: ImportedPivotUnsupportedReason) -> Stri
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mirror::CellMirror;
+    use crate::cells::CellStore;
     use crate::storage::WorkbookStorage;
-    use domain_types::domain::analytics::{AggregateFunction, DetectedDataType};
     use domain_types::domain::pivot::{
-        CellRange, FieldId, OutputLocation, ParsedPivotTable, PivotField, PivotFieldPlacementFlat,
-        PivotTableOoxmlPreservation, PivotTableRelationshipPreservation, PlacementId,
+        CellRange, OutputLocation, ParsedPivotTable, PivotTableOoxmlPreservation,
+        PivotTableRelationshipPreservation,
     };
 
     fn parsed_pivot() -> ParsedPivotTable {
@@ -638,14 +637,14 @@ mod tests {
 
     fn storage_with_pivot_sheets() -> (WorkbookStorage, cell_types::SheetId, cell_types::SheetId) {
         let mut storage = WorkbookStorage::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let source_sheet_id = cell_types::SheetId::from_raw(1);
         let output_sheet_id = cell_types::SheetId::from_raw(2);
         storage
-            .add_sheet(&mut mirror, source_sheet_id, "Data", 100, 26)
+            .add_sheet(&mut cell_store, source_sheet_id, "Data", 100, 26)
             .expect("add source sheet");
         storage
-            .add_sheet(&mut mirror, output_sheet_id, "PivotSheet", 100, 26)
+            .add_sheet(&mut cell_store, output_sheet_id, "PivotSheet", 100, 26)
             .expect("add output sheet");
         (storage, source_sheet_id, output_sheet_id)
     }

@@ -5,7 +5,7 @@ fn create_table_persists_table_filter_in_rust() {
     let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();
 
-    let (_, result) = engine
+    let result = engine
         .create_table(
             &sid,
             "Table1".into(),

@@ -101,7 +101,7 @@ fn scalar_with_formula_metadata_is_ambiguous_value_provenance() {
 
 #[test]
 fn imported_formula_result_modes_remain_distinct_value_provenance() {
-    use crate::mirror::cell_metadata::FormulaResultMode;
+    use crate::cells::cell_metadata::FormulaResultMode;
 
     let mut digests = Vec::new();
     for mode in [

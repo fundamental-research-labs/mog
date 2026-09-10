@@ -4,7 +4,7 @@
 //!
 //! The function locates a pivot table by the cell reference in arg[1], then
 //! finds the value at the intersection of the specified data field and row
-//! criteria. It reads from already-rendered cells in the mirror — it does NOT
+//! criteria. It reads from already-rendered cells in the cell store — it does NOT
 //! invoke the pivot compute engine.
 
 use crate::eval::context::traits::{EvalDataAccess, EvalMetadata};

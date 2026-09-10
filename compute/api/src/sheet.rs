@@ -130,11 +130,7 @@ impl Sheet {
 
         self.dispatch
             .call_engine(move |engine| engine.batch_set_cells_by_position(updates, false))
-            .and_then(|result| {
-                result
-                    .map(|(_patches, mutation)| mutation)
-                    .map_err(ComputeApiError::from)
-            })
+            .and_then(|result| result.map_err(ComputeApiError::from))
     }
 
     /// Create a new Sheet handle (called by Workbook, not public).
@@ -174,10 +170,7 @@ impl Sheet {
         let input = value.into();
         self.dispatch
             .call_engine(move |e| e.set_cell_value_parsed(&sid, row, col, &input))
-            .and_then(|r| {
-                r.map(|(_vp, mutation)| mutation)
-                    .map_err(ComputeApiError::from)
-            })
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Set a range of cells from a 2D grid of values.
@@ -196,10 +189,7 @@ impl Sheet {
         }
         self.dispatch
             .call_engine(move |e| e.set_cell_values_parsed(&sid, updates))
-            .and_then(|r| {
-                r.map(|(_vp, mutation)| mutation)
-                    .map_err(ComputeApiError::from)
-            })
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Clear all cells in a range.
@@ -210,7 +200,7 @@ impl Sheet {
         let (sr, sc, er, ec) = range.into().resolve()?;
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.clear_range(&sid, sr, sc, er, ec).map(|(_, r)| r))
+            .call_engine(move |e| e.clear_range(&sid, sr, sc, er, ec))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -224,10 +214,7 @@ impl Sheet {
         let sid = self.sheet_id;
         let m = mode.to_string();
         self.dispatch
-            .call_engine(move |e| {
-                e.clear_range_with_mode(&sid, sr, sc, er, ec, &m)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.clear_range_with_mode(&sid, sr, sc, er, ec, &m))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -337,10 +324,7 @@ impl Sheet {
         let sid = self.sheet_id;
         self.dispatch
             .call_engine(move |e| e.sort_range(&sid, sr, sc, er, ec, options))
-            .and_then(|r| {
-                r.map(|(_vp, mutation)| mutation)
-                    .map_err(ComputeApiError::from)
-            })
+            .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// Get the data bounds (used range) of the sheet.

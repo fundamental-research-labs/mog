@@ -23,8 +23,8 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 fast-float = "0.2"
 # Track R3 bridge tagged-error contract: ComputeError implements
-# bridge_types::BridgeStructuredError so every transport (WASM, NAPI,
-# Tauri) emits the same tagged-JSON envelope.
+# bridge_types::BridgeStructuredError so callers emit the same tagged-JSON
+# envelope.
 bridge-types = { path = "../../../../../infra/rust-bridge/bridge-types" }
 # Marker proc-attribute for the `no_bare_f64_at_boundary` build-time gate.
 # `FiniteF64::val` and `F64x2::{hi, lo}` are the only legitimate bare-`f64`

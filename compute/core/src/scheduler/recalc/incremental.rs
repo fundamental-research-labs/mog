@@ -8,19 +8,19 @@ impl ComputeCore {
     /// with rayon). Small levels are evaluated sequentially to avoid overhead.
     pub(super) fn topo_evaluate_cells(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         cells: &[CellId],
     ) -> Result<RecalcResult, ComputeError> {
         // No deadline — create a very large deadline (effectively infinite).
         // Use 1 year to avoid overflow with Instant::now().
         let deadline = make_deadline(std::time::Duration::from_secs(365 * 24 * 3600));
-        self.topo_evaluate_cells_with_deadline(mirror, cells, &deadline)
+        self.topo_evaluate_cells_with_deadline(cell_store, cells, &deadline)
     }
 
     /// Evaluate a list of cells in order with a deadline for timeout.
     pub(super) fn topo_evaluate_cells_with_deadline(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         cells: &[CellId],
         deadline: &Deadline,
     ) -> Result<RecalcResult, ComputeError> {
@@ -65,7 +65,7 @@ impl ComputeCore {
         // dynamic array correctness via pass 2 below.)
         let (changed_cells, projection_changes, errors, projection_deltas, topo_cycle_cells) = self
             .topo_evaluate_pass(
-                mirror,
+                cell_store,
                 &current_cells,
                 deadline,
                 &mut epoch_range_store,
@@ -89,7 +89,7 @@ impl ComputeCore {
         // that transitively depend on cycle cells.
         if !topo_cycle_cells.is_empty() {
             let cycle_result =
-                self.handle_cycles_and_recalc(mirror, vec![topo_cycle_cells], deadline)?;
+                self.handle_cycles_and_recalc(cell_store, vec![topo_cycle_cells], deadline)?;
 
             // Deduplicate: Phase 1b results supersede pass 1 results for the
             // same cells (Phase 1b has correct values from updated cycle inputs).
@@ -124,7 +124,7 @@ impl ComputeCore {
                 &merged_projection_changes,
             );
             let (fixup_changes, fixup_proj, fixup_errors) = self.selective_dep_fixup_pass(
-                mirror,
+                cell_store,
                 &mut epoch_range_store,
                 &mut metrics,
                 Some(&scope),
@@ -138,7 +138,7 @@ impl ComputeCore {
         // Pass 2: Projection stabilization — only runs when projections changed shape/existence
         if !projection_deltas.is_empty() {
             let (stab_changes, stab_projection_changes, stab_errors) = self.projection_stabilize(
-                mirror,
+                cell_store,
                 &projection_deltas,
                 deadline,
                 0,

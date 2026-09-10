@@ -95,7 +95,7 @@ pub(in crate::eval) async fn eval_match<'a, D: EvalDataAccess, M: EvalMetadata>(
                     // The lookup index has completed against the current
                     // column state. Only now inspect the source endpoint for
                     // approximate MATCH; doing this before the index search
-                    // can observe a stale mirror slice while a dependency is
+                    // can observe a stale cell_store slice while a dependency is
                     // still being refreshed. If the index is unavailable,
                     // materialization below remains the dependency-aware
                     // fallback.

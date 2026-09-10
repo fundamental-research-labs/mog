@@ -25,7 +25,7 @@ impl SheetSlicers {
     pub fn create_slicer(&self, config: StoredSlicer) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.create_slicer(&sid, config).map(|(_, r)| r))
+            .call_engine(move |e| e.create_slicer(&sid, config))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -34,7 +34,7 @@ impl SheetSlicers {
         let sid = self.sheet_id;
         let owned_id = slicer_id.to_owned();
         self.dispatch
-            .call_engine(move |e| e.delete_slicer(&sid, &owned_id).map(|(_, r)| r))
+            .call_engine(move |e| e.delete_slicer(&sid, &owned_id))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -45,7 +45,7 @@ impl SheetSlicers {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.delete_slicers(&sid, slicer_ids).map(|(_, r)| r))
+            .call_engine(move |e| e.delete_slicers(&sid, slicer_ids))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -75,7 +75,7 @@ impl SheetSlicers {
         let sid = self.sheet_id;
         let owned_id = slicer_id.to_owned();
         self.dispatch
-            .call_engine(move |e| e.toggle_slicer_item(&sid, &owned_id, value).map(|(_, r)| r))
+            .call_engine(move |e| e.toggle_slicer_item(&sid, &owned_id, value))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -88,10 +88,7 @@ impl SheetSlicers {
         let sid = self.sheet_id;
         let owned_id = slicer_id.to_owned();
         self.dispatch
-            .call_engine(move |e| {
-                e.set_slicer_selection(&sid, &owned_id, values)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.set_slicer_selection(&sid, &owned_id, values))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -103,7 +100,7 @@ impl SheetSlicers {
         let sid = self.sheet_id;
         let owned_id = slicer_id.to_owned();
         self.dispatch
-            .call_engine(move |e| e.clear_slicer_selection(&sid, &owned_id).map(|(_, r)| r))
+            .call_engine(move |e| e.clear_slicer_selection(&sid, &owned_id))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 }

@@ -23,7 +23,7 @@ fn lifecycle_import_cold_load_read() {
 
     assert_sum_at(&engine, &sid, 0, 1, 55.0, "cold-load SUM(A1:A10)");
 
-    let sheet = engine.mirror().get_sheet(&sid).expect("sheet mirror");
+    let sheet = engine.cell_store().get_sheet(&sid).expect("sheet store");
     if let Some(col_slice) = sheet.get_column_view(0) {
         assert!(
             col_slice.len() >= 10,

@@ -1,7 +1,7 @@
 use super::test_helpers::*;
 use super::value_utils::parse_plain_value;
 use super::*;
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use compute_parser::CellRefNode;
 use formula_types::IdentityFormulaRef;

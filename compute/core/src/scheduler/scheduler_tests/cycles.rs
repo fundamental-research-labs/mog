@@ -10,7 +10,7 @@ static FULL_RECALC_WITH_OPTIONS_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mut
 #[test]
 fn test_circular_reference_detected() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let snap = WorkbookSnapshot {
         axis_run_high_water_mark: None,
         identity_high_water_mark: None,
@@ -55,7 +55,7 @@ fn test_circular_reference_detected() {
         calculation_settings: None,
     };
 
-    let result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // Imported circular formula cells may carry Excel cached values. With
     // iterative calculation disabled, preserve those cached values while still
@@ -63,8 +63,8 @@ fn test_circular_reference_detected() {
     let a1_id = cid(0x10);
     let b1_id = cid(0x11);
 
-    let a1_val = core.get_cell_value(&mirror, &a1_id).unwrap();
-    let b1_val = core.get_cell_value(&mirror, &b1_id).unwrap();
+    let a1_val = core.get_cell_value(&cell_store, &a1_id).unwrap();
+    let b1_val = core.get_cell_value(&cell_store, &b1_id).unwrap();
 
     assert_eq!(*a1_val, CellValue::number(0.0));
     assert_eq!(*b1_val, CellValue::number(0.0));
@@ -80,7 +80,7 @@ fn test_circular_reference_detected() {
 #[test]
 fn test_self_referencing_formula() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let snap = WorkbookSnapshot {
         axis_run_high_water_mark: None,
         identity_high_water_mark: None,
@@ -114,12 +114,12 @@ fn test_self_referencing_formula() {
         calculation_settings: None,
     };
 
-    let result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
 
     // Imported self-references also preserve their cached value. New formulas
     // without a cached value are covered separately below.
     let a1_id = cid(0x10);
-    let a1_val = core.get_cell_value(&mirror, &a1_id).unwrap();
+    let a1_val = core.get_cell_value(&cell_store, &a1_id).unwrap();
     assert_eq!(*a1_val, CellValue::number(0.0));
 
     // Circular reference diagnostic should be emitted
@@ -133,7 +133,7 @@ fn test_self_referencing_formula() {
 #[test]
 fn blank_self_referencing_formula_materializes_circular_error() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let snap = WorkbookSnapshot {
         axis_run_high_water_mark: None,
         identity_high_water_mark: None,
@@ -167,11 +167,11 @@ fn blank_self_referencing_formula_materializes_circular_error() {
         calculation_settings: None,
     };
 
-    let result = core.init_from_snapshot(&mut mirror, snap).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snap).unwrap();
     let a1_id = cid(0x10);
 
     assert_eq!(
-        *core.get_cell_value(&mirror, &a1_id).unwrap(),
+        *core.get_cell_value(&cell_store, &a1_id).unwrap(),
         CellValue::Error(CellError::Circ, None)
     );
     assert!(result.errors.iter().any(|e| e.error.contains("Circular")));
@@ -195,7 +195,7 @@ fn blank_self_referencing_formula_materializes_circular_error() {
 //   subsequent `calculate()` (no iterative override) must:
 //     1. return `RecalcResult { changed_cells: [], .. }` (the dirty
 //        short-circuit fires — no work done, no new changes emitted), and
-//     2. leave mirror values for the cycle cells byte-identical to what
+//     2. leave cell_store values for the cycle cells byte-identical to what
 //        they were after the previous `calculate()`.
 //
 // A single-cell mutation precedes the first `calculate()` to arm the dirty
@@ -278,9 +278,9 @@ fn test_calculate_idempotent_under_cycles() {
          (got empty), otherwise the test isn't exercising the cycle code path"
     );
 
-    // Capture mirror values for the cycle cells after the first recalc.
-    let a1_after_first = engine.mirror().get_cell_value(&a1_id).cloned();
-    let a2_after_first = engine.mirror().get_cell_value(&a2_id).cloned();
+    // Capture cell_store values for the cycle cells after the first recalc.
+    let a1_after_first = engine.cell_store().get_cell_value(&a1_id).cloned();
+    let a2_after_first = engine.cell_store().get_cell_value(&a2_id).cloned();
     assert_eq!(
         a1_after_first,
         Some(CellValue::number(0.0)),
@@ -293,7 +293,7 @@ fn test_calculate_idempotent_under_cycles() {
     );
 
     // Second user-facing recalc with NO intervening mutation. The dirty
-    // short-circuit must fire: zero changed cells, and the mirror must
+    // short-circuit must fire: zero changed cells, and the cell store must
     // remain bit-identical to its state after the first recalc.
     let second = engine
         .recalculate_with_options(&opts)
@@ -305,16 +305,16 @@ fn test_calculate_idempotent_under_cycles() {
         second.changed_cells.len()
     );
 
-    let a1_after_second = engine.mirror().get_cell_value(&a1_id).cloned();
-    let a2_after_second = engine.mirror().get_cell_value(&a2_id).cloned();
+    let a1_after_second = engine.cell_store().get_cell_value(&a1_id).cloned();
+    let a2_after_second = engine.cell_store().get_cell_value(&a2_id).cloned();
     assert_eq!(
         a1_after_first, a1_after_second,
-        "A1 mirror value must be identical across two recalcs with no \
+        "A1 cell_store value must be identical across two recalcs with no \
          intervening mutation"
     );
     assert_eq!(
         a2_after_first, a2_after_second,
-        "A2 mirror value must be identical across two recalcs with no \
+        "A2 cell_store value must be identical across two recalcs with no \
          intervening mutation"
     );
 }
@@ -360,8 +360,8 @@ fn full_recalc_with_options_success_restores_settings_and_clears_pending_manual_
 
     let _guard = FULL_RECALC_WITH_OPTIONS_TEST_LOCK.lock().unwrap();
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, basic_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, basic_snapshot())
         .expect("basic snapshot should initialize");
     core.set_iterative_calc(false);
     core.set_max_iterations(77);
@@ -370,7 +370,7 @@ fn full_recalc_with_options_success_restores_settings_and_clears_pending_manual_
 
     let result = core
         .full_recalc_with_options(
-            &mut mirror,
+            &mut cell_store,
             &RecalcOptions {
                 iterative: Some(true),
                 max_iterations: Some(3),
@@ -393,8 +393,8 @@ fn full_recalc_with_options_err_restores_settings_and_keeps_pending_manual_dirty
 
     let _guard = FULL_RECALC_WITH_OPTIONS_TEST_LOCK.lock().unwrap();
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot_viewport_only(&mut mirror, basic_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot_viewport_only(&mut cell_store, basic_snapshot())
         .expect("viewport-only snapshot should initialize");
     core.set_iterative_calc(false);
     core.set_max_iterations(77);
@@ -405,7 +405,7 @@ fn full_recalc_with_options_err_restores_settings_and_keeps_pending_manual_dirty
 
     let err = core
         .full_recalc_with_options(
-            &mut mirror,
+            &mut cell_store,
             &RecalcOptions {
                 iterative: Some(true),
                 max_iterations: Some(3),
@@ -432,8 +432,8 @@ fn full_recalc_with_options_panic_restores_settings_and_keeps_pending_manual_dir
 
     let _guard = FULL_RECALC_WITH_OPTIONS_TEST_LOCK.lock().unwrap();
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, basic_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, basic_snapshot())
         .expect("basic snapshot should initialize");
     core.set_iterative_calc(false);
     core.set_max_iterations(77);
@@ -445,7 +445,7 @@ fn full_recalc_with_options_panic_restores_settings_and_keeps_pending_manual_dir
 
     let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let _ = core.full_recalc_with_options(
-            &mut mirror,
+            &mut cell_store,
             &RecalcOptions {
                 iterative: Some(true),
                 max_iterations: Some(3),
@@ -469,8 +469,8 @@ fn full_recalc_with_options_repeated_calls_do_not_leak_iterative_state() {
 
     let _guard = FULL_RECALC_WITH_OPTIONS_TEST_LOCK.lock().unwrap();
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, self_cycle_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, self_cycle_snapshot())
         .expect("self-cycle snapshot should initialize");
     core.set_iterative_calc(false);
     core.set_max_iterations(100);
@@ -478,7 +478,7 @@ fn full_recalc_with_options_repeated_calls_do_not_leak_iterative_state() {
 
     let first = core
         .full_recalc_with_options(
-            &mut mirror,
+            &mut cell_store,
             &RecalcOptions {
                 iterative: Some(true),
                 max_iterations: Some(2),
@@ -494,7 +494,7 @@ fn full_recalc_with_options_repeated_calls_do_not_leak_iterative_state() {
 
     let second = core
         .full_recalc_with_options(
-            &mut mirror,
+            &mut cell_store,
             &RecalcOptions {
                 iterative: Some(true),
                 max_iterations: Some(5),
@@ -515,19 +515,19 @@ fn full_recalc_with_options_circular_workbook_consumes_per_call_options() {
 
     let _guard = FULL_RECALC_WITH_OPTIONS_TEST_LOCK.lock().unwrap();
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, self_cycle_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, self_cycle_snapshot())
         .expect("self-cycle snapshot should initialize");
     let a1 = cid(0x10);
     assert_eq!(
-        *core.get_cell_value(&mirror, &a1).unwrap(),
+        *core.get_cell_value(&cell_store, &a1).unwrap(),
         CellValue::Error(CellError::Circ, None),
         "A1 should start as a circular error when no cached value exists"
     );
 
     let result = core
         .full_recalc_with_options(
-            &mut mirror,
+            &mut cell_store,
             &RecalcOptions {
                 iterative: Some(true),
                 max_iterations: Some(4),
@@ -536,7 +536,7 @@ fn full_recalc_with_options_circular_workbook_consumes_per_call_options() {
             },
         )
         .expect("iterative full recalc should succeed");
-    let after = match core.get_cell_value(&mirror, &a1).unwrap() {
+    let after = match core.get_cell_value(&cell_store, &a1).unwrap() {
         CellValue::Number(n) => n.get(),
         other => panic!("A1 should remain numeric after iterative recalc, got {other:?}"),
     };
@@ -578,8 +578,8 @@ fn iterative_calc_solves_chained_debt_schedule_cycles() {
         }
     }
 
-    fn expect_number(core: &ComputeCore, mirror: &CellMirror, cell_id: CellId) -> f64 {
-        match core.get_cell_value(mirror, &cell_id).unwrap() {
+    fn expect_number(core: &ComputeCore, cell_store: &CellStore, cell_id: CellId) -> f64 {
+        match core.get_cell_value(cell_store, &cell_id).unwrap() {
             CellValue::Number(n) => n.get(),
             other => panic!("expected numeric value for {cell_id:?}, got {other:?}"),
         }
@@ -638,13 +638,13 @@ fn iterative_calc_solves_chained_debt_schedule_cycles() {
     };
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snap)
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snap)
         .expect("debt schedule snapshot should initialize");
 
     let result = core
         .full_recalc_with_options(
-            &mut mirror,
+            &mut cell_store,
             &RecalcOptions {
                 iterative: Some(true),
                 max_iterations: Some(100),
@@ -661,11 +661,11 @@ fn iterative_calc_solves_chained_debt_schedule_cycles() {
         result.metrics
     );
 
-    let e_end = expect_number(&core, &mirror, cid(0xe24));
-    let f_begin = expect_number(&core, &mirror, cid(0xf23));
-    let f_end = expect_number(&core, &mirror, cid(0xf24));
-    let g_begin = expect_number(&core, &mirror, cid(0x1023));
-    let g_end = expect_number(&core, &mirror, cid(0x1024));
+    let e_end = expect_number(&core, &cell_store, cid(0xe24));
+    let f_begin = expect_number(&core, &cell_store, cid(0xf23));
+    let f_end = expect_number(&core, &cell_store, cid(0xf24));
+    let g_begin = expect_number(&core, &cell_store, cid(0x1023));
+    let g_end = expect_number(&core, &cell_store, cid(0x1024));
 
     assert!(
         (e_end - f_begin).abs() < 0.01,
@@ -712,28 +712,28 @@ fn iterative_calc_recovers_chained_debt_schedule_after_incremental_edits() {
 
     fn set(
         core: &mut ComputeCore,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         sheet_id: &SheetId,
         cell_id: CellId,
         row: u32,
         col: u32,
         input: &str,
     ) {
-        core.set_cell(mirror, sheet_id, cell_id, row, col, input)
+        core.set_cell(cell_store, sheet_id, cell_id, row, col, input)
             .expect("incremental set_cell should succeed");
     }
 
-    fn expect_number(core: &ComputeCore, mirror: &CellMirror, cell_id: CellId) -> f64 {
-        match core.get_cell_value(mirror, &cell_id).unwrap() {
+    fn expect_number(core: &ComputeCore, cell_store: &CellStore, cell_id: CellId) -> f64 {
+        match core.get_cell_value(cell_store, &cell_id).unwrap() {
             CellValue::Number(n) => n.get(),
             other => panic!("expected numeric value for {cell_id:?}, got {other:?}"),
         }
     }
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let sheet_id = sid(1);
-    core.init_from_snapshot(&mut mirror, empty_snapshot())
+    core.init_from_snapshot(&mut cell_store, empty_snapshot())
         .expect("empty workbook should initialize");
 
     for (cell_id, row, input) in [
@@ -751,11 +751,19 @@ fn iterative_calc_recovers_chained_debt_schedule_after_incremental_edits() {
         (cid(0xb12), 11, "=(B10+B11)/2"),
         (cid(0xb13), 12, "=MIN(B9,B10)"),
     ] {
-        set(&mut core, &mut mirror, &sheet_id, cell_id, row, 1, input);
+        set(
+            &mut core,
+            &mut cell_store,
+            &sheet_id,
+            cell_id,
+            row,
+            1,
+            input,
+        );
     }
 
     core.full_recalc_with_options(
-        &mut mirror,
+        &mut cell_store,
         &RecalcOptions {
             iterative: Some(true),
             max_iterations: Some(100),
@@ -780,7 +788,7 @@ fn iterative_calc_recovers_chained_debt_schedule_after_incremental_edits() {
         };
         set(
             &mut core,
-            &mut mirror,
+            &mut cell_store,
             &sheet_id,
             cid(ebitda_id),
             19,
@@ -789,7 +797,7 @@ fn iterative_calc_recovers_chained_debt_schedule_after_incremental_edits() {
         );
         set(
             &mut core,
-            &mut mirror,
+            &mut cell_store,
             &sheet_id,
             cid(ebitda_id + 1),
             20,
@@ -798,7 +806,7 @@ fn iterative_calc_recovers_chained_debt_schedule_after_incremental_edits() {
         );
         set(
             &mut core,
-            &mut mirror,
+            &mut cell_store,
             &sheet_id,
             cid(ebitda_id + 2),
             21,
@@ -814,7 +822,7 @@ fn iterative_calc_recovers_chained_debt_schedule_after_incremental_edits() {
         };
         set(
             &mut core,
-            &mut mirror,
+            &mut cell_store,
             &sheet_id,
             cid(ebitda_id + 3),
             22,
@@ -823,7 +831,7 @@ fn iterative_calc_recovers_chained_debt_schedule_after_incremental_edits() {
         );
         set(
             &mut core,
-            &mut mirror,
+            &mut cell_store,
             &sheet_id,
             cid(ebitda_id + 4),
             23,
@@ -832,7 +840,7 @@ fn iterative_calc_recovers_chained_debt_schedule_after_incremental_edits() {
         );
         set(
             &mut core,
-            &mut mirror,
+            &mut cell_store,
             &sheet_id,
             cid(ebitda_id + 5),
             24,
@@ -841,7 +849,7 @@ fn iterative_calc_recovers_chained_debt_schedule_after_incremental_edits() {
         );
         set(
             &mut core,
-            &mut mirror,
+            &mut cell_store,
             &sheet_id,
             cid(ebitda_id + 6),
             25,
@@ -852,7 +860,7 @@ fn iterative_calc_recovers_chained_debt_schedule_after_incremental_edits() {
 
     let result = core
         .full_recalc_with_options(
-            &mut mirror,
+            &mut cell_store,
             &RecalcOptions {
                 iterative: Some(true),
                 max_iterations: Some(100),
@@ -868,11 +876,11 @@ fn iterative_calc_recovers_chained_debt_schedule_after_incremental_edits() {
         result.metrics
     );
 
-    let e_end = expect_number(&core, &mirror, cid(0xe24));
-    let f_begin = expect_number(&core, &mirror, cid(0xf23));
-    let f_end = expect_number(&core, &mirror, cid(0xf24));
-    let g_begin = expect_number(&core, &mirror, cid(0x1023));
-    let g_end = expect_number(&core, &mirror, cid(0x1024));
+    let e_end = expect_number(&core, &cell_store, cid(0xe24));
+    let f_begin = expect_number(&core, &cell_store, cid(0xf23));
+    let f_end = expect_number(&core, &cell_store, cid(0xf24));
+    let g_begin = expect_number(&core, &cell_store, cid(0x1023));
+    let g_end = expect_number(&core, &cell_store, cid(0x1024));
 
     assert!((e_end - f_begin).abs() < 0.01);
     assert!((f_end - g_begin).abs() < 0.01);

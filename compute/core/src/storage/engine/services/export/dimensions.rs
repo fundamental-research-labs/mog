@@ -3,8 +3,7 @@
 //! Extracted from `export.rs` — row heights, column widths, hidden
 //! rows/cols, and table specs.
 
-use cell_types::{CellId, SheetId};
-use compute_document::hex::hex_to_id;
+use cell_types::SheetId;
 use domain_types::{
     ColDimension, RowDimension, SheetData, SheetDimensions,
     domain::{
@@ -21,7 +20,7 @@ use domain_types::{
 };
 use std::collections::{HashMap, HashSet};
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::services::queries;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::filters as sheet_filters;
@@ -39,7 +38,7 @@ use super::table_totals::apply_runtime_table_totals_to_spec;
 /// descent values, and column widths from native metadata and produces a `SheetDimensions`.
 pub(in crate::storage::engine) fn export_dimensions_for_sheet(
     stores: &EngineStores,
-    _mirror: &CellMirror,
+    _store: &CellStore,
     sheet_id: &SheetId,
     _override_max_col: Option<u32>,
 ) -> SheetDimensions {
@@ -124,11 +123,11 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
 /// Export tables for a sheet, reading lossless data from the native table catalog.
 pub(in crate::storage::engine) fn export_tables_for_sheet(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
 ) -> Vec<ExportedTableSpec> {
     let sheet_hex = sheet_id.to_uuid_string();
-    let mut catalog_tables: Vec<_> = mirror
+    let mut catalog_tables: Vec<_> = cell_store
         .all_tables()
         .iter()
         .filter(|table| table.sheet_id == sheet_hex)
@@ -151,7 +150,7 @@ pub(in crate::storage::engine) fn export_tables_for_sheet(
     let mut exported = Vec::new();
     for table in catalog_tables {
         exported.push(exported_table_spec_for_table(
-            stores, mirror, sheet_id, &table,
+            stores, cell_store, sheet_id, &table,
         ));
     }
     exported
@@ -161,9 +160,9 @@ pub(in crate::storage::engine) fn export_tables_for_sheet(
 /// The returned catalog is a snapshot payload; the live table source stays native.
 pub(in crate::storage::engine) fn table_catalog_for_snapshot(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
 ) -> Vec<TableCatalogEntry> {
-    mirror
+    cell_store
         .all_tables()
         .iter()
         .cloned()
@@ -171,7 +170,9 @@ pub(in crate::storage::engine) fn table_catalog_for_snapshot(
             if let Ok(sheet_id) = SheetId::from_uuid_str(&table.sheet_id) {
                 let mut spec =
                     domain_types::domain::table::catalog_entry_to_xlsx_table_spec(&table, None);
-                apply_runtime_table_filter_to_spec(stores, mirror, &sheet_id, &table.id, &mut spec);
+                apply_runtime_table_filter_to_spec(
+                    stores, cell_store, &sheet_id, &table.id, &mut spec,
+                );
                 // Empty filter shells are reconstructed from show_filter_buttons.
                 // Carry only actual authored criteria/sorts over the snapshot boundary.
                 if !spec.filter_columns.is_empty() || spec.sort_state.is_some() {
@@ -189,13 +190,13 @@ pub(in crate::storage::engine) fn table_catalog_for_snapshot(
 
 fn exported_table_spec_for_table(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     table: &TableCatalogEntry,
 ) -> ExportedTableSpec {
     let mut spec = domain_types::domain::table::catalog_entry_to_xlsx_table_spec(table, None);
-    apply_runtime_table_filter_to_spec(stores, mirror, sheet_id, &table.id, &mut spec);
-    apply_runtime_table_totals_to_spec(stores, mirror, sheet_id, table, &mut spec);
+    apply_runtime_table_filter_to_spec(stores, cell_store, sheet_id, &table.id, &mut spec);
+    apply_runtime_table_totals_to_spec(stores, cell_store, sheet_id, table, &mut spec);
     ExportedTableSpec {
         projection_input: ExportedTableProjectionInput {
             stable_table_id: table.id.clone(),
@@ -446,7 +447,7 @@ fn worksheet_table_relationship_target(path: &str) -> String {
 
 fn apply_runtime_table_filter_to_spec(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     table_id: &str,
     spec: &mut TableSpec,
@@ -458,9 +459,8 @@ fn apply_runtime_table_filter_to_spec(
     if filter.column_filters.is_empty() && filter.sort_state.is_none() {
         return;
     }
-
     let imported_filter_is_unchanged = imported_table_filter_runtime_matches_spec(
-        stores, mirror, sheet_id, table_id, spec, &filter,
+        stores, cell_store, sheet_id, table_id, spec, &filter,
     );
     if imported_filter_is_unchanged && filter.sort_state.is_none() {
         // The catalog already contains the typed table AutoFilter imported
@@ -469,8 +469,11 @@ fn apply_runtime_table_filter_to_spec(
         return;
     }
 
-    let pos_resolver =
-        |cell_id: &str| resolve_filter_cell_position(stores, mirror, sheet_id, cell_id);
+    let pos_resolver = |cell_id: &str| {
+        crate::storage::engine::filter_import_diagnostics::resolve_filter_cell_pos(
+            cell_store, sheet_id, cell_id,
+        )
+    };
     let Some(auto_filter) = filter_state_to_auto_filter(&filter, &pos_resolver) else {
         return;
     };
@@ -491,23 +494,6 @@ fn apply_runtime_table_filter_to_spec(
     if let Some(sort) = auto_filter.sort {
         spec.sort_state = Some(table_sort_state_from_ooxml(sort));
     }
-}
-
-fn resolve_filter_cell_position(
-    stores: &EngineStores,
-    mirror: &CellMirror,
-    sheet_id: &SheetId,
-    cell_id_hex: &str,
-) -> Option<(u32, u32)> {
-    let id = hex_to_id(cell_id_hex)?;
-    let cell_id = CellId::from_raw(id);
-    if let Some(pos) = mirror.resolve_position(&cell_id) {
-        return Some((pos.row(), pos.col()));
-    }
-    stores
-        .grid_indexes
-        .get(sheet_id)
-        .and_then(|grid| grid.cell_position(&cell_id))
 }
 
 fn table_filter_column_spec_from_ooxml(column: &OoxmlFilterColumn) -> Option<FilterColumnSpec> {

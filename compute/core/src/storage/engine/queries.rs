@@ -71,7 +71,7 @@ impl ComputeEngine {
     pub fn set_workbook_settings(
         &mut self,
         settings: WorkbookSettings,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         let current = self.get_workbook_settings();
         let authored = WorkbookSettings {
             selected_sheet_ids: current.selected_sheet_ids.clone(),
@@ -91,7 +91,7 @@ impl ComputeEngine {
     pub fn patch_workbook_settings(
         &mut self,
         patch: RustWorkbookSettingsPatch,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         let authored = RustWorkbookSettingsPatch {
             selected_sheet_ids: None,
             custom_settings: None,
@@ -113,7 +113,7 @@ impl ComputeEngine {
     pub fn set_document_properties(
         &mut self,
         props: domain_types::DocumentProperties,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| document_sheets::set_document_properties(engine, props))
     }
 
@@ -304,6 +304,17 @@ impl ComputeEngine {
         document_sheets::get_all_merges_in_sheet(self, sheet_id)
     }
 
+    /// Look up a native cell identity without serializing it or allocating a cell.
+    pub fn resolve_cell_id_at(
+        &self,
+        sheet_id: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> Option<cell_types::CellId> {
+        self.cell_store
+            .resolve_cell_id(sheet_id, cell_types::SheetPos::new(row, col))
+    }
+
     #[bridge::read]
     pub fn get_cell_id_at(&self, sheet_id: &SheetId, row: u32, col: u32) -> Option<String> {
         document_sheets::get_cell_id_at(self, sheet_id, row, col)
@@ -390,7 +401,7 @@ impl ComputeEngine {
         &mut self,
         key: &str,
         value: serde_json::Value,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         if matches!(key, "selectedSheetIds" | "customSettings" | "workbookViews") {
             self.without_history(|engine| {
                 projections_settings::set_workbook_setting(engine, key, value)
@@ -403,7 +414,7 @@ impl ComputeEngine {
     }
 
     #[bridge::write]
-    pub fn reset_workbook_settings(&mut self) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn reset_workbook_settings(&mut self) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| projections_settings::reset_workbook_settings(engine))
     }
 
@@ -416,7 +427,7 @@ impl ComputeEngine {
     pub fn set_calculation_settings(
         &mut self,
         settings: CalculationSettings,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| projections_settings::set_calculation_settings(engine, settings))
     }
 
@@ -429,7 +440,7 @@ impl ComputeEngine {
     pub fn set_iterative_calculation_enabled(
         &mut self,
         enabled: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             projections_settings::set_iterative_calculation_enabled(engine, enabled)
         })
@@ -440,7 +451,7 @@ impl ComputeEngine {
         &mut self,
         password_hash: Option<String>,
         options: Option<WorkbookProtectionOptions>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             projections_settings::protect_workbook(engine, password_hash, options)
         })
@@ -450,7 +461,7 @@ impl ComputeEngine {
     pub fn unprotect_workbook(
         &mut self,
         password_hash: Option<String>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| projections_settings::unprotect_workbook(engine, password_hash))
     }
 
@@ -481,7 +492,7 @@ impl ComputeEngine {
     pub fn set_default_table_style_id(
         &mut self,
         style_id: Option<String>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             projections_settings::set_default_table_style_id(engine, style_id)
         })
@@ -496,7 +507,7 @@ impl ComputeEngine {
     pub fn set_default_slicer_style(
         &mut self,
         style_id: Option<String>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| projections_settings::set_default_slicer_style(engine, style_id))
     }
 
@@ -526,25 +537,19 @@ impl ComputeEngine {
         name: &str,
         style: SlicerCustomStyle,
         make_unique_name: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             styles_named_ranges::add_slicer_style(engine, name, style, make_unique_name)
         })
     }
 
     #[bridge::write]
-    pub fn delete_slicer_style(
-        &mut self,
-        name: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn delete_slicer_style(&mut self, name: &str) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| styles_named_ranges::delete_slicer_style(engine, name))
     }
 
     #[bridge::write]
-    pub fn duplicate_slicer_style(
-        &mut self,
-        name: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn duplicate_slicer_style(&mut self, name: &str) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| styles_named_ranges::duplicate_slicer_style(engine, name))
     }
 
@@ -552,7 +557,7 @@ impl ComputeEngine {
     pub fn set_default_pivot_table_style(
         &mut self,
         style_id: Option<String>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             styles_named_ranges::set_default_pivot_table_style(engine, style_id)
         })
@@ -573,7 +578,7 @@ impl ComputeEngine {
         &mut self,
         key: &str,
         value: Option<String>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.without_history(|engine| styles_named_ranges::set_custom_setting(engine, key, value))
     }
 

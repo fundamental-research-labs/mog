@@ -88,14 +88,14 @@ fn snapshot_two_sheets() -> WorkbookSnapshot {
 }
 
 fn table_catalog_table_by_key(engine: &ComputeEngine, key: &str) -> Option<Table> {
-    engine.mirror().get_table_by_id(key).cloned()
+    engine.cell_store().get_table_by_id(key).cloned()
 }
 
 #[test]
 fn relocate_whole_table_moves_table_binding() {
     let (mut engine, _) =
         ComputeEngine::from_snapshot(snapshot_single_sheet()).expect("from_snapshot");
-    let sid = engine.mirror().sheet_by_name("S1").expect("S1");
+    let sid = engine.cell_store().sheet_by_name("S1").expect("S1");
 
     engine
         .create_table_lifecycle(
@@ -115,7 +115,7 @@ fn relocate_whole_table_moves_table_binding() {
         .expect("table after create")
         .id;
 
-    let (_patches, result) = engine
+    let result = engine
         .relocate_cells(&sid, 0, 0, 2, 1, &sid, 0, 3)
         .expect("relocate_cells");
 
@@ -148,7 +148,7 @@ fn relocate_whole_table_moves_table_binding() {
 fn relocate_containing_range_moves_embedded_table_binding() {
     let (mut engine, _) =
         ComputeEngine::from_snapshot(snapshot_single_sheet()).expect("from_snapshot");
-    let sid = engine.mirror().sheet_by_name("S1").expect("S1");
+    let sid = engine.cell_store().sheet_by_name("S1").expect("S1");
 
     engine
         .create_table_lifecycle(
@@ -164,7 +164,7 @@ fn relocate_containing_range_moves_embedded_table_binding() {
         )
         .expect("create table");
 
-    let (_patches, result) = engine
+    let result = engine
         .relocate_cells(&sid, 0, 0, 4, 3, &sid, 0, 5)
         .expect("relocate_cells");
 
@@ -188,8 +188,8 @@ fn relocate_containing_range_moves_embedded_table_binding() {
 fn relocate_cross_sheet_containing_range_moves_embedded_table_binding() {
     let (mut engine, _) =
         ComputeEngine::from_snapshot(snapshot_two_sheets()).expect("from_snapshot");
-    let s1 = engine.mirror().sheet_by_name("S1").expect("S1");
-    let s2 = engine.mirror().sheet_by_name("S2").expect("S2");
+    let s1 = engine.cell_store().sheet_by_name("S1").expect("S1");
+    let s2 = engine.cell_store().sheet_by_name("S2").expect("S2");
 
     engine
         .create_table_lifecycle(
@@ -209,7 +209,7 @@ fn relocate_cross_sheet_containing_range_moves_embedded_table_binding() {
         .expect("table after create")
         .id;
 
-    let (_patches, result) = engine
+    let result = engine
         .relocate_cells(&s1, 0, 0, 4, 3, &s2, 0, 5)
         .expect("relocate_cells");
 

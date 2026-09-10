@@ -9,7 +9,7 @@
 //! Run:
 //!   cargo test -p compute-core --test formula_accuracy_null_mismatch -- --nocapture
 
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::CellValue;
@@ -127,10 +127,10 @@ fn test_cross_sheet_ref_to_numeric_cell() {
         ),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init_from_snapshot failed");
 
     // Print diagnostics
@@ -189,10 +189,10 @@ fn test_cross_sheet_ref_to_empty_cell() {
         ),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init_from_snapshot failed");
 
     println!("\n=== test_cross_sheet_ref_to_empty_cell ===");
@@ -251,10 +251,10 @@ fn test_cross_sheet_ref_to_distant_cell() {
         ),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init_from_snapshot failed");
 
     println!("\n=== test_cross_sheet_ref_to_distant_cell ===");
@@ -306,10 +306,10 @@ fn test_same_sheet_ref_to_empty_cell_returns_zero_in_arithmetic() {
         ],
     )]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init_from_snapshot failed");
 
     println!("\n=== test_same_sheet_ref_to_empty_cell_returns_zero_in_arithmetic ===");
@@ -391,10 +391,10 @@ fn test_cross_sheet_chain() {
         ),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init_from_snapshot failed");
 
     println!("\n=== test_cross_sheet_chain ===");
@@ -472,10 +472,10 @@ fn test_multiple_cross_sheet_refs_in_formula() {
         ),
     ]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init_from_snapshot failed");
 
     println!("\n=== test_multiple_cross_sheet_refs_in_formula ===");

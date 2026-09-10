@@ -13,7 +13,7 @@ use domain_types::domain::slicer::{StoredSlicer, StoredSlicerUpdate};
 use value_types::{CellValue, ComputeError};
 
 mod filters;
-mod grouping;
+pub(super) mod grouping;
 mod range_ops;
 mod slicers;
 mod sparklines;
@@ -36,7 +36,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         config: serde_json::Value,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| filters::create_filter(engine, sheet_id, config))
     }
 
@@ -45,7 +45,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         filter_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| filters::delete_filter(engine, sheet_id, filter_id))
     }
 
@@ -56,7 +56,7 @@ impl ComputeEngine {
         filter_id: &str,
         header_col: u32,
         criteria: sheet_filters::ColumnFilter,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             filters::set_column_filter(engine, sheet_id, filter_id, header_col, criteria)
         })
@@ -68,7 +68,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         filter_id: &str,
         header_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             filters::clear_column_filter(engine, sheet_id, filter_id, header_col)
         })
@@ -79,7 +79,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         filter_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| filters::clear_all_column_filters(engine, sheet_id, filter_id))
     }
 
@@ -102,30 +102,23 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         request: sheet_filters::AdvancedFilterRequest,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| filters::apply_advanced_filter(engine, sheet_id, request))
     }
 
     /// Evaluate a filter and atomically hide/unhide rows.
-    /// Eliminates 5+ IPC round-trips from the TS domain module.
     ///
     /// After updating row visibility, triggers a full recalculation so that
     /// SUBTOTAL(101-111) and AGGREGATE formulas immediately reflect the new
     /// hidden-row state without requiring a separate `calculate()` call.
     ///
-    /// `apply_filter` updates native row visibility and the layout index. The incremental
-    /// `serialize_mutation_result` wire format only carries cell-value
-    /// patches, not row dimensions. Returning empty patches forced the TS
-    /// kernel to call `forceRefreshAllViewports()` after every filter
-    /// op. Now we rebuild the full viewport binary on the affected sheet
-    /// (same pattern T8/sort_range used for CF-overlap rebuilds), which
-    /// re-renders against the up-to-date hidden-row state.
+    /// Visibility changes invalidate derived geometry for subsequent reads.
     #[bridge::write]
     pub fn apply_filter(
         &mut self,
         sheet_id: &SheetId,
         filter_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| filters::apply_filter(engine, sheet_id, filter_id))
     }
 
@@ -134,7 +127,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         filter_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| filters::reapply_filter(engine, sheet_id, filter_id))
     }
 
@@ -176,14 +169,8 @@ impl ComputeEngine {
 
     /// Sort cells while updating native identities, metadata, and dependencies.
     ///
-    /// **CF natively re-evaluated.** When the sort range overlaps a CF format
-    /// on the same sheet, top-N / above-average / data-bar / color-scale rules
-    /// produce different colors for cells outside the changed-cells set
-    /// (e.g. a top-N rule re-ranks across the entire CF range). The
-    /// incremental viewport-patch path only emits CF colors for cells in
-    /// `recalc.changed_cells`, so we instead rebuild the full viewport
-    /// binary on a CF-overlap sort. This obsoletes the kernel-side
-    /// `forceRefreshAllViewports` workaround that used to follow every sort.
+    /// Conditional formats are re-evaluated after sorting so subsequent format
+    /// and viewport queries include changes outside the sorted cells.
     #[bridge::write]
     pub fn sort_range(
         &mut self,
@@ -193,7 +180,7 @@ impl ComputeEngine {
         end_row: u32,
         end_col: u32,
         options: super::mutation::BridgeSortOptions,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             range_ops::sort_range(
                 engine, sheet_id, start_row, start_col, end_row, end_col, options,
@@ -209,13 +196,13 @@ impl ComputeEngine {
     /// series generation, and formula reference adjustment.
     ///
     /// Delegates to the `compute-fill` crate for pure computation, then
-    /// applies the resulting updates to all five stores.
+    /// applies the resulting updates to the native stores and scheduler.
     #[bridge::write]
     pub fn auto_fill(
         &mut self,
         sheet_id: &SheetId,
         request: crate::engine_types::fill::BridgeAutoFillRequest,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| range_ops::auto_fill(engine, sheet_id, request))
     }
 
@@ -240,7 +227,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         request: crate::engine_types::fill::BridgeFlashFillRequest,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| range_ops::flash_fill(engine, sheet_id, request))
     }
 
@@ -255,12 +242,6 @@ impl ComputeEngine {
     ///
     /// Maps to OfficeJS `Range.copyFrom()`.
     ///
-    /// Cross-sheet patches (filter viewport R5.3 generalization): when the source
-    /// and target sheets differ, the incremental flush only carries
-    /// patches for the *source* sheet's viewport (where the recalc was
-    /// driven). Rebuild the target sheet's viewport binary too so the
-    /// kernel's `copyRangeToSheet` no longer needs the band-aid
-    /// `forceRefreshAllViewports`.
     #[bridge::write]
     #[allow(clippy::too_many_arguments)]
     pub fn copy_range(
@@ -276,7 +257,7 @@ impl ComputeEngine {
         copy_type: domain_types::domain::copy::CopyType,
         skip_blanks: bool,
         transpose: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             range_ops::copy_range(
                 engine,
@@ -307,7 +288,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         start_row: u32,
         end_row: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| grouping::group_rows(engine, sheet_id, start_row, end_row))
     }
 
@@ -318,7 +299,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         start_row: u32,
         end_row: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| grouping::ungroup_rows(engine, sheet_id, start_row, end_row))
     }
 
@@ -330,7 +311,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         start_col: u32,
         end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| grouping::group_columns(engine, sheet_id, start_col, end_col))
     }
 
@@ -341,7 +322,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         start_col: u32,
         end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| grouping::ungroup_columns(engine, sheet_id, start_col, end_col))
     }
 
@@ -352,7 +333,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         group_id: &str,
         collapsed: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             grouping::set_group_collapsed(engine, sheet_id, group_id, collapsed)
         })
@@ -364,7 +345,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         group_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| grouping::toggle_group_collapsed(engine, sheet_id, group_id))
     }
 
@@ -373,7 +354,7 @@ impl ComputeEngine {
     pub fn expand_all_groups(
         &mut self,
         sheet_id: &SheetId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| grouping::expand_all_groups(engine, sheet_id))
     }
 
@@ -382,7 +363,7 @@ impl ComputeEngine {
     pub fn collapse_all_groups(
         &mut self,
         sheet_id: &SheetId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| grouping::collapse_all_groups(engine, sheet_id))
     }
 
@@ -416,7 +397,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         config: StoredSlicer,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| slicers::create_slicer(engine, sheet_id, config))
     }
 
@@ -426,7 +407,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         slicer_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| slicers::delete_slicer(engine, sheet_id, slicer_id))
     }
 
@@ -436,7 +417,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         slicer_ids: Vec<String>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| slicers::delete_slicers(engine, sheet_id, slicer_ids))
     }
 
@@ -447,7 +428,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         slicer_id: &str,
         update: StoredSlicerUpdate,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             slicers::update_slicer_config(engine, sheet_id, slicer_id, update)
         })
@@ -478,7 +459,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         slicer_id: &str,
         value: CellValue,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| slicers::toggle_slicer_item(engine, sheet_id, slicer_id, value))
     }
 
@@ -489,7 +470,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         slicer_id: &str,
         values: Vec<CellValue>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             slicers::set_slicer_selection(engine, sheet_id, slicer_id, values)
         })
@@ -501,7 +482,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         slicer_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| slicers::clear_slicer_selection(engine, sheet_id, slicer_id))
     }
 
@@ -569,7 +550,7 @@ impl ComputeEngine {
     /// Create subtotal rows and groups for a data range.
     /// The options should contain: group_by_column, subtotal_columns, function,
     /// summary_below_data, replace_existing, has_headers.
-    /// Routes through `apply_mutation()` for proper recalc + viewport patches.
+    /// Routes through `apply_mutation()` for recalculation and complete mutation results.
     /// Returns the `SubtotalResult` via `MutationResult.data`.
     #[bridge::write]
     pub fn create_subtotals(
@@ -580,7 +561,7 @@ impl ComputeEngine {
         end_row: u32,
         end_col: u32,
         options: sheet_grouping::SubtotalOptions,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             grouping::create_subtotals(
                 engine, sheet_id, start_row, start_col, end_row, end_col, options,
@@ -597,7 +578,7 @@ impl ComputeEngine {
         start_col: u32,
         end_row: u32,
         end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             grouping::remove_subtotals(engine, sheet_id, start_row, start_col, end_row, end_col)
         })
@@ -613,7 +594,7 @@ impl ComputeEngine {
         start_col: u32,
         end_row: u32,
         end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             grouping::auto_outline(engine, sheet_id, start_row, start_col, end_row, end_col)
         })
@@ -634,7 +615,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         sparkline: sheet_sparklines::Sparkline,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| sparklines::add_sparkline(engine, sheet_id, sparkline))
     }
 
@@ -644,7 +625,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         sparkline_id: &str,
         updates: sheet_sparklines::SparklineUpdate,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             sparklines::update_sparkline(engine, sheet_id, sparkline_id, updates)
         })
@@ -655,7 +636,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         sparkline_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| sparklines::delete_sparkline(engine, sheet_id, sparkline_id))
     }
 
@@ -687,7 +668,7 @@ impl ComputeEngine {
         end_col: u32,
         columns: Vec<u32>,
         has_headers: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             range_ops::remove_duplicates(
                 engine,
@@ -713,7 +694,7 @@ impl ComputeEngine {
         dest_row: u32,
         dest_col: u32,
         options: serde_json::Value,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             text_to_columns::text_to_columns(
                 engine, sheet_id, start_row, end_row, source_col, dest_row, dest_col, options,
@@ -740,7 +721,7 @@ impl ComputeEngine {
         custom_delimiter: Option<String>,
         treat_consecutive_as_one: bool,
         text_qualifier: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             text_to_columns::text_to_columns_simple(
                 engine,
@@ -811,7 +792,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         filter_id: &str,
         sort_state: Option<sheet_filters::FilterSortState>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             filters::set_filter_sort_state(engine, sheet_id, filter_id, sort_state)
         })
@@ -832,7 +813,7 @@ impl ComputeEngine {
     pub fn clear_all_filters(
         &mut self,
         sheet_id: &SheetId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| filters::clear_all_filters(engine, sheet_id))
     }
 
@@ -877,7 +858,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         group: sheet_sparklines::SparklineGroup,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| sparklines::add_sparkline_group(engine, sheet_id, group))
     }
 
@@ -907,7 +888,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         group_id: &str,
         delete_sparklines: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             sparklines::delete_sparkline_group(engine, sheet_id, group_id, delete_sparklines)
         })
@@ -922,7 +903,7 @@ impl ComputeEngine {
         start_col: u32,
         end_row: u32,
         end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             sparklines::clear_sparklines_in_range(
                 engine, sheet_id, start_row, start_col, end_row, end_col,
@@ -935,7 +916,7 @@ impl ComputeEngine {
     pub fn clear_sparklines_for_sheet(
         &mut self,
         sheet_id: &SheetId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| sparklines::clear_sparklines_for_sheet(engine, sheet_id))
     }
 
@@ -1065,7 +1046,7 @@ impl ComputeEngine {
         axis: &str,
         level: u32,
         collapsed: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             grouping::set_level_collapsed(engine, sheet_id, axis, level, collapsed)
         })
@@ -1077,7 +1058,7 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         settings: sheet_grouping::OutlineSettingsUpdate,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| grouping::set_outline_settings(engine, sheet_id, settings))
     }
 
@@ -1088,7 +1069,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         start_row: u32,
         end_row: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             grouping::clear_row_grouping(engine, sheet_id, start_row, end_row)
         })
@@ -1101,7 +1082,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         start_col: u32,
         end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             grouping::clear_column_grouping(engine, sheet_id, start_col, end_col)
         })
@@ -1112,7 +1093,7 @@ impl ComputeEngine {
     pub fn clear_all_grouping(
         &mut self,
         sheet_id: &SheetId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| grouping::clear_all_grouping(engine, sheet_id))
     }
 

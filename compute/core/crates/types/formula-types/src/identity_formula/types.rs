@@ -179,7 +179,7 @@ pub struct IdentityFormula {
     /// Precomputed at construction from the AST so [`SUBTOTAL`]'s
     /// skip-nested-aggregates rule evaluates as `O(1)` per query instead of
     /// re-parsing the template string. See `cell_has_subtotal_formula` in
-    /// `compute-core/src/eval_bridge/mirror_access.rs`.
+    /// `compute-core/src/eval_bridge/store_access.rs`.
     ///
     /// `#[serde(default)]` so snapshot documents authored before this
     /// field existed deserialize to `false` (correct — no aggregate inference

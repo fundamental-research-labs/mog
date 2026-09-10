@@ -6,17 +6,17 @@
 //! boundaries explicit so that service modules can take `&mut EngineStores`
 //! without borrowing viewport or session state.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock, RwLock};
 
 use rustc_hash::FxHashMap;
 
 use cell_types::{IdAllocator, SheetId};
-use compute_layout_index::LayoutIndex;
+use compute_layout_index::PixelLayout;
 
 use compute_cf::types::CellCFResult;
 
 use crate::identity::GridIndex;
-use crate::range_manager::RangeSpatialIndex;
+use crate::range_manager::MergeList;
 use crate::scheduler::ComputeCore;
 use crate::storage::WorkbookStorage;
 
@@ -25,8 +25,6 @@ use super::merge_index::MergeSpatialItem;
 /// Per-sheet cache of conditional formatting evaluation results.
 pub(crate) struct CFCacheEntry {
     pub results: FxHashMap<(u32, u32), CellCFResult>,
-    #[allow(dead_code)]
-    pub dirty: bool,
 }
 
 /// Shared data layer for all engine services.
@@ -48,22 +46,14 @@ pub(crate) struct EngineStores {
     /// UUID allocator with an independent random namespace for authored metadata.
     pub(crate) id_alloc: Arc<IdAllocator>,
 
-    /// Per-sheet identity-position tracking.
+    /// Per-sheet compact axis identity and order lookup.
     pub(super) grid_indexes: FxHashMap<SheetId, GridIndex>,
 
-    /// Per-sheet spatial layout index for cell-to-pixel mapping.
-    ///
-    /// Built from dimension data (custom row heights, column widths,
-    /// hidden rows/cols) during construction. Updated incrementally
-    /// on dimension mutations. Enables O(log k) position lookups.
-    pub(super) layout_indexes: FxHashMap<SheetId, LayoutIndex>,
+    /// Derived geometry, populated only by pixel consumers.
+    pub(super) pixel_layouts: RwLock<FxHashMap<SheetId, PixelLayoutEntry>>,
 
-    /// Per-sheet spatial index for efficient merge region lookups.
-    ///
-    /// Built from native merge metadata during construction and updated
-    /// during structural operations (merge/unmerge). Enables O(n)
-    /// viewport queries instead of O(n*m) linear scans.
-    pub(super) merge_indexes: FxHashMap<SheetId, RangeSpatialIndex<MergeSpatialItem>>,
+    /// Resolved merge rectangles, queried by linear scan.
+    pub(super) merge_indexes: FxHashMap<SheetId, MergeList<MergeSpatialItem>>,
 
     /// Formula parser, dep graph, recalc scheduler.
     pub(super) compute: ComputeCore,
@@ -73,14 +63,68 @@ pub(crate) struct EngineStores {
     pub(super) cf_cache: FxHashMap<SheetId, CFCacheEntry>,
 
     /// Font database for text measurement (autofit, PDF export).
-    /// Loaded once at engine init with metric-compatible Latin fonts.
-    pub(super) font_db: compute_text_measurement::FontDb,
+    /// Bundled fonts are loaded only by autofit or screenshot requests.
+    pub(super) font_db: OnceLock<compute_text_measurement::FontDb>,
 
     /// Text measurement cache (shared across autofit calls).
     pub(super) measurement_cache: compute_text_measurement::MeasurementCache,
 }
 
+pub(super) struct PixelLayoutEntry {
+    rows: Arc<compute_document::identity::AxisIndex<cell_types::RowId>>,
+    cols: Arc<compute_document::identity::AxisIndex<cell_types::ColId>>,
+    layout: Arc<PixelLayout>,
+}
+
 impl EngineStores {
+    /// Resolve geometry from canonical dimensions. Axis identities also form part
+    /// of the cache key, so growth, sorting, and structural edits cannot reuse
+    /// positions from a previous axis ordering.
+    pub(super) fn pixel_layout(&self, sheet_id: &SheetId) -> Option<Arc<PixelLayout>> {
+        let grid = self.grid_indexes.get(sheet_id)?;
+        let rows = grid.row_axis();
+        let cols = grid.col_axis();
+        {
+            let cache = self
+                .pixel_layouts
+                .read()
+                .expect("pixel layout cache poisoned");
+            if let Some(entry) = cache.get(sheet_id)
+                && Arc::ptr_eq(&entry.rows, &rows)
+                && Arc::ptr_eq(&entry.cols, &cols)
+            {
+                return Some(Arc::clone(&entry.layout));
+            }
+        }
+        let layout = Arc::new(super::construction::build_pixel_layout_for_sheet(
+            &self.storage,
+            sheet_id,
+            grid.row_count(),
+            grid.col_count(),
+            Some(grid),
+            self.layout_metrics,
+        ));
+        self.pixel_layouts
+            .write()
+            .expect("pixel layout cache poisoned")
+            .insert(
+                *sheet_id,
+                PixelLayoutEntry {
+                    rows,
+                    cols,
+                    layout: Arc::clone(&layout),
+                },
+            );
+        Some(layout)
+    }
+
+    pub(super) fn invalidate_pixel_layout(&self, sheet_id: &SheetId) {
+        self.pixel_layouts
+            .write()
+            .expect("pixel layout cache poisoned")
+            .remove(sheet_id);
+    }
+
     /// Generate a unique 32-char hex ID using the full client-partitioned u128.
     pub(crate) fn next_id_simple(&self) -> String {
         let n = self.id_alloc.next_u128();

@@ -1,7 +1,7 @@
 use cell_types::SheetId;
 use domain_types::{ColStyleEntry, ColStyleRange, RowStyleEntry};
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::properties;
 
@@ -59,11 +59,11 @@ pub(in crate::storage::engine) fn export_row_col_styles_for_sheet(
 }
 
 pub(in crate::storage::engine) fn export_col_style_ranges_for_sheet(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     palette: &impl PaletteOps,
 ) -> Vec<ColStyleRange> {
-    let Some(sheet) = mirror.get_sheet(sheet_id) else {
+    let Some(sheet) = cell_store.get_sheet(sheet_id) else {
         return Vec::new();
     };
 

@@ -8,7 +8,7 @@ use domain_types::domain::filter::{
 };
 use value_types::{CellValue, DateSystem};
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::filter_import_diagnostics::{
     resolve_filter_cell_pos, unsupported_filter_import_diagnostic, upsert_import_diagnostic_phase,
 };
@@ -18,13 +18,13 @@ use crate::storage::sheet::{dimensions, filters, properties};
 /// Reconcile imported sheet-level AutoFilters with runtime row visibility.
 ///
 /// Hydration preserves the OOXML `<autoFilter>` under `properties/autoFilter`
-/// and creates a runtime `FilterState`. This pass runs after CellMirror,
-/// GridIndex, and LayoutIndex are available, evaluates the runtime criteria,
+/// and creates a runtime `FilterState`. This pass runs after CellStore,
+/// GridIndex, and PixelLayout are available, evaluates the runtime criteria,
 /// and transfers excluded rows from ambiguous imported `hidden="1"` ownership
 /// to filter ownership.
 pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     mut import_report: Option<&mut domain_types::ImportReport>,
     import_phase: domain_types::ImportPhase,
 ) {
@@ -36,7 +36,7 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility(
             crate::xlsx_profile::PhaseTimer::new("import", "materialize_table_auto_filters");
         crate::storage::engine::construction::materialize_table_auto_filters_from_preserved_specs(
             stores,
-            mirror,
+            cell_store,
             import_report.as_deref_mut(),
             import_phase,
         );
@@ -49,7 +49,7 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility(
     for sheet_id in sheet_ids {
         normalize_imported_auto_filter_visibility_for_sheet(
             stores,
-            mirror,
+            cell_store,
             &sheet_id,
             import_report.as_deref_mut(),
             import_phase,
@@ -59,7 +59,7 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility(
 
 pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility_for_sheet(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     mut import_report: Option<&mut domain_types::ImportReport>,
     import_phase: domain_types::ImportPhase,
@@ -68,7 +68,7 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility_for_
     if imported_auto_filter.is_some() {
         upsert_sheet_auto_filter_bindings_for_sheet(
             stores,
-            mirror,
+            cell_store,
             sheet_id,
             imported_auto_filter.as_ref(),
         );
@@ -93,7 +93,7 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility_for_
                 {
                     record_unsupported_filter_import_diagnostics(
                         stores,
-                        mirror,
+                        cell_store,
                         sheet_id,
                         binding,
                         imported_auto_filter.as_ref(),
@@ -111,7 +111,7 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility_for_
                 &mut filter,
                 binding.as_ref(),
                 imported_auto_filter.as_ref(),
-                DateSystem::from_date1904(mirror.date1904),
+                DateSystem::from_date1904(cell_store.date1904),
             )
         {
             if filters::upsert_filter_state(&mut stores.storage, sheet_id, &filter).is_err() {
@@ -122,7 +122,7 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility_for_
         let results = {
             let mut eval_profile =
                 crate::xlsx_profile::PhaseTimer::new("import", "evaluate_imported_filter");
-            let results = evaluate_runtime_filter(stores, mirror, sheet_id, &filter.id);
+            let results = evaluate_runtime_filter(stores, cell_store, sheet_id, &filter.id);
             eval_profile.counter("rows", results.len() as u64);
             eval_profile.counter("column_filters", filter.column_filters.len() as u64);
             eval_profile.counter(
@@ -165,14 +165,14 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility_for_
             visibility_profile.counter("transitions", transitions.len() as u64);
             transitions
         };
-        apply_visibility_transitions(stores, mirror, sheet_id, &transitions);
+        apply_visibility_transitions(stores, cell_store, sheet_id, &transitions);
         remove_filter_only_rows_from_explicit_hidden_metadata(
             stores,
             sheet_id,
             rows_excluded.iter().copied(),
         );
-        sync_mirror_rows_from_effective_hidden(stores, mirror, sheet_id, &rows_excluded);
-        sync_mirror_rows_from_effective_hidden(stores, mirror, sheet_id, &rows_included);
+        sync_store_rows_from_effective_hidden(stores, cell_store, sheet_id, &rows_excluded);
+        sync_store_rows_from_effective_hidden(stores, cell_store, sheet_id, &rows_included);
     }
 }
 
@@ -254,7 +254,7 @@ fn remove_filter_only_rows_from_explicit_hidden_metadata(
 
 pub(in crate::storage::engine) fn sync_imported_auto_filter_metadata_from_runtime(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     filter_id: &str,
 ) {
@@ -270,7 +270,7 @@ pub(in crate::storage::engine) fn sync_imported_auto_filter_metadata_from_runtim
 
     let runtime_auto_filter =
         domain_types::domain::filter::filter_state_to_auto_filter(&filter_state, &|hex| {
-            resolve_filter_cell_pos(stores, mirror, sheet_id, hex)
+            resolve_filter_cell_pos(cell_store, sheet_id, hex)
         });
     let Some(runtime_auto_filter) = runtime_auto_filter else {
         return;
@@ -279,47 +279,53 @@ pub(in crate::storage::engine) fn sync_imported_auto_filter_metadata_from_runtim
     merge_runtime_auto_filter_into_imported_metadata(&mut metadata, runtime_auto_filter);
     write_imported_auto_filter_metadata(stores, sheet_id, &metadata);
     if let Some(filter_state) = filters::get_filter(&stores.storage, sheet_id, filter_id) {
-        upsert_sheet_auto_filter_binding(stores, mirror, sheet_id, &filter_state, Some(&metadata));
+        upsert_sheet_auto_filter_binding(
+            stores,
+            cell_store,
+            sheet_id,
+            &filter_state,
+            Some(&metadata),
+        );
     }
 }
 
 pub(in crate::storage::engine) fn sync_imported_auto_filter_metadata_after_set_column(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     filter_id: &str,
     header_col: u32,
 ) {
     sync_imported_auto_filter_column_metadata(
         stores,
-        mirror,
+        cell_store,
         sheet_id,
         filter_id,
         header_col,
         ColumnMetadataSync::ReplaceFromRuntime,
     );
     super::imported_filter_runtime::clear_imported_table_date_group_metadata_after_column_edit(
-        stores, mirror, sheet_id, filter_id, header_col,
+        stores, cell_store, sheet_id, filter_id, header_col,
     );
 }
 
 pub(in crate::storage::engine) fn sync_imported_auto_filter_metadata_after_clear_column(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     filter_id: &str,
     header_col: u32,
 ) {
     sync_imported_auto_filter_column_metadata(
         stores,
-        mirror,
+        cell_store,
         sheet_id,
         filter_id,
         header_col,
         ColumnMetadataSync::Clear,
     );
     super::imported_filter_runtime::clear_imported_table_date_group_metadata_after_column_edit(
-        stores, mirror, sheet_id, filter_id, header_col,
+        stores, cell_store, sheet_id, filter_id, header_col,
     );
 }
 
@@ -330,7 +336,7 @@ enum ColumnMetadataSync {
 
 fn sync_imported_auto_filter_column_metadata(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     filter_id: &str,
     header_col: u32,
@@ -347,7 +353,7 @@ fn sync_imported_auto_filter_column_metadata(
     }
 
     let Some((header_row, start_col)) =
-        resolve_filter_cell_pos(stores, mirror, sheet_id, &filter_state.header_start_cell_id)
+        resolve_filter_cell_pos(cell_store, sheet_id, &filter_state.header_start_cell_id)
     else {
         return;
     };
@@ -357,18 +363,15 @@ fn sync_imported_auto_filter_column_metadata(
 
     refresh_imported_auto_filter_range_from_filter_state(
         &mut metadata,
-        stores,
-        mirror,
+        cell_store,
         sheet_id,
         &filter_state,
     );
 
     let relative_col = header_col - start_col;
     let filter_type = match sync {
-        ColumnMetadataSync::ReplaceFromRuntime => stores
-            .grid_indexes
-            .get(sheet_id)
-            .and_then(|grid| grid.cell_id_at(header_row, header_col))
+        ColumnMetadataSync::ReplaceFromRuntime => cell_store
+            .resolve_cell_id(sheet_id, SheetPos::new(header_row, header_col))
             .map(|cell_id| id_to_hex(cell_id.as_u128()).to_string())
             .and_then(|header_cell_id| {
                 filter_state
@@ -381,7 +384,7 @@ fn sync_imported_auto_filter_column_metadata(
 
     replace_imported_column_filter_type(&mut metadata, relative_col, filter_type);
     write_imported_auto_filter_metadata(stores, sheet_id, &metadata);
-    upsert_sheet_auto_filter_binding(stores, mirror, sheet_id, &filter_state, Some(&metadata));
+    upsert_sheet_auto_filter_binding(stores, cell_store, sheet_id, &filter_state, Some(&metadata));
 }
 
 pub(in crate::storage::engine) fn delete_imported_auto_filter_metadata(
@@ -419,7 +422,7 @@ pub(in crate::storage::engine) fn read_imported_auto_filter_metadata(
 
 pub(in crate::storage::engine) fn upsert_sheet_auto_filter_bindings_for_sheet(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     imported_auto_filter: Option<&AutoFilter>,
 ) {
@@ -428,13 +431,19 @@ pub(in crate::storage::engine) fn upsert_sheet_auto_filter_bindings_for_sheet(
         .iter()
         .filter(|filter| filter.filter_kind == filters::FilterKind::AutoFilter)
     {
-        upsert_sheet_auto_filter_binding(stores, mirror, sheet_id, filter, imported_auto_filter);
+        upsert_sheet_auto_filter_binding(
+            stores,
+            cell_store,
+            sheet_id,
+            filter,
+            imported_auto_filter,
+        );
     }
 }
 
 pub(in crate::storage::engine) fn upsert_sheet_auto_filter_binding(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     filter: &filters::FilterState,
     imported_auto_filter: Option<&AutoFilter>,
@@ -444,17 +453,17 @@ pub(in crate::storage::engine) fn upsert_sheet_auto_filter_binding(
     }
 
     let Some((start_row, start_col)) =
-        resolve_filter_cell_pos(stores, mirror, sheet_id, &filter.header_start_cell_id)
+        resolve_filter_cell_pos(cell_store, sheet_id, &filter.header_start_cell_id)
     else {
         return;
     };
     let Some((header_end_row, end_col)) =
-        resolve_filter_cell_pos(stores, mirror, sheet_id, &filter.header_end_cell_id)
+        resolve_filter_cell_pos(cell_store, sheet_id, &filter.header_end_cell_id)
     else {
         return;
     };
     let Some((end_row, _data_end_col)) =
-        resolve_filter_cell_pos(stores, mirror, sheet_id, &filter.data_end_cell_id)
+        resolve_filter_cell_pos(cell_store, sheet_id, &filter.data_end_cell_id)
     else {
         return;
     };
@@ -471,13 +480,13 @@ pub(in crate::storage::engine) fn upsert_sheet_auto_filter_binding(
     let mut button_metadata = BTreeMap::new();
 
     {
-        let Some(grid) = stores.grid_indexes.get_mut(sheet_id) else {
-            return;
-        };
         for col in start_col..=end_col {
-            let cell_id = grid.ensure_cell_id(start_row, col);
+            let Some(cell_id) =
+                super::cell_editing::ensure_cell_id(stores, cell_store, sheet_id, start_row, col)
+            else {
+                return;
+            };
             let header_cell_id = id_to_hex(cell_id.as_u128()).to_string();
-            mirror.register_identity_only(sheet_id, SheetPos::new(start_row, col), cell_id);
             let col_id = col.saturating_sub(start_col);
             col_id_to_header_cell_id.insert(col_id, header_cell_id.clone());
             let source_column = imported_auto_filter.and_then(|auto_filter| {
@@ -504,7 +513,7 @@ pub(in crate::storage::engine) fn upsert_sheet_auto_filter_binding(
     let shell = super::imported_filter_shell::build_filter_shell_metadata(
         imported_auto_filter,
         button_metadata,
-        DateSystem::from_date1904(mirror.date1904),
+        DateSystem::from_date1904(cell_store.date1904),
     );
     let fingerprint = super::imported_filter_shell::filter_binding_fingerprint(
         &sheet_id_text,
@@ -545,7 +554,7 @@ pub(in crate::storage::engine) fn upsert_sheet_auto_filter_binding(
 
 fn record_unsupported_filter_import_diagnostics(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     binding: &filters::FilterMetadataBinding,
     imported_auto_filter: Option<&AutoFilter>,
@@ -574,7 +583,7 @@ fn record_unsupported_filter_import_diagnostics(
             Some(binding.filter_id.clone()),
             None,
             None,
-            resolve_filter_cell_pos(stores, mirror, sheet_id, &binding.header_start_cell_id),
+            resolve_filter_cell_pos(cell_store, sheet_id, &binding.header_start_cell_id),
             vec![filters::ImportFilterUnsupportedReason::UnknownExtension],
             "autoFilter".to_string(),
             domain_types::ImportFeatureKind::Worksheet,
@@ -591,7 +600,7 @@ fn record_unsupported_filter_import_diagnostics(
             reasons.extend(
                 super::imported_filter_shell::unsupported_reasons_for_filter_type(
                     filter_type,
-                    DateSystem::from_date1904(mirror.date1904),
+                    DateSystem::from_date1904(cell_store.date1904),
                 ),
             );
         }
@@ -603,7 +612,7 @@ fn record_unsupported_filter_import_diagnostics(
             .col_id_to_header_cell_id
             .get(&column.col_index)
             .and_then(|header_cell_id| {
-                resolve_filter_cell_pos(stores, mirror, sheet_id, header_cell_id)
+                resolve_filter_cell_pos(cell_store, sheet_id, header_cell_id)
             });
         let diagnostic = unsupported_filter_import_diagnostic(
             binding,
@@ -680,18 +689,17 @@ fn merge_runtime_auto_filter_into_imported_metadata(
 
 fn refresh_imported_auto_filter_range_from_filter_state(
     imported: &mut AutoFilter,
-    stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     filter_state: &filters::FilterState,
 ) {
     let Some((start_row, start_col)) =
-        resolve_filter_cell_pos(stores, mirror, sheet_id, &filter_state.header_start_cell_id)
+        resolve_filter_cell_pos(cell_store, sheet_id, &filter_state.header_start_cell_id)
     else {
         return;
     };
     let Some((end_row, end_col)) =
-        resolve_filter_cell_pos(stores, mirror, sheet_id, &filter_state.data_end_cell_id)
+        resolve_filter_cell_pos(cell_store, sheet_id, &filter_state.data_end_cell_id)
     else {
         return;
     };
@@ -724,7 +732,7 @@ fn replace_imported_column_filter_type(
 
 pub(in crate::storage::engine) fn apply_visibility_transitions(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     transitions: &[(u32, bool)],
 ) {
@@ -745,23 +753,15 @@ pub(in crate::storage::engine) fn apply_visibility_transitions(
         })
         .collect();
 
-    if let Some(layout) = stores.layout_indexes.get_mut(sheet_id) {
-        for &(row, hidden) in &aggregate_states {
-            if hidden {
-                layout.hide_row(row as usize);
-            } else {
-                layout.unhide_row(row as usize);
-            }
-        }
-    }
+    stores.invalidate_pixel_layout(sheet_id);
     for (row, hidden) in aggregate_states {
-        mirror.set_row_hidden(sheet_id, row, hidden);
+        cell_store.set_row_hidden(sheet_id, row, hidden);
     }
 }
 
-fn sync_mirror_rows_from_effective_hidden(
+fn sync_store_rows_from_effective_hidden(
     stores: &EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     rows: &[u32],
 ) {
@@ -773,55 +773,54 @@ fn sync_mirror_rows_from_effective_hidden(
             stores.grid_indexes.get(sheet_id),
         )
         .effective_hidden;
-        mirror.set_row_hidden(sheet_id, row, hidden);
+        cell_store.set_row_hidden(sheet_id, row, hidden);
     }
 }
 
 fn evaluate_runtime_filter(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Vec<filters::FilterEvaluationResult> {
     let filter = super::imported_filter_runtime::project_imported_date_group_filters_for_evaluation(
-        stores, mirror, sheet_id, filter_id,
+        stores, cell_store, sheet_id, filter_id,
     );
     let sid = *sheet_id;
     let grid_index = stores.grid_indexes.get(&sid);
     let icons = crate::storage::engine::services::cf_cache::evaluate_filter_icons(
-        stores, mirror, sheet_id, filter_id,
+        stores, cell_store, sheet_id, filter_id,
     );
     filters::evaluate_filter_state_with_date_system(
         filter.as_ref(),
         |row, col| {
-            if let Some(col_slice) = mirror.get_column_view(&sid, col) {
+            if let Some(col_slice) = cell_store.get_column_view(&sid, col) {
                 return col_slice
                     .get(row as usize)
                     .cloned()
                     .unwrap_or(CellValue::Null);
             }
             let pos = SheetPos::new(row, col);
-            mirror
+            cell_store
                 .get_cell_value_at(&sid, pos)
                 .cloned()
                 .unwrap_or(CellValue::Null)
         },
         |row, col| {
-            let cell_id_opt = grid_index.and_then(|grid| grid.cell_id_at(row, col));
+            let cell_id_opt = cell_store.resolve_cell_id(&sid, SheetPos::new(row, col));
             match cell_id_opt {
                 Some(cid) => {
-                    let cell_hex = id_to_hex(cid.as_u128());
                     let table_fmt =
-                        super::resolve_structured_format_at_cell(mirror, &sid, row, col);
-                    crate::storage::properties::get_effective_format(
+                        super::resolve_structured_format_at_cell(cell_store, &sid, row, col);
+                    crate::storage::properties::get_effective_format_by_id(
                         &stores.storage,
                         &sid,
-                        &cell_hex,
+                        Some(&cid),
                         row,
                         col,
                         table_fmt.as_ref(),
                         grid_index,
-                        mirror.get_sheet(&sid),
+                        cell_store.get_sheet(&sid),
                     )
                 }
                 None => crate::storage::properties::get_positional_format(
@@ -830,7 +829,7 @@ fn evaluate_runtime_filter(
                     row,
                     col,
                     grid_index,
-                    mirror.get_sheet(&sid),
+                    cell_store.get_sheet(&sid),
                 ),
             }
         },
@@ -838,12 +837,12 @@ fn evaluate_runtime_filter(
         |hex| {
             let id = hex_to_id(hex)?;
             let cell_id = CellId::from_raw(id);
-            if let Some(pos) = mirror.resolve_position(&cell_id) {
+            if let Some(pos) = cell_store.resolve_position(&cell_id) {
                 return Some((pos.row(), pos.col()));
             }
-            grid_index.and_then(|grid| grid.cell_position(&cell_id))
+            None
         },
-        DateSystem::from_date1904(mirror.date1904),
+        DateSystem::from_date1904(cell_store.date1904),
     )
 }
 

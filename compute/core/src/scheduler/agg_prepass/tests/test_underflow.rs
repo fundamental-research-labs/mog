@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn post_op_flushes_subnormal_result_and_preserves_normal_boundary() {
-    let mirror = test_mirror();
+    let cell_store = test_store();
     let min_normal = f64::MIN_POSITIVE;
 
     let multiply = PostOp {
@@ -10,7 +10,7 @@ fn post_op_flushes_subnormal_result_and_preserves_normal_boundary() {
         operand: PostOpOperand::Number(0.5),
     };
     assert_eq!(
-        apply_post_op(CellValue::number(min_normal), &multiply, &mirror),
+        apply_post_op(CellValue::number(min_normal), &multiply, &cell_store),
         CellValue::number(0.0),
     );
 
@@ -19,35 +19,35 @@ fn post_op_flushes_subnormal_result_and_preserves_normal_boundary() {
         operand: PostOpOperand::Number(1.0),
     };
     assert_eq!(
-        apply_post_op(CellValue::number(min_normal), &preserve, &mirror),
+        apply_post_op(CellValue::number(min_normal), &preserve, &cell_store),
         CellValue::number(min_normal),
     );
 }
 
 #[test]
 fn post_op_treats_subnormal_divisor_as_division_by_zero() {
-    let mirror = test_mirror();
+    let cell_store = test_store();
     let divide = PostOp {
         op: compute_parser::BinOp::Div,
         operand: PostOpOperand::Number(f64::MIN_POSITIVE / 2.0),
     };
 
     assert_eq!(
-        apply_post_op(CellValue::number(1.0), &divide, &mirror),
+        apply_post_op(CellValue::number(1.0), &divide, &cell_store),
         CellValue::Error(CellError::Div0, None),
     );
 }
 
 #[test]
 fn post_op_overflow_keeps_num_classification() {
-    let mirror = test_mirror();
+    let cell_store = test_store();
     let multiply = PostOp {
         op: compute_parser::BinOp::Mul,
         operand: PostOpOperand::Number(2.0),
     };
 
     assert_eq!(
-        apply_post_op(CellValue::number(f64::MAX), &multiply, &mirror),
+        apply_post_op(CellValue::number(f64::MAX), &multiply, &cell_store),
         CellValue::Error(CellError::Num, None),
     );
 }
@@ -56,7 +56,7 @@ fn post_op_overflow_keeps_num_classification() {
 fn execute_group_applies_formula_boundary_to_post_op_result() {
     let sheet = sheet_id_1();
     let min_normal = f64::MIN_POSITIVE;
-    let mirror = {
+    let cell_store = {
         let cells = vec![
             CellData {
                 cell_id: CellId::from_raw(9001).to_uuid_string(),
@@ -86,7 +86,7 @@ fn execute_group_applies_formula_boundary_to_post_op_result() {
                 array_ref: None,
             },
         ];
-        CellMirror::from_snapshot(WorkbookSnapshot {
+        CellStore::from_snapshot(WorkbookSnapshot {
             sheets: vec![SheetSnapshot {
                 identities: vec![],
                 row_axis: None,
@@ -137,7 +137,7 @@ fn execute_group_applies_formula_boundary_to_post_op_result() {
     let no_formulas = |_: &SheetId, _: u32, _: u32, _: u32| false;
     let no_stale = |_: &SheetId, _: u32, _: u32, _: u32| false;
 
-    let results = execute_agg_group(&group, &mirror, no_formulas, no_stale).unwrap();
+    let results = execute_agg_group(&group, &cell_store, no_formulas, no_stale).unwrap();
     assert_eq!(
         results,
         vec![(CellId::from_raw(9004), CellValue::number(0.0))]

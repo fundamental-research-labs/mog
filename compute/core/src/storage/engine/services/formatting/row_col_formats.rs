@@ -1,5 +1,5 @@
 use crate::border_patch::BorderPatchField;
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::MutationResult;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::properties;
@@ -113,7 +113,7 @@ pub(in crate::storage::engine) fn patch_col_borders(
 
 pub(in crate::storage::engine) fn clear_col_format(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     col: u32,
 ) -> Result<MutationResult, ComputeError> {
@@ -123,18 +123,18 @@ pub(in crate::storage::engine) fn clear_col_format(
         col,
         stores.grid_indexes.get(sheet_id),
     );
-    let Some(sheet_mirror) = mirror.get_sheet_mut(sheet_id) else {
+    let Some(sheet_store) = cell_store.get_sheet_mut(sheet_id) else {
         return Err(ComputeError::SheetNotFound {
             sheet_id: sheet_id.to_uuid_string(),
         });
     };
-    properties::clear_col_format_ranges_in_span(sheet_mirror, col, col, &stores.id_alloc);
+    properties::clear_col_format_ranges_in_span(sheet_store, col, col, &stores.id_alloc);
     Ok(MutationResult::empty())
 }
 
 pub(in crate::storage::engine) fn set_col_format_range(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     start_col: u32,
     end_col: u32,
@@ -145,13 +145,13 @@ pub(in crate::storage::engine) fn set_col_format_range(
             sheet_id: sheet_id.to_uuid_string(),
         });
     }
-    let Some(sheet_mirror) = mirror.get_sheet_mut(sheet_id) else {
+    let Some(sheet_store) = cell_store.get_sheet_mut(sheet_id) else {
         return Err(ComputeError::SheetNotFound {
             sheet_id: sheet_id.to_uuid_string(),
         });
     };
     properties::set_col_format_range_with_alloc(
-        sheet_mirror,
+        sheet_store,
         start_col,
         end_col,
         format,

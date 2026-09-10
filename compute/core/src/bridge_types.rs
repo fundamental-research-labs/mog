@@ -1,7 +1,7 @@
 //! Re-exports of all types that appear in bridge method signatures.
 //!
-//! Downstream descriptor consumers (bridge-delegate, bridge-wasm, bridge-napi)
-//! import `compute_core::bridge_types::*` to resolve all types in expanded
+//! Downstream descriptor consumers (bridge-delegate) import
+//! `compute_core::bridge_types::*` to resolve all types in expanded
 //! descriptor macros. Single source of truth — add new types here when they
 //! first appear in a `#[bridge::api]`-annotated method signature.
 

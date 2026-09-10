@@ -6,7 +6,7 @@ use domain_types::domain::filter::{DateGroupItem, OoxmlFilterType};
 use domain_types::domain::table::FilterSpec;
 use value_types::DateSystem;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::services::imported_filters::read_imported_auto_filter_metadata;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::filters;
@@ -19,7 +19,7 @@ use crate::storage::sheet::filters;
 /// criterion.
 pub(in crate::storage::engine) fn project_imported_date_group_filters_for_evaluation(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Option<filters::FilterState> {
@@ -34,7 +34,7 @@ pub(in crate::storage::engine) fn project_imported_date_group_filters_for_evalua
         return Some(filter);
     }
 
-    let date_system = DateSystem::from_date1904(mirror.date1904);
+    let date_system = DateSystem::from_date1904(cell_store.date1904);
     let alternate_date_system = match date_system {
         DateSystem::Date1900 => DateSystem::Date1904,
         DateSystem::Date1904 => DateSystem::Date1900,
@@ -79,7 +79,7 @@ pub(in crate::storage::engine) fn project_imported_date_group_filters_for_evalua
             let Some(table_id) = filter.table_id.clone() else {
                 return Some(filter);
             };
-            let Some(table) = mirror
+            let Some(table) = cell_store
                 .all_tables()
                 .iter()
                 .find(|table| table.id == table_id || table.name == table_id)
@@ -128,7 +128,7 @@ pub(in crate::storage::engine) fn project_imported_date_group_filters_for_evalua
 /// mistaken for the old imported projection on the next evaluation.
 pub(in crate::storage::engine) fn clear_imported_table_date_group_metadata_after_column_edit(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     filter_id: &str,
     header_col: u32,
@@ -142,7 +142,7 @@ pub(in crate::storage::engine) fn clear_imported_table_date_group_metadata_after
     let Some(table_id) = filter.table_id.as_deref() else {
         return;
     };
-    let Some(mut table) = mirror
+    let Some(mut table) = cell_store
         .all_tables()
         .iter()
         .find(|table| {
@@ -169,7 +169,7 @@ pub(in crate::storage::engine) fn clear_imported_table_date_group_metadata_after
             .filter_columns
             .retain(|column| column.col_id != relative_col);
         if table.filter_columns.len() != original_len {
-            stores.compute.set_table(mirror, table.clone());
+            stores.compute.set_table(cell_store, table.clone());
         }
         return;
     }
@@ -191,7 +191,7 @@ pub(in crate::storage::engine) fn clear_imported_table_date_group_metadata_after
     }
 
     date_group_items.clear();
-    stores.compute.set_table(mirror, table.clone());
+    stores.compute.set_table(cell_store, table.clone());
 }
 
 fn refresh_imported_date_group_column(

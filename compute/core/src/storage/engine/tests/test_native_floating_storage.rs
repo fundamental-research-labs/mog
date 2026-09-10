@@ -50,7 +50,7 @@ fn copied_native_drawings_remap_groups_connectors_and_control_cells() {
     })).unwrap();
     engine.set_floating_object_group(&source, "group", serde_json::json!({"id":"group","sheetId":source.to_uuid_string(),"children":["shape","connector"],"name":"Pair"})).unwrap();
     engine.copy_sheet(&source, "Copied").unwrap();
-    let copy = engine.mirror().sheet_by_name("Copied").unwrap();
+    let copy = engine.cell_store().sheet_by_name("Copied").unwrap();
     let objects = engine.get_all_floating_objects_typed(&copy);
     assert_eq!(objects.len(), 3);
     let shape = objects
@@ -62,10 +62,13 @@ fn copied_native_drawings_remap_groups_connectors_and_control_cells() {
     let source_anchor = reference_id(&anchor);
     let copied_anchor = reference_id(shape.common.anchor_cell_id.as_deref().unwrap());
     assert_ne!(source_anchor, copied_anchor);
-    assert_eq!(engine.mirror().sheet_for_cell(&copied_anchor), Some(copy));
+    assert_eq!(
+        engine.cell_store().sheet_for_cell(&copied_anchor),
+        Some(copy)
+    );
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_sheet(&copy)
             .unwrap()
             .position_of(&copied_anchor),
@@ -132,11 +135,11 @@ fn drawing_anchor_growth_is_sparse_and_structural_export_projects_current_positi
     });
     let sheet = engine.storage().sheet_order()[0];
     engine.set_floating_object(&sheet, "far", serde_json::json!({"type":"shape","shapeType":"rect","anchorRow":100_000,"anchorCol":2,"width":20,"height":30})).unwrap();
-    let mirror = engine.mirror().get_sheet(&sheet).unwrap();
-    assert_eq!(mirror.cells_iter().count(), 0);
-    assert_eq!(mirror.id_to_pos.len(), 1);
+    let cell_store = engine.cell_store().get_sheet(&sheet).unwrap();
+    assert_eq!(cell_store.cells_iter().count(), 0);
+    assert_eq!(cell_store.cells().count(), 1);
     assert!(std::sync::Arc::ptr_eq(
-        &mirror.row_axis,
+        &cell_store.row_axis,
         &engine.stores.grid_indexes[&sheet].row_axis()
     ));
     engine
@@ -172,7 +175,7 @@ fn drawing_anchor_growth_is_sparse_and_structural_export_projects_current_positi
     assert_eq!(object.common.anchor.anchor_row, 100_001);
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_sheet(&sheet)
             .unwrap()
             .cells_iter()
@@ -197,8 +200,8 @@ fn imported_blank_drawing_anchor_has_one_identity_and_no_value_overlay() {
     let sheet_id = engine.storage().sheet_order()[0];
     let object = &engine.get_all_floating_objects_typed(&sheet_id)[0];
     let anchor = reference_id(object.common.anchor_cell_id.as_deref().unwrap());
-    let sheet = engine.mirror().get_sheet(&sheet_id).unwrap();
+    let sheet = engine.cell_store().get_sheet(&sheet_id).unwrap();
     assert_eq!(sheet.position_of(&anchor), Some(SheetPos::new(1, 2)));
-    assert_eq!(sheet.id_to_pos.len(), 1);
+    assert_eq!(sheet.cells().count(), 1);
     assert_eq!(sheet.cells_iter().count(), 0);
 }

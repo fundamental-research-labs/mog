@@ -12,8 +12,8 @@ fn unary(op: UnaryOp, value: f64) -> ASTNode {
 
 #[test]
 fn scalar_arithmetic_flushes_subnormal_results() {
-    let (mirror, sheet) = test_mirror();
-    let context = make_ctx(&mirror, sheet);
+    let (cell_store, sheet) = test_store();
+    let context = make_ctx(&cell_store, sheet);
     let min_normal = f64::MIN_POSITIVE;
     let next_normal = f64::from_bits(min_normal.to_bits() + 1);
 
@@ -56,8 +56,8 @@ fn scalar_arithmetic_flushes_subnormal_results() {
 
 #[test]
 fn array_broadcast_flushes_each_subnormal_result_and_preserves_shape() {
-    let (mirror, sheet) = test_mirror();
-    let context = make_ctx(&mirror, sheet);
+    let (cell_store, sheet) = test_store();
+    let context = make_ctx(&cell_store, sheet);
     let min_normal = f64::MIN_POSITIVE;
     let array = ASTNode::Array {
         rows: vec![vec![
@@ -75,8 +75,8 @@ fn array_broadcast_flushes_each_subnormal_result_and_preserves_shape() {
 
 #[test]
 fn function_and_operator_alias_results_use_the_same_boundary() {
-    let (mirror, sheet) = test_mirror();
-    let context = make_ctx(&mirror, sheet);
+    let (cell_store, sheet) = test_store();
+    let context = make_ctx(&cell_store, sheet);
     let subnormal = f64::MIN_POSITIVE / 2.0;
 
     assert_eq!(
@@ -97,8 +97,8 @@ fn function_and_operator_alias_results_use_the_same_boundary() {
 
 #[test]
 fn arithmetic_overflow_remains_num_and_exact_boundary_is_preserved() {
-    let (mirror, sheet) = test_mirror();
-    let context = make_ctx(&mirror, sheet);
+    let (cell_store, sheet) = test_store();
+    let context = make_ctx(&cell_store, sheet);
 
     assert_eq!(
         eval(
@@ -122,8 +122,8 @@ fn arithmetic_overflow_remains_num_and_exact_boundary_is_preserved() {
 
 #[test]
 fn aggregate_function_result_flushes_subnormal_without_changing_input_storage() {
-    let (mirror, sheet) = test_mirror();
-    let context = make_ctx(&mirror, sheet);
+    let (cell_store, sheet) = test_store();
+    let context = make_ctx(&cell_store, sheet);
     let subnormal = f64::MIN_POSITIVE / 2.0;
     let values = ASTNode::Array {
         rows: vec![vec![ASTNode::Number(subnormal)]],
@@ -139,7 +139,7 @@ fn aggregate_function_result_flushes_subnormal_without_changing_input_storage() 
 fn formula_result_boundary_covers_literals_references_let_lambda_and_arrays() {
     let subnormal = f64::MIN_POSITIVE / 2.0;
     let min_normal = f64::MIN_POSITIVE;
-    let (mirror, sheet) = {
+    let (cell_store, sheet) = {
         let snapshot = WorkbookSnapshot {
             sheets: vec![SheetSnapshot {
                 identities: vec![],
@@ -170,11 +170,11 @@ fn formula_result_boundary_covers_literals_references_let_lambda_and_arrays() {
             calculation_settings: None,
             ..Default::default()
         };
-        let mirror = crate::mirror::CellMirror::from_snapshot(snapshot).unwrap();
-        let sheet = mirror.sheet_by_name("Sheet1").unwrap();
-        (mirror, sheet)
+        let cell_store = crate::cells::CellStore::from_snapshot(snapshot).unwrap();
+        let sheet = cell_store.sheet_by_name("Sheet1").unwrap();
+        (cell_store, sheet)
     };
-    let context = make_ctx(&mirror, sheet);
+    let context = make_ctx(&cell_store, sheet);
 
     // A raw literal is a formula result and is normalized at the evaluator
     // boundary, while the storage value below remains subnormal.
@@ -219,7 +219,7 @@ fn formula_result_boundary_covers_literals_references_let_lambda_and_arrays() {
     });
     assert_eq!(eval(&reference, &context), CellValue::number(0.0));
     assert_eq!(
-        mirror
+        cell_store
             .get_cell_value_at(&sheet, cell_types::SheetPos::new(0, 0))
             .cloned(),
         Some(CellValue::number(subnormal))

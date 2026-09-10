@@ -104,9 +104,9 @@ fn native_table_references_rename_refreshes_source_names_and_incremental_depende
     let bytes = engine.export_to_xlsx_bytes().unwrap();
     let (reloaded, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
     let result_sheet = *reloaded
-        .mirror()
+        .cell_store()
         .sheet_ids()
-        .find(|id| reloaded.mirror().get_sheet(id).unwrap().name == "Results")
+        .find(|id| reloaded.cell_store().get_sheet(id).unwrap().name == "Results")
         .unwrap();
     assert_eq!(
         cell_value(&reloaded, result_sheet, 0, 2),
@@ -196,14 +196,14 @@ fn native_table_catalog_copy_snapshot_and_xlsx_preserve_authored_metadata() {
     engine
         .stores
         .compute
-        .set_table(&mut engine.mirror, table.clone());
+        .set_table(&mut engine.cell_store, table.clone());
     engine
         .set_cell_value_parsed(&source, 5, 0, "=SUM(Sales[Amount])")
         .unwrap();
 
     crate::storage::engine::construction::materialize_table_auto_filters_for_sheets(
         &mut engine.stores,
-        &mut engine.mirror,
+        &mut engine.cell_store,
         &[source],
     );
     let (copy_id, _) = engine.copy_sheet(&source, "Copied Data").unwrap();
@@ -292,7 +292,10 @@ fn native_table_catalog_selected_sheet_import_preserves_metadata_and_renames_col
     let mut table = engine.get_table_by_name("Sales").unwrap();
     table.comment = Some("Selected sheet metadata".into());
     table.columns[0].unique_name = Some("amount_identity".into());
-    engine.stores.compute.set_table(&mut engine.mirror, table);
+    engine
+        .stores
+        .compute
+        .set_table(&mut engine.cell_store, table);
     engine
         .set_cell_value_parsed(&source, 5, 0, "=SUM(Sales[Amount])")
         .unwrap();
@@ -377,13 +380,13 @@ fn native_table_catalog_selected_sheet_import_preserves_metadata_and_renames_col
         Some(CellValue::from(30.0))
     );
     let original_id = engine
-        .mirror
+        .cell_store
         .get_sheet(&source)
         .unwrap()
         .cell_id_at(SheetPos::new(1, 0))
         .unwrap();
     let imported_id = engine
-        .mirror
+        .cell_store
         .get_sheet(&imported_sid)
         .unwrap()
         .cell_id_at(SheetPos::new(1, 0))

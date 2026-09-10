@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
+use crate::cells::CellStore;
 use crate::storage::WorkbookStorage;
-use compute_document::identity::GridIndex;
 
 use super::clear::clear_range_and_return_ids;
 use super::types::RelocationResult;
@@ -88,28 +88,8 @@ fn sanitize_moved_formula_metadata(
     metadata.array_ref = if remove { None } else { array };
 }
 
-/// Relocate cells from source range to target position.
-///
-/// This is the architecturally correct implementation for cut-paste and
-/// drag-move:
-/// - CellIds are PRESERVED (stable identities)
-/// - Positions are updated in the GridIndex (in-memory authority)
-/// - Formulas referencing moved cells automatically work (they reference CellIds)
-///
-/// This differs from copy-paste which creates NEW CellIds at the target.
-///
-/// Edge cases handled:
-/// 1. Overlapping source and target ranges: cells being moved are excluded
-///    from the target clear step.
-/// 2. Cross-sheet moves transfer cell properties under the same identity.
-/// 3. Target cells already have data: cleared first (unless being moved).
-///
-/// Callers pass:
-/// - `source_grid`: the source sheet's GridIndex (always mutated — we
-///   remove moved cells from it on cross-sheet moves and re-register on
-///   same-sheet moves).
-/// - `target_grid`: the target sheet's GridIndex. Pass `None` for
-///   same-sheet moves (`source_grid` is reused).
+/// Transfer metadata for a relocation and report the source/target identities.
+/// The compute caller moves values and identity bindings together after clearing targets.
 #[allow(clippy::too_many_arguments)]
 pub fn relocate_cells(
     storage: &mut WorkbookStorage,
@@ -118,19 +98,13 @@ pub fn relocate_cells(
     target_sheet: SheetId,
     target_start_row: u32,
     target_start_col: u32,
-    source_grid: &mut GridIndex,
-    mut target_grid: Option<&mut GridIndex>,
+    cells: &CellStore,
 ) -> RelocationResult {
     let same_sheet = source_sheet == target_sheet;
-    debug_assert_eq!(
-        same_sheet,
-        target_grid.is_none(),
-        "relocate_cells: target_grid must be None iff source and target sheets are the same"
-    );
-
     // --- 1. Snapshot source cells (CellId + original position) ---
-    let source_cells: Vec<(CellId, u32, u32)> = source_grid
+    let source_cells: Vec<(CellId, u32, u32)> = cells
         .cells_in_range(
+            &source_sheet,
             source_range.start_row(),
             source_range.start_col(),
             source_range.end_row(),
@@ -164,19 +138,13 @@ pub fn relocate_cells(
         (source_range.end_col() as i64 + col_delta) as u32,
     );
 
-    let cleared = {
-        let grid_for_clear: &mut GridIndex = match target_grid.as_deref_mut() {
-            Some(tg) => tg,
-            None => &mut *source_grid,
-        };
-        clear_range_and_return_ids(
-            storage,
-            target_sheet,
-            grid_for_clear,
-            &target_range,
-            Some(&moving_ids),
-        )
-    };
+    let cleared = clear_range_and_return_ids(
+        storage,
+        target_sheet,
+        cells,
+        &target_range,
+        Some(&moving_ids),
+    );
 
     let bounds = (
         source_range.start_row(),
@@ -271,30 +239,6 @@ pub fn relocate_cells(
             .collect();
         if let Some(sheet) = storage.sheet_metadata.get_mut(&target_sheet) {
             sheet.cell_properties.extend(properties);
-        }
-    }
-
-    // Rebind positions in the grid index(es).
-    match target_grid {
-        Some(tg) => {
-            // Cross-sheet: remove from source grid, register in target grid.
-            for (cell_id, _, _) in &source_cells {
-                source_grid.remove_cell(cell_id);
-            }
-            for (cell_id, old_row, old_col) in &source_cells {
-                let new_row = (*old_row as i64 + row_delta) as u32;
-                let new_col = (*old_col as i64 + col_delta) as u32;
-                tg.register_cell(*cell_id, new_row, new_col);
-            }
-        }
-        None => {
-            // Same-sheet: register_cell on the (now-authoritative) source grid.
-            // `register_cell` cleans up any stale old position automatically.
-            for (cell_id, old_row, old_col) in &source_cells {
-                let new_row = (*old_row as i64 + row_delta) as u32;
-                let new_col = (*old_col as i64 + col_delta) as u32;
-                source_grid.register_cell(*cell_id, new_row, new_col);
-            }
         }
     }
 

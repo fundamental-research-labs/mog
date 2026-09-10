@@ -75,7 +75,7 @@ pub(in crate::storage::engine) fn normalize_named_range_refs(engine: &mut Comput
     // Snapshot construction initializes evaluator variables directly. Seed their
     // authored records once so a later snapshot/export keeps the names as well.
     let snapshot_names: Vec<_> = engine
-        .mirror
+        .cell_store
         .variables
         .all_variables()
         .map(|(_, _, definition)| definition.clone())
@@ -132,7 +132,7 @@ pub(in crate::storage::engine) fn normalize_named_range_refs(engine: &mut Comput
     }
 
     // Pick first sheet as context for workbook-scoped names.
-    let first_sheet = engine.mirror.sheet_ids().next().copied();
+    let first_sheet = engine.cell_store.sheet_ids().next().copied();
 
     for dn in to_normalize {
         if dn.raw_refers_to.is_some() {
@@ -157,7 +157,7 @@ pub(in crate::storage::engine) fn normalize_named_range_refs(engine: &mut Comput
         let a1 = format!("={}", dn.refers_to.template);
 
         let identity = match engine.stores.compute.to_identity_formula_with_rect_ranges(
-            &mut engine.mirror,
+            &mut engine.cell_store,
             &context_sheet,
             &a1,
         ) {

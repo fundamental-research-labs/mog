@@ -3,12 +3,9 @@
 //! `ComputeApiError` wraps `ComputeError` from the engine and adds
 //! facade-level error variants (address validation, sheet lookup, etc.).
 //!
-//! `ComputeApiError` implements [`bridge_types::BridgeStructuredError`] so the
-//! bridge macros (WASM,
-//! NAPI, Tauri) emit the **same** tagged-JSON envelope across every
-//! transport: `[BRIDGE_ERROR]{"kind":"...","message":"...", ...}`. The
-//! TS-side discriminated union (`kernel/src/types/bridge-error.ts`)
-//! mirrors this shape exactly.
+//! `ComputeApiError` implements [`bridge_types::BridgeStructuredError`] so
+//! bridge macros emit the same tagged-JSON envelope:
+//! `[BRIDGE_ERROR]{"kind":"...","message":"...", ...}`.
 
 use value_types::ComputeError;
 
@@ -52,7 +49,7 @@ pub enum ComputeApiError {
 //
 // `ComputeApiError` is the type returned by every `#[bridge::api]` method
 // on `ComputeService`, so its `to_bridge_value` defines the wire shape
-// the TS `BridgeError` discriminated union must mirror.
+// the TS `BridgeError` discriminated union must match.
 //
 // Variants are camelCase-fielded; the discriminator is `kind` and uses
 // the variant name as PascalCase. `Compute(ComputeError)` flattens —

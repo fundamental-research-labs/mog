@@ -80,7 +80,7 @@ fn text_date_system_survives_xlsx_import_rebuild_and_native_rebuild() {
         let replayed = super::helpers::rebuild_native_engine(&engine);
         assert_date(&replayed, expected);
         // Import into an existing engine must install the date system before
-        // its initial calculation (this constructor rebuilds the mirror).
+        // its initial calculation (this constructor rebuilds the cell store).
         engine
             .import_from_xlsx_bytes(&workbook_bytes(!date1904), true)
             .unwrap();

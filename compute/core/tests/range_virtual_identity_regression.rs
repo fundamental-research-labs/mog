@@ -87,7 +87,7 @@ fn sheet_snap(idx: u32, name: &str, cells: Vec<CellData>) -> SheetSnapshot {
 
 fn cell_at(engine: &ComputeEngine, sid: &SheetId, row: u32, col: u32) -> CellValue {
     engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(sid, SheetPos::new(row, col))
         .cloned()
         .unwrap_or(CellValue::Null)
@@ -139,7 +139,7 @@ fn virtual_id_formula_refs_cell_before_edit() {
 
     // Verify the CellId at A3 resolves correctly.
     let a3_cell = cell_id(0, 2, 0);
-    let resolved = engine.mirror().resolve_position(&a3_cell);
+    let resolved = engine.cell_store().resolve_position(&a3_cell);
     assert!(
         resolved.is_some(),
         "resolve_position for A3's CellId should return Some"
@@ -173,7 +173,7 @@ fn virtual_id_formula_refs_cell_after_edit() {
     );
 
     // The CellId for A3 should still resolve to the same position.
-    let resolved = engine.mirror().resolve_position(&a3_cell);
+    let resolved = engine.cell_store().resolve_position(&a3_cell);
     assert!(
         resolved.is_some(),
         "A3 CellId should still resolve after edit"
@@ -184,7 +184,7 @@ fn virtual_id_formula_refs_cell_after_edit() {
 
     // The cell value via CellId should be the override (99).
     let val = engine
-        .mirror()
+        .cell_store()
         .get_cell_value(&a3_cell)
         .cloned()
         .unwrap_or(CellValue::Null);
@@ -205,7 +205,9 @@ fn virtual_id_resolve_cell_id_for_position() {
     let sid = sheet_id(0);
 
     // Resolve position (2, 0) = A3 to its CellId.
-    let resolved = engine.mirror().resolve_cell_id(&sid, SheetPos::new(2, 0));
+    let resolved = engine
+        .cell_store()
+        .resolve_cell_id(&sid, SheetPos::new(2, 0));
     assert!(
         resolved.is_some(),
         "resolve_cell_id(sheet, (2,0)) should return a CellId for A3"
@@ -239,7 +241,7 @@ fn virtual_id_resolve_position_returns_correct_pos() {
 
     for (row, col, _expected_val) in &cases {
         let cid = cell_id(0, *row, *col);
-        let pos = engine.mirror().resolve_position(&cid);
+        let pos = engine.cell_store().resolve_position(&cid);
         assert!(
             pos.is_some(),
             "resolve_position for cell at ({}, {}) should return Some",
@@ -275,7 +277,7 @@ fn virtual_id_sheet_for_cell() {
 
     for row in 0..5u32 {
         let cid = cell_id(0, row, 0);
-        let sid = engine.mirror().sheet_for_cell(&cid);
+        let sid = engine.cell_store().sheet_for_cell(&cid);
         assert!(
             sid.is_some(),
             "sheet_for_cell for row {} should return Some",
@@ -290,7 +292,7 @@ fn virtual_id_sheet_for_cell() {
 
     // Formula cell in B1 also belongs to the same sheet.
     let b1 = cell_id(0, 0, 1);
-    let sid = engine.mirror().sheet_for_cell(&b1);
+    let sid = engine.cell_store().sheet_for_cell(&b1);
     assert!(
         sid.is_some(),
         "sheet_for_cell for B1 formula should return Some"
@@ -401,7 +403,7 @@ fn virtual_id_stable_across_compaction() {
     let mut pre_ids: Vec<CellId> = Vec::new();
     for r in 0..4u32 {
         let cid = engine
-            .mirror()
+            .cell_store()
             .resolve_cell_id(&sid, SheetPos::new(r, 0))
             .unwrap_or_else(|| panic!("CellId at row {} should exist", r));
         pre_ids.push(cid);
@@ -418,7 +420,7 @@ fn virtual_id_stable_across_compaction() {
     // After overrides (and potential compaction), verify CellIds are stable.
     for r in 0..4u32 {
         let cid = engine
-            .mirror()
+            .cell_store()
             .resolve_cell_id(&sid, SheetPos::new(r, 0))
             .unwrap_or_else(|| panic!("CellId at row {} should still exist after compaction", r));
         assert_eq!(
@@ -430,7 +432,7 @@ fn virtual_id_stable_across_compaction() {
 
     // Verify positions resolve correctly.
     for r in 0..4u32 {
-        let pos = engine.mirror().resolve_position(&pre_ids[r as usize]);
+        let pos = engine.cell_store().resolve_position(&pre_ids[r as usize]);
         assert!(pos.is_some(), "CellId at row {} should still resolve", r);
         assert_eq!(
             pos.unwrap().row(),
@@ -445,7 +447,7 @@ fn virtual_id_stable_across_compaction() {
     let expected = [100.0, 20.0, 300.0, 40.0];
     for r in 0..4u32 {
         let v = engine
-            .mirror()
+            .cell_store()
             .get_cell_value(&pre_ids[r as usize])
             .cloned()
             .unwrap_or(CellValue::Null);
@@ -496,7 +498,11 @@ fn virtual_id_stable_across_sort() {
     // Capture CellIds at each position before sort.
     let mut pre_ids: Vec<Option<CellId>> = Vec::new();
     for r in 0..5u32 {
-        pre_ids.push(engine.mirror().resolve_cell_id(&sid, SheetPos::new(r, 0)));
+        pre_ids.push(
+            engine
+                .cell_store()
+                .resolve_cell_id(&sid, SheetPos::new(r, 0)),
+        );
     }
 
     // Sort A1:A5 ascending.
@@ -538,7 +544,7 @@ fn virtual_id_stable_across_sort() {
     for (orig_row, pre_opt) in pre_ids.iter().enumerate() {
         if let Some(cid) = pre_opt {
             let val = engine
-                .mirror()
+                .cell_store()
                 .get_cell_value(cid)
                 .cloned()
                 .unwrap_or(CellValue::Null);
@@ -574,13 +580,13 @@ fn virtual_id_stable_across_insert_delete() {
 
     // Capture the CellId for A3 (row 2, col 0) before insert.
     let a3_cid = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&sid, SheetPos::new(2, 0))
         .expect("A3 should have a CellId");
 
     // Capture the CellId for A5 (row 4, col 0).
     let a5_cid = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&sid, SheetPos::new(4, 0))
         .expect("A5 should have a CellId");
 
@@ -597,7 +603,7 @@ fn virtual_id_stable_across_insert_delete() {
         .expect("insert_rows");
 
     // A3's CellId should now resolve to row 4 (shifted down by 2).
-    let new_pos = engine.mirror().resolve_position(&a3_cid);
+    let new_pos = engine.cell_store().resolve_position(&a3_cid);
     assert!(
         new_pos.is_some(),
         "A3's CellId should still resolve after insert"
@@ -612,7 +618,7 @@ fn virtual_id_stable_across_insert_delete() {
 
     // The value associated with A3's CellId should still be 30.
     let val = engine
-        .mirror()
+        .cell_store()
         .get_cell_value(&a3_cid)
         .cloned()
         .unwrap_or(CellValue::Null);
@@ -623,7 +629,7 @@ fn virtual_id_stable_across_insert_delete() {
     );
 
     // A5's CellId should now be at row 6.
-    let a5_pos = engine.mirror().resolve_position(&a5_cid);
+    let a5_pos = engine.cell_store().resolve_position(&a5_cid);
     assert!(
         a5_pos.is_some(),
         "A5's CellId should still resolve after insert"
@@ -635,7 +641,7 @@ fn virtual_id_stable_across_insert_delete() {
     );
 
     // sheet_for_cell should return the correct sheet.
-    let sheet = engine.mirror().sheet_for_cell(&a3_cid);
+    let sheet = engine.cell_store().sheet_for_cell(&a3_cid);
     assert_eq!(
         sheet,
         Some(sid),
@@ -655,7 +661,7 @@ fn virtual_id_stable_across_insert_delete() {
         .expect("delete_rows");
 
     // A3's CellId should be back at row 2.
-    let restored_pos = engine.mirror().resolve_position(&a3_cid);
+    let restored_pos = engine.cell_store().resolve_position(&a3_cid);
     assert!(
         restored_pos.is_some(),
         "A3's CellId should still resolve after delete"
@@ -667,7 +673,7 @@ fn virtual_id_stable_across_insert_delete() {
     );
 
     // A5's CellId should be back at row 4.
-    let a5_restored = engine.mirror().resolve_position(&a5_cid);
+    let a5_restored = engine.cell_store().resolve_position(&a5_cid);
     assert_eq!(
         a5_restored.unwrap().row(),
         4,
@@ -689,7 +695,7 @@ fn virtual_id_resolve_roundtrip() {
     //   cell_id -> pos -> cell_id
     for row in 0..5u32 {
         let pos = SheetPos::new(row, 0);
-        let cid = engine.mirror().resolve_cell_id(&sid, pos);
+        let cid = engine.cell_store().resolve_cell_id(&sid, pos);
         assert!(
             cid.is_some(),
             "resolve_cell_id should return Some for populated row {}",
@@ -698,7 +704,7 @@ fn virtual_id_resolve_roundtrip() {
         let cid = cid.unwrap();
 
         // Roundtrip: cell_id -> pos
-        let pos_back = engine.mirror().resolve_position(&cid);
+        let pos_back = engine.cell_store().resolve_position(&cid);
         assert!(
             pos_back.is_some(),
             "resolve_position should return Some for CellId at row {}",
@@ -709,7 +715,7 @@ fn virtual_id_resolve_roundtrip() {
         assert_eq!(p.col(), 0, "roundtrip col mismatch for row {}", row);
 
         // Roundtrip: pos -> cell_id -> pos -> cell_id
-        let cid_back = engine.mirror().resolve_cell_id(&sid, p);
+        let cid_back = engine.cell_store().resolve_cell_id(&sid, p);
         assert_eq!(
             cid_back,
             Some(cid),
@@ -739,11 +745,11 @@ fn virtual_id_multi_sheet_isolation() {
     let beta_sid = sheet_id(1);
 
     let alpha_cid = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&alpha_sid, SheetPos::new(0, 0))
         .expect("Alpha A1 should have a CellId");
     let beta_cid = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&beta_sid, SheetPos::new(0, 0))
         .expect("Beta A1 should have a CellId");
 
@@ -755,24 +761,24 @@ fn virtual_id_multi_sheet_isolation() {
 
     // sheet_for_cell should return the correct sheet for each.
     assert_eq!(
-        engine.mirror().sheet_for_cell(&alpha_cid),
+        engine.cell_store().sheet_for_cell(&alpha_cid),
         Some(alpha_sid),
         "Alpha's CellId should resolve to Alpha"
     );
     assert_eq!(
-        engine.mirror().sheet_for_cell(&beta_cid),
+        engine.cell_store().sheet_for_cell(&beta_cid),
         Some(beta_sid),
         "Beta's CellId should resolve to Beta"
     );
 
     // Values should be distinct.
     let alpha_val = engine
-        .mirror()
+        .cell_store()
         .get_cell_value(&alpha_cid)
         .cloned()
         .unwrap_or(CellValue::Null);
     let beta_val = engine
-        .mirror()
+        .cell_store()
         .get_cell_value(&beta_cid)
         .cloned()
         .unwrap_or(CellValue::Null);

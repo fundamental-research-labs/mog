@@ -109,21 +109,21 @@ fn describe(v: &CellValue) -> String {
 }
 
 /// Look up a cell value at `(sheet_name, row, col)` by walking the
-/// engine's mirror. Returns `None` if either the sheet name or the cell
+/// engine's cell_store. Returns `None` if either the sheet name or the cell
 /// position is absent — both conditions should be treated as drift.
 fn read_value(engine: &ComputeEngine, entry: &OracleEntry) -> Option<CellValue> {
-    let mirror = engine.mirror();
-    let sheet_id = mirror
+    let cell_store = engine.cell_store();
+    let sheet_id = cell_store
         .sheet_ids()
         .find(|sid| {
-            mirror
+            cell_store
                 .get_sheet(sid)
                 .map(|sm| sm.name == entry.sheet_name)
                 .unwrap_or(false)
         })
         .copied()?;
     let pos = cell_types::SheetPos::new(entry.row, entry.col);
-    mirror.get_cell_value_at(&sheet_id, pos).cloned()
+    cell_store.get_cell_value_at(&sheet_id, pos).cloned()
 }
 
 struct FixtureReport {

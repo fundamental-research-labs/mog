@@ -5,8 +5,6 @@ use crate::snapshot::{CellData, SheetSnapshot};
 use domain_types::ParseOutput;
 use value_types::{CellValue, FiniteF64};
 
-use compute_wire::constants::{MUTATION_HEADER_SIZE, NO_STRING, PATCH_STRIDE};
-
 // -------------------------------------------------------------------
 // Snapshot Builders
 // -------------------------------------------------------------------
@@ -22,7 +20,7 @@ pub(super) fn cell_value_at(
     col: u32,
 ) -> CellValue {
     engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(sheet_id, SheetPos::new(row, col))
         .cloned()
         .unwrap_or(CellValue::Null)
@@ -131,13 +129,13 @@ pub(super) fn assemble_engine_from_parse_output_storage(
     storage: crate::storage::WorkbookStorage,
     workbook_snap: WorkbookSnapshot,
 ) -> ComputeEngine {
-    let mut mirror =
-        crate::mirror::CellMirror::from_snapshot(workbook_snap.clone()).expect("mirror");
+    let mut cell_store =
+        crate::cells::CellStore::from_snapshot(workbook_snap.clone()).expect("cell_store");
     let mut compute = crate::scheduler::ComputeCore::new();
     compute
-        .init_from_snapshot_no_recalc(&mut mirror, workbook_snap.clone())
+        .init_from_snapshot_no_recalc(&mut cell_store, workbook_snap.clone())
         .expect("compute init");
-    super::super::construction::assemble_engine(storage, mirror, compute, &workbook_snap)
+    super::super::construction::assemble_engine(storage, cell_store, compute, &workbook_snap)
         .expect("assemble engine")
 }
 
@@ -157,7 +155,7 @@ pub(super) fn engine_from_parse_output_normal(output: &ParseOutput) -> ComputeEn
         super::super::construction::collect_imported_formats(output, &id_map.sheet_ids, &[]);
     let mut engine = assemble_engine_from_parse_output_storage(storage, workbook_snap);
     super::super::construction::install_imported_formats(
-        &mut engine.mirror,
+        &mut engine.cell_store,
         &engine.stores.storage.metadata.style_palette,
         &formats,
     );
@@ -251,136 +249,11 @@ pub(super) fn copy_range_snapshot() -> WorkbookSnapshot {
     }
 }
 
-// -------------------------------------------------------------------
-// Binary patch decode helpers
-// -------------------------------------------------------------------
-
-/// Decode a multi-viewport packed blob and extract the first viewport's
-/// mutation patch bytes. Returns None if the blob has no viewports.
-pub(super) fn extract_first_viewport_mutation(packed: &[u8]) -> Option<Vec<u8>> {
-    if packed.len() < 2 {
-        return None;
-    }
-    let viewport_count = u16::from_le_bytes([packed[0], packed[1]]) as usize;
-    if viewport_count == 0 {
-        return None;
-    }
-    let mut offset = 2;
-    // Read first viewport
-    let id_len = packed[offset] as usize;
-    offset += 1 + id_len;
-    let patch_len = u32::from_le_bytes([
-        packed[offset],
-        packed[offset + 1],
-        packed[offset + 2],
-        packed[offset + 3],
-    ]) as usize;
-    offset += 4;
-    Some(packed[offset..offset + patch_len].to_vec())
-}
-
-/// Given raw mutation patch bytes, extract (display_off, display_len)
-/// for each cell patch. display_off == NO_STRING means no display text.
-pub(super) fn extract_patch_display_info(mutation_bytes: &[u8]) -> Vec<(u32, u16)> {
-    let patch_count = u32::from_le_bytes([
-        mutation_bytes[0],
-        mutation_bytes[1],
-        mutation_bytes[2],
-        mutation_bytes[3],
-    ]) as usize;
-    let sheet_id_len = u16::from_le_bytes([mutation_bytes[8], mutation_bytes[9]]) as usize;
-
-    let patches_start = MUTATION_HEADER_SIZE + sheet_id_len;
-    let mut results = Vec::new();
-    for i in 0..patch_count {
-        let patch_off = patches_start + i * PATCH_STRIDE;
-        // Cell record starts at +8 within the patch (after row u32 + col u32)
-        let rec_off = patch_off + 8;
-        // display_off is at +8 within the 24-byte cell record
-        let display_off = u32::from_le_bytes([
-            mutation_bytes[rec_off + 8],
-            mutation_bytes[rec_off + 9],
-            mutation_bytes[rec_off + 10],
-            mutation_bytes[rec_off + 11],
-        ]);
-        // display_len is at +20 within the 24-byte cell record
-        let display_len =
-            u16::from_le_bytes([mutation_bytes[rec_off + 20], mutation_bytes[rec_off + 21]]);
-        results.push((display_off, display_len));
-    }
-    results
-}
-
-/// Given raw mutation patch bytes, decode the display text string for
-/// a patch at index `i` from the string pool. Returns None if NO_STRING.
-pub(super) fn decode_patch_display_text(
-    mutation_bytes: &[u8],
-    patch_index: usize,
-) -> Option<String> {
-    let patch_count = u32::from_le_bytes([
-        mutation_bytes[0],
-        mutation_bytes[1],
-        mutation_bytes[2],
-        mutation_bytes[3],
-    ]) as usize;
-    let sheet_id_len = u16::from_le_bytes([mutation_bytes[8], mutation_bytes[9]]) as usize;
-
-    let patches_start = MUTATION_HEADER_SIZE + sheet_id_len;
-    let string_pool_start = patches_start + patch_count * PATCH_STRIDE;
-
-    let patch_off = patches_start + patch_index * PATCH_STRIDE;
-    let rec_off = patch_off + 8;
-    let display_off = u32::from_le_bytes([
-        mutation_bytes[rec_off + 8],
-        mutation_bytes[rec_off + 9],
-        mutation_bytes[rec_off + 10],
-        mutation_bytes[rec_off + 11],
-    ]);
-    let display_len =
-        u16::from_le_bytes([mutation_bytes[rec_off + 20], mutation_bytes[rec_off + 21]]);
-    if display_off == NO_STRING || display_len == 0 {
-        return None;
-    }
-    let start = string_pool_start + display_off as usize;
-    let end = start + display_len as usize;
-    Some(String::from_utf8_lossy(&mutation_bytes[start..end]).to_string())
-}
-
-/// Extract (row, col) pairs from a single-viewport mutation binary blob.
-pub(super) fn extract_patch_positions(mutation_bytes: &[u8]) -> Vec<(u32, u32)> {
-    let patch_count = u32::from_le_bytes([
-        mutation_bytes[0],
-        mutation_bytes[1],
-        mutation_bytes[2],
-        mutation_bytes[3],
-    ]) as usize;
-    let sheet_id_len = u16::from_le_bytes([mutation_bytes[8], mutation_bytes[9]]) as usize;
-    let patches_start = MUTATION_HEADER_SIZE + sheet_id_len;
-    let mut positions = Vec::new();
-    for i in 0..patch_count {
-        let patch_off = patches_start + i * PATCH_STRIDE;
-        let row = u32::from_le_bytes([
-            mutation_bytes[patch_off],
-            mutation_bytes[patch_off + 1],
-            mutation_bytes[patch_off + 2],
-            mutation_bytes[patch_off + 3],
-        ]);
-        let col = u32::from_le_bytes([
-            mutation_bytes[patch_off + 4],
-            mutation_bytes[patch_off + 5],
-            mutation_bytes[patch_off + 6],
-            mutation_bytes[patch_off + 7],
-        ]);
-        positions.push((row, col));
-    }
-    positions
-}
-
 /// Reconstruct runtime calculation state from the native snapshot and metadata.
 /// Native storage owns imported workbook/cell metadata; the snapshot owns cells,
 /// formulas and stable identities. Both participate in an engine rebuild.
 pub(super) fn rebuild_native_engine(source: &ComputeEngine) -> ComputeEngine {
-    let snapshot = construction::build_workbook_snapshot(&source.stores, &source.mirror);
+    let snapshot = construction::build_workbook_snapshot(&source.stores, &source.cell_store);
     let (mut rebuilt, _) = ComputeEngine::from_snapshot(snapshot).expect("native snapshot");
     rebuilt.stores.storage = source.stores.storage.clone();
     rebuilt

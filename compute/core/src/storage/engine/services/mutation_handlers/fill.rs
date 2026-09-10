@@ -3,17 +3,16 @@ use std::collections::HashMap;
 use cell_types::{CellId, SheetId, SheetPos};
 use value_types::{CellValue, ComputeError};
 
-use crate::mirror::{CellEntry, CellMirror};
+use crate::cells::CellStore;
 use crate::snapshot::{CellChange, CellPosition, RecalcResult};
 use crate::storage::engine::stores::EngineStores;
-use compute_document::hex::id_to_hex;
 
 use super::AdjustedFormulaResult;
 use super::cell_mutations::mutation_set_cells_by_position_raw;
 
 fn source_formula_at(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -22,21 +21,17 @@ fn source_formula_at(
     Vec<compute_fill::formula_adjust::RefPosition>,
 ) {
     let pos = SheetPos::new(row, col);
-    let cell_id = stores
-        .grid_indexes
-        .get(sheet_id)
-        .and_then(|grid| grid.cell_id_at(row, col))
-        .or_else(|| mirror.resolve_cell_id(sheet_id, pos));
+    let cell_id = cell_store.resolve_cell_id(sheet_id, pos);
 
     let formula = cell_id
-        .and_then(|id| mirror.get_formula(&id).cloned())
+        .and_then(|id| cell_store.get_formula(&id).cloned())
         .or_else(|| {
             let formula_text =
                 cell_id.and_then(|id| stores.compute.get_formula(&id).map(str::to_owned));
             formula_text.and_then(|text| {
                 stores
                     .compute
-                    .to_identity_formula(mirror, sheet_id, &text)
+                    .to_identity_formula(cell_store, sheet_id, &text)
                     .ok()
             })
         });
@@ -47,7 +42,7 @@ fn source_formula_at(
             id_formula
                 .refs
                 .iter()
-                .map(|r| resolve_identity_ref_to_fill_position(mirror, sheet_id, r, row, col))
+                .map(|r| resolve_identity_ref_to_fill_position(cell_store, sheet_id, r, row, col))
                 .collect()
         })
         .unwrap_or_default();
@@ -56,8 +51,7 @@ fn source_formula_at(
 }
 
 fn source_formula_at_readonly(
-    stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -66,20 +60,16 @@ fn source_formula_at_readonly(
     Vec<compute_fill::formula_adjust::RefPosition>,
 ) {
     let pos = SheetPos::new(row, col);
-    let cell_id = stores
-        .grid_indexes
-        .get(sheet_id)
-        .and_then(|grid| grid.cell_id_at(row, col))
-        .or_else(|| mirror.resolve_cell_id(sheet_id, pos));
+    let cell_id = cell_store.resolve_cell_id(sheet_id, pos);
 
-    let formula = cell_id.and_then(|id| mirror.get_formula(&id).cloned());
+    let formula = cell_id.and_then(|id| cell_store.get_formula(&id).cloned());
     let ref_positions = formula
         .as_ref()
         .map(|id_formula| {
             id_formula
                 .refs
                 .iter()
-                .map(|r| resolve_identity_ref_to_fill_position(mirror, sheet_id, r, row, col))
+                .map(|r| resolve_identity_ref_to_fill_position(cell_store, sheet_id, r, row, col))
                 .collect()
         })
         .unwrap_or_default();
@@ -89,7 +79,7 @@ fn source_formula_at_readonly(
 
 fn source_format_at(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -97,24 +87,19 @@ fn source_format_at(
     use crate::storage::properties;
 
     let pos = SheetPos::new(row, col);
-    let cell_id = stores
-        .grid_indexes
-        .get(sheet_id)
-        .and_then(|grid| grid.cell_id_at(row, col))
-        .or_else(|| mirror.resolve_cell_id(sheet_id, pos));
-    let table_fmt = super::super::resolve_structured_format_at_cell(mirror, sheet_id, row, col);
+    let cell_id = cell_store.resolve_cell_id(sheet_id, pos);
+    let table_fmt = super::super::resolve_structured_format_at_cell(cell_store, sheet_id, row, col);
 
     if let Some(cell_id) = cell_id {
-        let cell_hex = id_to_hex(cell_id.as_u128());
-        properties::get_effective_format(
+        properties::get_effective_format_by_id(
             &stores.storage,
             sheet_id,
-            &cell_hex,
+            Some(&cell_id),
             row,
             col,
             table_fmt.as_ref(),
             stores.grid_indexes.get(sheet_id),
-            mirror.get_sheet(sheet_id),
+            cell_store.get_sheet(sheet_id),
         )
     } else {
         properties::get_positional_format(
@@ -123,13 +108,14 @@ fn source_format_at(
             row,
             col,
             stores.grid_indexes.get(sheet_id),
-            mirror.get_sheet(sheet_id),
+            cell_store.get_sheet(sheet_id),
         )
     }
 }
 
 fn build_fill_input(
     stores: &EngineStores,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     request: compute_fill::types::FillRequest,
     source_cells: Vec<compute_fill::types::SourceCell>,
@@ -143,11 +129,11 @@ fn build_fill_input(
     let combined_end_row = src.end_row.max(request.target_range.end_row);
     let combined_end_col = src.end_col.max(request.target_range.end_col);
 
-    let resolved_merges = match stores.grid_indexes.get(sheet_id) {
-        Some(grid) => merges::get_merges_in_range(
+    let resolved_merges = match cell_store.get_sheet(sheet_id) {
+        Some(sheet) => merges::get_merges_in_range(
             &stores.storage,
             *sheet_id,
-            grid,
+            sheet,
             combined_start_row,
             combined_start_col,
             combined_end_row,
@@ -227,7 +213,7 @@ fn fill_result_summary(
 /// The `set_cells_by_position_fn` callback applies cell edits through the standard mutation path.
 pub(in crate::storage::engine) fn mutation_auto_fill(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     request: crate::engine_types::fill::BridgeAutoFillRequest,
 ) -> Result<(RecalcResult, compute_fill::types::FillResultSummary), ComputeError> {
@@ -243,14 +229,15 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
         for col in src.start_col..=src.end_col {
             let pos = SheetPos::new(row, col);
 
-            let value = mirror
+            let value = cell_store
                 .get_cell_value_at(sheet_id, pos)
                 .cloned()
                 .unwrap_or(CellValue::Null);
 
-            let (formula, ref_positions) = source_formula_at(stores, mirror, sheet_id, row, col);
+            let (formula, ref_positions) =
+                source_formula_at(stores, cell_store, sheet_id, row, col);
 
-            let format = Some(source_format_at(stores, mirror, sheet_id, row, col));
+            let format = Some(source_format_at(stores, cell_store, sheet_id, row, col));
 
             source_cells.push(SourceCell {
                 row,
@@ -264,7 +251,7 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
     }
 
     // -- 2. Build fill input and compute --
-    let fill_input = build_fill_input(stores, sheet_id, fill_request, source_cells);
+    let fill_input = build_fill_input(stores, cell_store, sheet_id, fill_request, source_cells);
     let fill_result = compute_fill::engine::compute_fill(&fill_input);
     let summary = fill_result_summary(&fill_result);
 
@@ -285,7 +272,7 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
             } => {
                 let (new_formula, overrides) = match build_adjusted_formula(
                     stores,
-                    mirror,
+                    cell_store,
                     sheet_id,
                     source_formula,
                     adjusted_refs,
@@ -294,7 +281,7 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
                     None => continue,
                 };
                 let lookup = AdjustedPositionLookup {
-                    mirror,
+                    cell_store,
                     formula_sheet: *sheet_id,
                     overrides,
                 };
@@ -327,24 +314,23 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
     let mut recalc = if cell_edits.is_empty() {
         RecalcResult::empty()
     } else {
-        mutation_set_cells_by_position_raw(stores, &mut *mirror, cell_edits, false)?
+        mutation_set_cells_by_position_raw(stores, &mut *cell_store, cell_edits, false)?
     };
 
     let mut format_changes: Vec<CellChange> = Vec::with_capacity(format_edits.len());
     for (row, col, format) in &format_edits {
-        let Some(cell_id) = super::super::cell_editing::ensure_cell_id_mirrored(
-            stores, mirror, sheet_id, *row, *col,
-        ) else {
+        let Some(cell_id) =
+            super::super::cell_editing::ensure_cell_id(stores, cell_store, sheet_id, *row, *col)
+        else {
             continue;
         };
-        let cell_hex = id_to_hex(cell_id.as_u128());
-        crate::storage::properties::replace_cell_format(
+        crate::storage::properties::replace_cell_format_by_id(
             &mut stores.storage,
             sheet_id,
-            &cell_hex,
+            &cell_id,
             format,
         );
-        let value = mirror
+        let value = cell_store
             .get_cell_value_at(sheet_id, SheetPos::new(*row, *col))
             .cloned()
             .unwrap_or(CellValue::Null);
@@ -387,7 +373,7 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
 
 pub(in crate::storage::engine) fn auto_fill_preview(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     request: crate::engine_types::fill::BridgeAutoFillRequest,
 ) -> Result<crate::engine_types::fill::BridgeAutoFillPreviewResult, ComputeError> {
@@ -400,13 +386,13 @@ pub(in crate::storage::engine) fn auto_fill_preview(
     for row in src.start_row..=src.end_row {
         for col in src.start_col..=src.end_col {
             let pos = SheetPos::new(row, col);
-            let value = mirror
+            let value = cell_store
                 .get_cell_value_at(sheet_id, pos)
                 .cloned()
                 .unwrap_or(CellValue::Null);
             let (formula, ref_positions) =
-                source_formula_at_readonly(stores, mirror, sheet_id, row, col);
-            let format = Some(source_format_at(stores, mirror, sheet_id, row, col));
+                source_formula_at_readonly(cell_store, sheet_id, row, col);
+            let format = Some(source_format_at(stores, cell_store, sheet_id, row, col));
 
             source_cells.push(SourceCell {
                 row,
@@ -419,7 +405,7 @@ pub(in crate::storage::engine) fn auto_fill_preview(
         }
     }
 
-    let fill_input = build_fill_input(stores, sheet_id, fill_request, source_cells);
+    let fill_input = build_fill_input(stores, cell_store, sheet_id, fill_request, source_cells);
     let fill_result = compute_fill::engine::compute_fill(&fill_input);
     let summary = fill_result_summary(&fill_result);
 
@@ -437,9 +423,9 @@ pub(in crate::storage::engine) fn auto_fill_preview(
         };
 
         let source_formula_text =
-            super::fill_preview::source_formula_text(mirror, sheet_id, source_formula);
+            super::fill_preview::source_formula_text(cell_store, sheet_id, source_formula);
         let (formula, bridge_refs) = super::fill_preview::render_preview_formula(
-            mirror,
+            cell_store,
             sheet_id,
             source_formula,
             adjusted_refs,
@@ -497,7 +483,7 @@ pub(in crate::storage::engine) fn auto_fill_preview(
 /// algorithm, and writes results back to storage.
 pub fn mutation_flash_fill(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     request: crate::engine_types::fill::BridgeFlashFillRequest,
 ) -> Result<
@@ -520,7 +506,7 @@ pub fn mutation_flash_fill(
     // Read source values (single column).
     let mut source_values = Vec::with_capacity(n);
     for row in src.start_row..src.start_row + n as u32 {
-        let val = mirror
+        let val = cell_store
             .get_cell_value_at(sheet_id, SheetPos::new(row, src.start_col))
             .cloned()
             .unwrap_or(CellValue::Null);
@@ -530,7 +516,7 @@ pub fn mutation_flash_fill(
     // Read example values from target column.
     let mut example_values = Vec::with_capacity(n);
     for row in tgt.start_row..tgt.start_row + n as u32 {
-        let val = mirror
+        let val = cell_store
             .get_cell_value_at(sheet_id, SheetPos::new(row, tgt.start_col))
             .cloned()
             .unwrap_or(CellValue::Null);
@@ -579,24 +565,24 @@ pub fn mutation_flash_fill(
         return Ok((RecalcResult::empty(), summary));
     }
 
-    let recalc = mutation_set_cells_by_position_raw(stores, mirror, cell_edits, false)?;
+    let recalc = mutation_set_cells_by_position_raw(stores, cell_store, cell_edits, false)?;
 
     Ok((recalc, summary))
 }
 
 /// Resolve an `IdentityFormulaRef` to a [`compute_fill::formula_adjust::RefPosition`].
 ///
-/// Uses `CellMirror::resolve_position` (global cross-sheet lookup) instead of
+/// Uses `CellStore::resolve_position` (global cross-sheet lookup) instead of
 /// looking up on a single sheet. This correctly handles cross-sheet formula
 /// references — a formula on Sheet A that references a cell on Sheet B will
 /// resolve the CellId to its actual position on Sheet B, not default to (0, 0).
 ///
-/// When a CellId cannot be resolved at all (orphaned, mirror out of sync),
+/// When a CellId cannot be resolved at all (orphaned, cell_store out of sync),
 /// falls back to the source cell's own position. This keeps the ref fixed
 /// (same as absolute behaviour) rather than silently using (0, 0) which
 /// would produce wildly wrong adjustments.
 pub(super) fn resolve_identity_ref_to_fill_position(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     _sheet_id: &SheetId,
     r: &formula_types::IdentityFormulaRef,
     source_row: u32,
@@ -606,18 +592,18 @@ pub(super) fn resolve_identity_ref_to_fill_position(
     use formula_types::IdentityFormulaRef;
     match r {
         IdentityFormulaRef::Cell(cell_ref) => {
-            let (row, col) = mirror
+            let (row, col) = cell_store
                 .resolve_position(&cell_ref.id)
                 .map(|p| (p.row(), p.col()))
                 .unwrap_or((source_row, source_col));
             RefPosition::Cell { row, col }
         }
         IdentityFormulaRef::Range(range_ref) => {
-            let (start_row, start_col) = mirror
+            let (start_row, start_col) = cell_store
                 .resolve_position(&range_ref.start_id)
                 .map(|p| (p.row(), p.col()))
                 .unwrap_or((source_row, source_col));
-            let (end_row, end_col) = mirror
+            let (end_row, end_col) = cell_store
                 .resolve_position(&range_ref.end_id)
                 .map(|p| (p.row(), p.col()))
                 .unwrap_or((source_row, source_col));
@@ -629,19 +615,19 @@ pub(super) fn resolve_identity_ref_to_fill_position(
             }
         }
         IdentityFormulaRef::RectRange(rect_ref) => {
-            let start_row = mirror
+            let start_row = cell_store
                 .row_index_lookup(&rect_ref.start_row_id)
                 .map(|(_, row)| row)
                 .unwrap_or(source_row);
-            let start_col = mirror
+            let start_col = cell_store
                 .col_index_lookup(&rect_ref.start_col_id)
                 .map(|(_, col)| col)
                 .unwrap_or(source_col);
-            let end_row = mirror
+            let end_row = cell_store
                 .row_index_lookup(&rect_ref.end_row_id)
                 .map(|(_, row)| row)
                 .unwrap_or(start_row);
-            let end_col = mirror
+            let end_col = cell_store
                 .col_index_lookup(&rect_ref.end_col_id)
                 .map(|(_, col)| col)
                 .unwrap_or(start_col);
@@ -686,7 +672,7 @@ pub(super) fn resolve_identity_ref_to_fill_position(
 /// Build a new `IdentityFormula` with adjusted refs from fill results.
 pub(super) fn build_adjusted_formula(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     source: &formula_types::IdentityFormula,
     adjusted_refs: &[compute_fill::types::AdjustedRef],
@@ -705,27 +691,21 @@ pub(super) fn build_adjusted_formula(
                 IdentityFormulaRef::Cell(cell_ref) => {
                     // Resolve which sheet the original ref pointed to (may differ
                     // from the fill operation's sheet for cross-sheet references).
-                    let ref_sheet = mirror.sheet_for_cell(&cell_ref.id).unwrap_or(*sheet_id);
+                    let ref_sheet = cell_store.sheet_for_cell(&cell_ref.id).unwrap_or(*sheet_id);
                     let pos = SheetPos::new(adj.target_row, adj.target_col);
-                    let existing = mirror
+                    let existing = cell_store
                         .get_sheet(&ref_sheet)
                         .and_then(|sm| sm.cell_id_at(pos));
                     let cell_id = match existing {
                         Some(id) => id,
                         None => {
-                            let new_id = stores.grid_id_alloc.next_cell_id();
-                            if let Some(grid) = stores.grid_indexes.get_mut(&ref_sheet) {
-                                grid.register_cell(new_id, adj.target_row, adj.target_col);
-                            }
-                            mirror.insert_cell(
+                            let new_id = super::super::cell_editing::ensure_cell_id(
+                                stores,
+                                cell_store,
                                 &ref_sheet,
-                                new_id,
-                                pos,
-                                CellEntry {
-                                    value: CellValue::Null,
-                                    formula: None,
-                                },
-                            );
+                                adj.target_row,
+                                adj.target_col,
+                            )?;
                             overrides.insert(new_id, (ref_sheet, adj.target_row, adj.target_col));
                             new_id
                         }
@@ -738,29 +718,23 @@ pub(super) fn build_adjusted_formula(
                 }
                 IdentityFormulaRef::Range(range_ref) => {
                     // Use the start ref's sheet for the entire range.
-                    let ref_sheet = mirror
+                    let ref_sheet = cell_store
                         .sheet_for_cell(&range_ref.start_id)
                         .unwrap_or(*sheet_id);
                     let start_pos = SheetPos::new(adj.target_row, adj.target_col);
-                    let existing_start = mirror
+                    let existing_start = cell_store
                         .get_sheet(&ref_sheet)
                         .and_then(|sm| sm.cell_id_at(start_pos));
                     let start_id = match existing_start {
                         Some(id) => id,
                         None => {
-                            let new_id = stores.grid_id_alloc.next_cell_id();
-                            if let Some(grid) = stores.grid_indexes.get_mut(&ref_sheet) {
-                                grid.register_cell(new_id, adj.target_row, adj.target_col);
-                            }
-                            mirror.insert_cell(
+                            let new_id = super::super::cell_editing::ensure_cell_id(
+                                stores,
+                                cell_store,
                                 &ref_sheet,
-                                new_id,
-                                start_pos,
-                                CellEntry {
-                                    value: CellValue::Null,
-                                    formula: None,
-                                },
-                            );
+                                adj.target_row,
+                                adj.target_col,
+                            )?;
                             overrides.insert(new_id, (ref_sheet, adj.target_row, adj.target_col));
                             new_id
                         }
@@ -769,25 +743,15 @@ pub(super) fn build_adjusted_formula(
                     let end_row = adj.target_end_row.unwrap_or(adj.target_row);
                     let end_col = adj.target_end_col.unwrap_or(adj.target_col);
                     let end_pos = SheetPos::new(end_row, end_col);
-                    let existing_end = mirror
+                    let existing_end = cell_store
                         .get_sheet(&ref_sheet)
                         .and_then(|sm| sm.cell_id_at(end_pos));
                     let end_id = match existing_end {
                         Some(id) => id,
                         None => {
-                            let new_id = stores.grid_id_alloc.next_cell_id();
-                            if let Some(grid) = stores.grid_indexes.get_mut(&ref_sheet) {
-                                grid.register_cell(new_id, end_row, end_col);
-                            }
-                            mirror.insert_cell(
-                                &ref_sheet,
-                                new_id,
-                                end_pos,
-                                CellEntry {
-                                    value: CellValue::Null,
-                                    formula: None,
-                                },
-                            );
+                            let new_id = super::super::cell_editing::ensure_cell_id(
+                                stores, cell_store, &ref_sheet, end_row, end_col,
+                            )?;
                             overrides.insert(new_id, (ref_sheet, end_row, end_col));
                             new_id
                         }
@@ -811,10 +775,10 @@ pub(super) fn build_adjusted_formula(
                         Some(end_row_id),
                         Some(end_col_id),
                     ) = (
-                        mirror.row_id_lookup(&rect_ref.sheet_id, adj.target_row),
-                        mirror.col_id_lookup(&rect_ref.sheet_id, adj.target_col),
-                        mirror.row_id_lookup(&rect_ref.sheet_id, end_row),
-                        mirror.col_id_lookup(&rect_ref.sheet_id, end_col),
+                        cell_store.row_id_lookup(&rect_ref.sheet_id, adj.target_row),
+                        cell_store.col_id_lookup(&rect_ref.sheet_id, adj.target_col),
+                        cell_store.row_id_lookup(&rect_ref.sheet_id, end_row),
+                        cell_store.col_id_lookup(&rect_ref.sheet_id, end_col),
                     )
                     else {
                         new_refs.push(src_ref.clone());
@@ -854,14 +818,14 @@ pub(super) fn build_adjusted_formula(
 }
 
 // ---------------------------------------------------------------------------
-// AdjustedPositionLookup — layers override positions on top of the mirror
+// AdjustedPositionLookup — layers override positions on top of the cell store
 // ---------------------------------------------------------------------------
 
 /// Lightweight [`WorkbookLookup`] that resolves freshly-allocated CellIds
-/// (not yet registered in the mirror) via an overrides map, falling back to
-/// the mirror for all existing cells.
+/// (not yet registered in the cell store) via an overrides map, falling back to
+/// the cell store for all existing cells.
 pub(super) struct AdjustedPositionLookup<'a> {
-    pub(super) mirror: &'a CellMirror,
+    pub(super) cell_store: &'a CellStore,
     pub(super) formula_sheet: SheetId,
     pub(super) overrides: HashMap<CellId, (SheetId, u32, u32)>,
 }
@@ -871,18 +835,18 @@ impl<'a> formula_types::WorkbookLookup for AdjustedPositionLookup<'a> {
         if let Some(pos) = self.overrides.get(cell_id) {
             return Some(*pos);
         }
-        let sheet_id = self.mirror.sheet_for_cell(cell_id)?;
-        let pos = self.mirror.resolve_position(cell_id)?;
+        let sheet_id = self.cell_store.sheet_for_cell(cell_id)?;
+        let pos = self.cell_store.resolve_position(cell_id)?;
         Some((sheet_id, pos.row(), pos.col()))
     }
     fn row_index(&self, row_id: &cell_types::RowId) -> Option<(SheetId, u32)> {
-        self.mirror.row_index_lookup(row_id)
+        self.cell_store.row_index_lookup(row_id)
     }
     fn col_index(&self, col_id: &cell_types::ColId) -> Option<(SheetId, u32)> {
-        self.mirror.col_index_lookup(col_id)
+        self.cell_store.col_index_lookup(col_id)
     }
     fn sheet_name(&self, sheet_id: &SheetId) -> Option<&str> {
-        self.mirror.get_sheet(sheet_id).map(|s| s.name.as_str())
+        self.cell_store.get_sheet(sheet_id).map(|s| s.name.as_str())
     }
     fn formula_sheet(&self) -> SheetId {
         self.formula_sheet

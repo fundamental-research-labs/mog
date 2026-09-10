@@ -206,7 +206,7 @@ pub fn agg_heavy() -> Fixture {
         (0, 5, "COUNT(D1:D5)", num(2.0)),
         // COUNTA on D1..D5 → non-empty. D5 is an empty-string text cell.
         // "" is rendered as text content, so COUNTA counts it: D1="a", D2="b",
-        // D3=1, D4=2, D5="" → 5. If parse collapses "" to null in the mirror,
+        // D3=1, D4=2, D5="" → 5. If parse collapses "" to null in the cell store,
         // we'd see 4. The canonical Excel oracle is 5.
         (1, 5, "COUNTA(D1:D5)", num(5.0)),
         // Arithmetic on aggregates
@@ -625,7 +625,7 @@ pub fn xlookup_heavy() -> Fixture {
 /// Dynamic-array workbook.
 ///
 /// Engine semantics: spill sources store the full array at the formula
-/// cell; `mirror.get_cell_value()` unwraps to the top-left element. We
+/// cell; `cell_store.get_cell_value()` unwraps to the top-left element. We
 /// pin the top-left of each spill plus a handful of scalar reductions
 /// over the spilled range (e.g. `ROWS(UNIQUE(...))`) to catch both
 /// spill-anchor correctness and overall spill shape.

@@ -7,12 +7,12 @@ pub(in crate::storage::engine) fn from_xlsx_bytes(
     let (storage, workbook_snap, import_report, imported_formats) =
         parse_and_hydrate_xlsx(xlsx_data)?;
 
-    let (mirror, compute, recalc_result) = {
-        let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "mirror_compute_rebuild");
-        let mut mirror = CellMirror::new();
+    let (cell_store, compute, recalc_result) = {
+        let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "store_compute_rebuild");
+        let mut cell_store = CellStore::new();
         let mut compute = ComputeCore::new();
         let recalc_result =
-            compute.init_from_snapshot_no_recalc(&mut mirror, workbook_snap.clone())?;
+            compute.init_from_snapshot_no_recalc(&mut cell_store, workbook_snap.clone())?;
         profile.counter("sheets", workbook_snap.sheets.len() as u64);
         profile.counter(
             "snapshot_cells",
@@ -22,19 +22,19 @@ pub(in crate::storage::engine) fn from_xlsx_bytes(
                 .map(|sheet| sheet.cells.len() as u64)
                 .sum::<u64>(),
         );
-        (mirror, compute, recalc_result)
+        (cell_store, compute, recalc_result)
     };
 
-    let mut engine = assemble_engine(storage, mirror, compute, &workbook_snap)?;
+    let mut engine = assemble_engine(storage, cell_store, compute, &workbook_snap)?;
     install_imported_formats(
-        &mut engine.mirror,
+        &mut engine.cell_store,
         &engine.stores.storage.metadata.style_palette,
         &imported_formats,
     );
     engine.import_report = import_report;
     crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
         &mut engine.stores,
-        &mut engine.mirror,
+        &mut engine.cell_store,
         Some(&mut engine.import_report),
         domain_types::ImportPhase::FullHydration,
     );
@@ -54,7 +54,7 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes(
         parse_and_hydrate_xlsx(xlsx_data)?;
     let result = rebuild_engine_from_snapshot(engine, storage, workbook_snap, do_recalc)?;
     install_imported_formats(
-        &mut engine.mirror,
+        &mut engine.cell_store,
         &engine.stores.storage.metadata.style_palette,
         &imported_formats,
     );
@@ -62,7 +62,7 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes(
     engine.clear_runtime_diagnostics();
     crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
         &mut engine.stores,
-        &mut engine.mirror,
+        &mut engine.cell_store,
         Some(&mut engine.import_report),
         domain_types::ImportPhase::FullHydration,
     );

@@ -2,8 +2,7 @@
 //!
 //! Parses the token stream emitted by `bridge-core`'s `__bridge_descriptor_*!`
 //! declarative macros (see `bridge-core/src/emit.rs`) into the target-neutral
-//! [`ApiDescriptor`] IR. Every downstream target crate
-//! (`bridge-napi-macros`, `bridge-cli-macros`, ...) calls
+//! [`ApiDescriptor`] IR. Downstream target crates call
 //! `syn::parse_macro_input!(input as bridge_ir::ApiDescriptor)` to consume
 //! the DSL.
 //!
@@ -112,7 +111,7 @@ impl Parse for ApiDescriptor {
 
         // Stateless descriptors older than the `type_name = X;` line fall
         // back to "Unknown". Preserving this so pre-existing snapshots still
-        // parse — matches the bridge-napi parser's original behaviour.
+        // parse — matches the original descriptor-parser behaviour.
         let type_name =
             type_name.unwrap_or_else(|| syn::Ident::new("Unknown", proc_macro2::Span::call_site()));
 

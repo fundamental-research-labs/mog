@@ -5,27 +5,29 @@ use crate::scheduler::ComputeCore;
 use super::{ComputeEngine, construction};
 
 impl ComputeEngine {
-    /// Propagate cache invalidations recorded by the live mirror to the
+    /// Propagate cache invalidations recorded by the live cell store to the
     /// durable import sidecar.  The scheduler records an owner as soon as it
     /// publishes a result, so dependents cannot read an obsolete package
     /// value during the same recalculation pass.
     pub(super) fn sync_imported_array_cache_invalidations(&mut self) {
-        let invalidated = self.mirror.take_imported_array_cache_invalidations();
+        let invalidated = self.cell_store.take_imported_array_cache_invalidations();
         self.stores
             .storage
             .invalidate_imported_array_caches_at(invalidated);
     }
 
     pub(super) fn metadata_requires_recalc(&self) -> bool {
-        self.mirror
+        self.cell_store
             .cell_metadata_provider
             .as_ref()
-            .is_some_and(|provider| provider.revision() != self.mirror.evaluated_metadata_revision)
+            .is_some_and(|provider| {
+                provider.revision() != self.cell_store.evaluated_metadata_revision
+            })
     }
 
     pub(super) fn mark_metadata_evaluated(&mut self) {
-        self.mirror.evaluated_metadata_revision = self
-            .mirror
+        self.cell_store.evaluated_metadata_revision = self
+            .cell_store
             .cell_metadata_provider
             .as_ref()
             .map_or(0, |provider| provider.revision());
@@ -63,10 +65,10 @@ impl ComputeEngine {
             engine.materialize_all_pivots();
             crate::storage::engine::cell_metadata::refresh(
                 &engine.stores.storage,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 engine.stores.layout_metrics,
             );
-            let result = engine.stores.compute.full_recalc(&mut engine.mirror)?;
+            let result = engine.stores.compute.full_recalc(&mut engine.cell_store)?;
             engine.sync_imported_array_cache_invalidations();
             engine.init_cf_caches();
             engine.stores.compute.clear_dirty();
@@ -114,13 +116,13 @@ impl ComputeEngine {
             engine.materialize_all_pivots();
             crate::storage::engine::cell_metadata::refresh(
                 &engine.stores.storage,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 engine.stores.layout_metrics,
             );
             let result = engine
                 .stores
                 .compute
-                .full_recalc_with_options(&mut engine.mirror, options)?;
+                .full_recalc_with_options(&mut engine.cell_store, options)?;
             engine.sync_imported_array_cache_invalidations();
             engine.init_cf_caches();
             engine.stores.compute.clear_dirty();
@@ -132,21 +134,22 @@ impl ComputeEngine {
     /// Rebuild the `ComputeCore` from the engine's own internal state.
     pub fn rebuild_compute_core(&mut self) -> Result<crate::snapshot::RecalcResult, ComputeError> {
         self.without_history(|engine| {
-            let snapshot = construction::build_workbook_snapshot(&engine.stores, &engine.mirror);
-            let char_code_page = engine.mirror.char_code_page;
-            let mut rebuilt_mirror = construction::build_finalized_mirror_from_snapshot(
+            let snapshot =
+                construction::build_workbook_snapshot(&engine.stores, &engine.cell_store);
+            let char_code_page = engine.cell_store.char_code_page;
+            let mut rebuilt_store = construction::build_finalized_store_from_snapshot(
                 &engine.stores.storage,
                 &snapshot,
                 &engine.stores.grid_indexes,
                 engine.stores.layout_metrics,
             )?;
-            rebuilt_mirror.char_code_page = char_code_page;
+            rebuilt_store.char_code_page = char_code_page;
             engine.stores.compute = ComputeCore::new();
             let recalc = engine
                 .stores
                 .compute
-                .init_from_snapshot_with_prebuilt_mirror(&mut rebuilt_mirror, snapshot)?;
-            let invalidated = rebuilt_mirror.take_imported_array_cache_invalidations();
+                .init_from_snapshot_with_prebuilt_store(&mut rebuilt_store, snapshot)?;
+            let invalidated = rebuilt_store.take_imported_array_cache_invalidations();
             engine
                 .stores
                 .storage
@@ -155,7 +158,8 @@ impl ComputeEngine {
                 .stores
                 .compute
                 .set_id_alloc(engine.stores.grid_id_alloc.clone());
-            engine.mirror = rebuilt_mirror;
+            rebuilt_store.set_id_alloc(engine.stores.grid_id_alloc.clone());
+            engine.cell_store = rebuilt_store;
             engine.init_cf_caches();
             // `init_from_snapshot` already cleared the dirty bit after its
             // internal full recalc. Belt-and-braces — rebuild leaves the

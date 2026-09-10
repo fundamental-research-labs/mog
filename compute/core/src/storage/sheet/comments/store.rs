@@ -126,7 +126,7 @@ pub(crate) fn remap_for_copy(
 /// Move identity-owned comments and annotations after a range relocation.
 pub(crate) fn relocate_anchors(
     storage: &mut WorkbookStorage,
-    mirror: &crate::mirror::CellMirror,
+    cell_store: &crate::cells::CellStore,
     source: &SheetId,
     target: &SheetId,
 ) {
@@ -139,7 +139,7 @@ pub(crate) fn relocate_anchors(
                 if comment
                     .cell_ref
                     .cell()
-                    .and_then(|id| mirror.sheet_for_cell(&id))
+                    .and_then(|id| cell_store.sheet_for_cell(&id))
                     == Some(*target)
                 {
                     crate::storage::engine::history::metadata::capture_sheet_vector_entry!(storage,*source,comments,comment.id,value=>value.id);
@@ -149,7 +149,7 @@ pub(crate) fn relocate_anchors(
             for &id in meta
                 .cell_annotations
                 .keys()
-                .filter(|id| mirror.sheet_for_cell(id) == Some(*target))
+                .filter(|id| cell_store.sheet_for_cell(id) == Some(*target))
             {
                 crate::storage::engine::history::metadata::capture_cell_annotation(
                     storage, *source, id,
@@ -168,7 +168,7 @@ pub(crate) fn relocate_anchors(
             if comment
                 .cell_ref
                 .cell()
-                .and_then(|id| mirror.sheet_for_cell(&id))
+                .and_then(|id| cell_store.sheet_for_cell(&id))
                 == Some(*target)
             {
                 moved_comments.push(comment);
@@ -177,7 +177,7 @@ pub(crate) fn relocate_anchors(
             }
         }
         metadata.cell_annotations.retain(|id, record| {
-            if mirror.sheet_for_cell(id) == Some(*target) {
+            if cell_store.sheet_for_cell(id) == Some(*target) {
                 moved_annotations.push((*id, record.clone()));
                 false
             } else {

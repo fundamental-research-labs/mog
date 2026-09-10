@@ -4,8 +4,8 @@ use super::*;
 
 #[test]
 fn rank_primitives_keep_distinct_tiny_numbers_and_exact_ties() {
-    let (mirror, sheet) = test_mirror();
-    let context = make_ctx(&mirror, sheet);
+    let (cell_store, sheet) = test_store();
+    let context = make_ctx(&cell_store, sheet);
     let array = ASTNode::Array {
         rows: vec![vec![
             ASTNode::Number(0.0),
@@ -37,17 +37,17 @@ fn rank_primitives_keep_distinct_tiny_numbers_and_exact_ties() {
 
 #[test]
 fn text_uses_workbook_date_system_for_scalars_and_broadcast_arrays() {
-    let (mut mirror, sheet) = test_mirror();
+    let (mut cell_store, sheet) = test_store();
     for (date1904, first_date, second_date) in [
         (false, "1900-01-01", "1900-01-02"),
         (true, "1904-01-02", "1904-01-03"),
         (false, "1900-01-01", "1900-01-02"),
     ] {
-        mirror.date1904 = date1904;
+        cell_store.date1904 = date1904;
         // Direct evaluator calls bypass the scheduler's epoch setup. A settings
         // change starts a new calculation epoch in the production engine.
         crate::eval::cache::subexpr_cache::clear();
-        let context = make_ctx(&mirror, sheet);
+        let context = make_ctx(&cell_store, sheet);
         let code = ASTNode::Text("yyyy-mm-dd".into());
         assert_eq!(
             eval(

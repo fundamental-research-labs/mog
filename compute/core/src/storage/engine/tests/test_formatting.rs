@@ -12,7 +12,7 @@ fn stored_number_format_at(
     col: u32,
 ) -> Option<String> {
     let cell_id = crate::storage::engine::services::cell_editing::find_cell_id_at(
-        &engine.stores,
+        &engine.cell_store,
         sheet_id,
         row,
         col,
@@ -312,7 +312,7 @@ fn test_set_cell_currency_string_applies_currency_format() {
         .unwrap();
 
     let cell_value = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 3));
     match cell_value {
         Some(CellValue::Number(value)) => assert_eq!(value.get(), 19.99),
@@ -390,7 +390,7 @@ fn test_set_cell_date_formula_applies_date_format() {
         .unwrap();
 
     let cell_value = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 3));
     match cell_value {
         Some(CellValue::Number(serial)) => {
@@ -434,7 +434,7 @@ fn test_set_cell_datevalue_formula_keeps_general_serial_display() {
         .unwrap();
 
     let cell_value = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 3));
     match cell_value {
         Some(CellValue::Number(serial)) => assert_eq!(serial.get(), 60.0),
@@ -619,7 +619,7 @@ fn test_set_cell_date_formula_error_keeps_general_format() {
         .unwrap();
 
     let cell_value = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 5));
     assert!(
         matches!(cell_value, Some(CellValue::Error(_, _))),
@@ -779,7 +779,7 @@ fn test_set_cell_date_string_applies_date_format_us() {
 
     // Verify the value is a numeric serial.
     let cell_value = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 3));
     match cell_value {
         Some(value_types::CellValue::Number(_)) => {}
@@ -787,9 +787,13 @@ fn test_set_cell_date_string_applies_date_format_us() {
     }
 
     // Verify a date format was applied (M/d/yyyy in US locale).
-    let cell_id =
-        crate::storage::engine::services::cell_editing::find_cell_id_at(&engine.stores, &sid, 0, 3)
-            .expect("cell allocated");
+    let cell_id = crate::storage::engine::services::cell_editing::find_cell_id_at(
+        &engine.cell_store,
+        &sid,
+        0,
+        3,
+    )
+    .expect("cell allocated");
     let format = engine.get_cell_format(&sid, &cell_id, 0, 3);
     assert_eq!(format.number_format.as_deref(), Some("M/d/yyyy"));
 }
@@ -812,9 +816,13 @@ fn test_set_cell_iso_date_applies_iso_format() {
     )];
     engine.batch_set_cells_by_position(edits, true).unwrap();
 
-    let cell_id =
-        crate::storage::engine::services::cell_editing::find_cell_id_at(&engine.stores, &sid, 0, 4)
-            .expect("cell allocated");
+    let cell_id = crate::storage::engine::services::cell_editing::find_cell_id_at(
+        &engine.cell_store,
+        &sid,
+        0,
+        4,
+    )
+    .expect("cell allocated");
     let format = engine.get_cell_format(&sid, &cell_id, 0, 4);
     assert_eq!(format.number_format.as_deref(), Some("yyyy-mm-dd"));
 }
@@ -838,9 +846,13 @@ fn test_set_cell_non_date_string_keeps_general_format() {
     )];
     engine.batch_set_cells_by_position(edits, true).unwrap();
 
-    let cell_id =
-        crate::storage::engine::services::cell_editing::find_cell_id_at(&engine.stores, &sid, 0, 5)
-            .expect("cell allocated");
+    let cell_id = crate::storage::engine::services::cell_editing::find_cell_id_at(
+        &engine.cell_store,
+        &sid,
+        0,
+        5,
+    )
+    .expect("cell allocated");
     let format = engine.get_cell_format(&sid, &cell_id, 0, 5);
     // No date format — number_format is unset (General).
     assert!(
@@ -880,9 +892,13 @@ fn test_set_cell_existing_date_format_preserved() {
     )];
     engine.batch_set_cells_by_position(edits, true).unwrap();
 
-    let cell_id =
-        crate::storage::engine::services::cell_editing::find_cell_id_at(&engine.stores, &sid, 0, 6)
-            .expect("cell allocated");
+    let cell_id = crate::storage::engine::services::cell_editing::find_cell_id_at(
+        &engine.cell_store,
+        &sid,
+        0,
+        6,
+    )
+    .expect("cell allocated");
     let format = engine.get_cell_format(&sid, &cell_id, 0, 6);
     assert_eq!(
         format.number_format.as_deref(),
@@ -929,9 +945,13 @@ fn test_set_cell_explicit_fraction_format_preserved_against_date_inference() {
     )];
     engine.batch_set_cells_by_position(edits, true).unwrap();
 
-    let cell_id =
-        crate::storage::engine::services::cell_editing::find_cell_id_at(&engine.stores, &sid, 0, 0)
-            .expect("cell allocated");
+    let cell_id = crate::storage::engine::services::cell_editing::find_cell_id_at(
+        &engine.cell_store,
+        &sid,
+        0,
+        0,
+    )
+    .expect("cell allocated");
     let format = engine.get_cell_format(&sid, &cell_id, 0, 0);
     assert_eq!(
         format.number_format.as_deref(),
@@ -970,9 +990,13 @@ fn test_set_cell_explicit_currency_format_preserved_against_date_inference() {
     )];
     engine.batch_set_cells_by_position(edits, true).unwrap();
 
-    let cell_id =
-        crate::storage::engine::services::cell_editing::find_cell_id_at(&engine.stores, &sid, 0, 1)
-            .expect("cell allocated");
+    let cell_id = crate::storage::engine::services::cell_editing::find_cell_id_at(
+        &engine.cell_store,
+        &sid,
+        0,
+        1,
+    )
+    .expect("cell allocated");
     let format = engine.get_cell_format(&sid, &cell_id, 0, 1);
     assert_eq!(
         format.number_format.as_deref(),
@@ -981,7 +1005,7 @@ fn test_set_cell_explicit_currency_format_preserved_against_date_inference() {
     );
     // Phase-2 co-check: the value is text, not a serial.
     let cell_value = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 1));
     match cell_value {
         Some(value_types::CellValue::Text(s)) => assert_eq!(s.as_ref(), "3/15/2024"),
@@ -1022,9 +1046,13 @@ fn test_set_cell_explicit_number_format_preserved_against_date_inference() {
     )];
     engine.batch_set_cells_by_position(edits, true).unwrap();
 
-    let cell_id =
-        crate::storage::engine::services::cell_editing::find_cell_id_at(&engine.stores, &sid, 0, 2)
-            .expect("cell allocated");
+    let cell_id = crate::storage::engine::services::cell_editing::find_cell_id_at(
+        &engine.cell_store,
+        &sid,
+        0,
+        2,
+    )
+    .expect("cell allocated");
     let format = engine.get_cell_format(&sid, &cell_id, 0, 2);
     assert_eq!(
         format.number_format.as_deref(),
@@ -1032,7 +1060,7 @@ fn test_set_cell_explicit_number_format_preserved_against_date_inference() {
         "number format should not be overwritten by date inference"
     );
     let cell_value = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 2));
     match cell_value {
         Some(value_types::CellValue::Text(s)) => assert_eq!(s.as_ref(), "3/15/2024"),
@@ -1064,9 +1092,13 @@ fn test_set_cell_general_format_still_gets_inferred_date_format() {
     )];
     engine.batch_set_cells_by_position(edits, true).unwrap();
 
-    let cell_id =
-        crate::storage::engine::services::cell_editing::find_cell_id_at(&engine.stores, &sid, 0, 3)
-            .expect("cell allocated");
+    let cell_id = crate::storage::engine::services::cell_editing::find_cell_id_at(
+        &engine.cell_store,
+        &sid,
+        0,
+        3,
+    )
+    .expect("cell allocated");
     let format = engine.get_cell_format(&sid, &cell_id, 0, 3);
     assert_eq!(
         format.number_format.as_deref(),
@@ -1111,7 +1143,7 @@ fn test_text_to_columns_general_preserves_leading_zeros() {
 
     // D1 = "00123" (string, leading zero preserved on General)
     let v_d = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 3))
         .cloned()
         .unwrap_or(value_types::CellValue::Null);
@@ -1122,7 +1154,7 @@ fn test_text_to_columns_general_preserves_leading_zeros() {
 
     // E1 = "abc"
     let v_e = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 4))
         .cloned()
         .unwrap_or(value_types::CellValue::Null);
@@ -1133,7 +1165,7 @@ fn test_text_to_columns_general_preserves_leading_zeros() {
 
     // F1 = 42 (number)
     let v_f = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 5))
         .cloned()
         .unwrap_or(value_types::CellValue::Null);
@@ -1191,7 +1223,7 @@ fn test_text_to_columns_destination_numeric_format_coerces_leading_zeros() {
 
     // D1: with Number format on the destination column, "00123" coerces to 123.
     let v_d = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 3))
         .cloned()
         .unwrap_or(value_types::CellValue::Null);
@@ -1208,7 +1240,7 @@ fn test_text_to_columns_destination_numeric_format_coerces_leading_zeros() {
 
     // E1: "abc" remains text regardless of column format.
     let v_e = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 4))
         .cloned()
         .unwrap_or(value_types::CellValue::Null);
@@ -1237,9 +1269,13 @@ fn test_set_cell_plain_number_does_not_get_date_format() {
     )];
     engine.batch_set_cells_by_position(edits, true).unwrap();
 
-    let cell_id =
-        crate::storage::engine::services::cell_editing::find_cell_id_at(&engine.stores, &sid, 0, 7)
-            .expect("cell allocated");
+    let cell_id = crate::storage::engine::services::cell_editing::find_cell_id_at(
+        &engine.cell_store,
+        &sid,
+        0,
+        7,
+    )
+    .expect("cell allocated");
     let format = engine.get_cell_format(&sid, &cell_id, 0, 7);
     assert!(
         format.number_format.is_none(),
@@ -1267,7 +1303,7 @@ fn test_set_cell_percent_input_applies_percent_format() {
     engine.batch_set_cells_by_position(edits, true).unwrap();
 
     match engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 8))
     {
         Some(value_types::CellValue::Number(n)) => {

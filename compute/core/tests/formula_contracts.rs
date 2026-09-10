@@ -1,9 +1,9 @@
 //! Source-independent formula contracts.
 //!
-//! These tests complement `dev/formula-eval`: they encode small, durable
-//! product contracts without depending on XLSX cached values. Workbook cases
-//! must hydrate through `ComputeEngine::from_snapshot` so they exercise the
-//! same storage/mirror/recalc path used by production engine initialization.
+//! These tests encode small, durable product contracts without depending on
+//! XLSX cached values. Workbook cases must hydrate through
+//! `ComputeEngine::from_snapshot` so they exercise the same
+//! storage/cell_store/recalc path used by production engine initialization.
 
 use cell_types::{SheetId, SheetPos};
 use compute_core::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
@@ -669,7 +669,7 @@ fn run_case(case: FormulaContractCase) {
             .map(|(_, sheet_id)| *sheet_id)
             .unwrap_or_else(|| panic!("[{}] missing sheet {}", id, expected.sheet_name));
         let actual = engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sheet_id, SheetPos::new(expected.row, expected.col))
             .cloned()
             .unwrap_or(CellValue::Null);

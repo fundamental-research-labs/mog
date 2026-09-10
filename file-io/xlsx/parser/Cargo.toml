@@ -11,7 +11,7 @@ repository = "https://github.com/fundamental-research-labs/mog"
 [lib]
 crate-type = ["rlib"]
 
-# CLI tool for round-trip testing (native only, not WASM)
+# CLI tool for round-trip testing
 [[bin]]
 name = "xlsx-roundtrip"
 path = "src/bin/roundtrip.rs"

@@ -362,11 +362,11 @@ fn is_explicit_non_contiguous_reference(node: &ASTNode) -> bool {
 #[cfg(test)]
 mod tests {
     use super::extract_phonetic_reference;
+    use crate::cells::CellStore;
+    use crate::cells::cell_metadata::{CellMetadataProvider, CellReferenceMetadata};
     use crate::eval::context::traits::sync_block_on;
     use crate::eval::engine::evaluator::Evaluator;
-    use crate::eval_bridge::MirrorContext;
-    use crate::mirror::CellMirror;
-    use crate::mirror::cell_metadata::{CellMetadataProvider, CellReferenceMetadata};
+    use crate::eval_bridge::EvalContext;
     use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
     use cell_types::{CellId, SheetId};
     use compute_parser::{ASTNode, BinOp, CellRefNode, RangeRef};
@@ -400,7 +400,7 @@ mod tests {
     impl CellMetadataProvider for TestPhoneticProvider {
         fn rich_shared_string(
             &self,
-            _mirror: &CellMirror,
+            _cell_store: &CellStore,
             sheet: &SheetId,
             row: u32,
             col: u32,
@@ -410,7 +410,7 @@ mod tests {
 
         fn query(
             &self,
-            _mirror: &CellMirror,
+            _cell_store: &CellStore,
             _sheet: &SheetId,
             _row: u32,
             _col: u32,
@@ -430,7 +430,7 @@ mod tests {
     fn production_fixture(
         a1_value: CellValue,
         records: impl IntoIterator<Item = ((u32, u32), RichSharedString)>,
-    ) -> (CellMirror, SheetId) {
+    ) -> (CellStore, SheetId) {
         production_fixture_with_names(a1_value, records, Vec::new())
     }
 
@@ -438,7 +438,7 @@ mod tests {
         a1_value: CellValue,
         records: impl IntoIterator<Item = ((u32, u32), RichSharedString)>,
         named_ranges: Vec<NamedRangeDef>,
-    ) -> (CellMirror, SheetId) {
+    ) -> (CellStore, SheetId) {
         let snapshot = WorkbookSnapshot {
             sheets: vec![SheetSnapshot {
                 id: "00000000-0000-0000-0000-000000000001".to_string(),
@@ -482,15 +482,15 @@ mod tests {
             max_change: FiniteF64::must(0.001),
             calculation_settings: None,
         };
-        let mut mirror = CellMirror::from_snapshot(snapshot).unwrap();
-        let sheet = mirror.sheet_by_name("Sheet1").unwrap();
-        mirror.install_cell_metadata_provider(Arc::new(TestPhoneticProvider {
+        let mut cell_store = CellStore::from_snapshot(snapshot).unwrap();
+        let sheet = cell_store.sheet_by_name("Sheet1").unwrap();
+        cell_store.install_cell_metadata_provider(Arc::new(TestPhoneticProvider {
             records: records
                 .into_iter()
                 .map(|((row, col), rich)| ((sheet, row, col), rich))
                 .collect(),
         }));
-        (mirror, sheet)
+        (cell_store, sheet)
     }
 
     fn cell_reference(sheet: SheetId, row: u32, col: u32) -> ASTNode {
@@ -508,14 +508,14 @@ mod tests {
         }
     }
 
-    fn evaluate_production(node: &ASTNode, mirror: &CellMirror, sheet: SheetId) -> CellValue {
-        let context = MirrorContext::new(mirror, test_cell_id(0, 0), sheet);
+    fn evaluate_production(node: &ASTNode, cell_store: &CellStore, sheet: SheetId) -> CellValue {
+        let context = EvalContext::new(cell_store, test_cell_id(0, 0), sheet);
         sync_block_on(Evaluator::evaluate(node, &context, &context)).unwrap()
     }
 
     #[test]
     fn production_dispatch_extracts_runs_and_selects_upper_left_reference() {
-        let (mirror, sheet) = production_fixture_with_names(
+        let (cell_store, sheet) = production_fixture_with_names(
             CellValue::Text("東京".into()),
             [(
                 (0, 0),
@@ -605,50 +605,50 @@ mod tests {
         };
 
         assert_eq!(
-            evaluate_production(&phonetic(a1), &mirror, sheet),
+            evaluate_production(&phonetic(a1), &cell_store, sheet),
             CellValue::Text("トウキョウ".into())
         );
         assert_eq!(
-            evaluate_production(&phonetic(range), &mirror, sheet),
+            evaluate_production(&phonetic(range), &cell_store, sheet),
             CellValue::Text("トウキョウ".into())
         );
         assert_eq!(
-            evaluate_production(&phonetic(index), &mirror, sheet),
+            evaluate_production(&phonetic(index), &cell_store, sheet),
             CellValue::Text("トウキョウ".into())
         );
         assert_eq!(
-            evaluate_production(&phonetic(named), &mirror, sheet),
+            evaluate_production(&phonetic(named), &cell_store, sheet),
             CellValue::Text("トウキョウ".into())
         );
         assert_eq!(
-            evaluate_production(&phonetic(indirect), &mirror, sheet),
+            evaluate_production(&phonetic(indirect), &cell_store, sheet),
             CellValue::Text("トウキョウ".into())
         );
         assert_eq!(
-            evaluate_production(&phonetic(named_union), &mirror, sheet),
+            evaluate_production(&phonetic(named_union), &cell_store, sheet),
             CellValue::Error(CellError::Na, None)
         );
         assert_eq!(
-            evaluate_production(&phonetic(indirect_union), &mirror, sheet),
+            evaluate_production(&phonetic(indirect_union), &cell_store, sheet),
             CellValue::Error(CellError::Na, None)
         );
         assert_eq!(
-            evaluate_production(&phonetic(index_union), &mirror, sheet),
+            evaluate_production(&phonetic(index_union), &cell_store, sheet),
             CellValue::Error(CellError::Na, None)
         );
         assert_eq!(
-            evaluate_production(&phonetic(offset_union), &mirror, sheet),
+            evaluate_production(&phonetic(offset_union), &cell_store, sheet),
             CellValue::Error(CellError::Na, None)
         );
         assert_eq!(
-            evaluate_production(&phonetic(intersection), &mirror, sheet),
+            evaluate_production(&phonetic(intersection), &cell_store, sheet),
             CellValue::Text("大阪".into())
         );
     }
 
     #[test]
     fn production_dispatch_rejects_union_and_falls_back_for_missing_or_stale_metadata() {
-        let (mirror, sheet) = production_fixture(
+        let (cell_store, sheet) = production_fixture(
             CellValue::Text("東京".into()),
             [((0, 0), rich("東京", Vec::new()))],
         );
@@ -661,26 +661,26 @@ mod tests {
             inner: Box::new(cell_reference(sheet, 0, 0)),
         };
         assert_eq!(
-            evaluate_production(&phonetic(union), &mirror, sheet),
+            evaluate_production(&phonetic(union), &cell_store, sheet),
             CellValue::Error(CellError::Na, None)
         );
         assert_eq!(
-            evaluate_production(&phonetic(three_d), &mirror, sheet),
+            evaluate_production(&phonetic(three_d), &cell_store, sheet),
             CellValue::Error(CellError::Na, None)
         );
         assert_eq!(
-            evaluate_production(&phonetic(cell_reference(sheet, 0, 1)), &mirror, sheet),
+            evaluate_production(&phonetic(cell_reference(sheet, 0, 1)), &cell_store, sheet),
             CellValue::Text("大阪".into())
         );
 
-        let (stale_mirror, stale_sheet) = production_fixture(
+        let (stale_cell_store, stale_sheet) = production_fixture(
             CellValue::Text("大阪".into()),
             [((0, 0), rich("東京", vec![run("トウキョウ", 0, 2)]))],
         );
         assert_eq!(
             evaluate_production(
                 &phonetic(cell_reference(stale_sheet, 0, 0)),
-                &stale_mirror,
+                &stale_cell_store,
                 stale_sheet,
             ),
             CellValue::Text("大阪".into())
@@ -689,18 +689,18 @@ mod tests {
 
     #[test]
     fn production_dispatch_propagates_selected_cell_error_and_keeps_literals_value_based() {
-        let (mirror, sheet) = production_fixture(
+        let (cell_store, sheet) = production_fixture(
             CellValue::Error(CellError::Ref, None),
             [((0, 0), rich("東京", vec![run("トウキョウ", 0, 2)]))],
         );
         assert_eq!(
-            evaluate_production(&phonetic(cell_reference(sheet, 0, 0)), &mirror, sheet,),
+            evaluate_production(&phonetic(cell_reference(sheet, 0, 0)), &cell_store, sheet,),
             CellValue::Error(CellError::Ref, None)
         );
         assert_eq!(
             evaluate_production(
                 &phonetic(ASTNode::Text("Tokyo".to_string())),
-                &mirror,
+                &cell_store,
                 sheet,
             ),
             CellValue::Text("Tokyo".into())

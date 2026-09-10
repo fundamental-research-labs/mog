@@ -5,7 +5,6 @@
 mod helpers;
 mod test_advanced_filter;
 mod test_annotations;
-mod test_binary_patches;
 mod test_bootstrap_hydration;
 mod test_border_patches;
 mod test_bulk_position;
@@ -23,8 +22,9 @@ mod test_formatting;
 mod test_formula_format_inheritance;
 mod test_formula_metadata_transfer;
 mod test_imported_autofilter_metadata;
-mod test_merge_mutations;
 mod test_imported_temporal_filters;
+mod test_merge_mutations;
+mod test_mutation_display_text;
 mod test_named_range_refers_to;
 mod test_native_floating_storage;
 mod test_native_history;
@@ -93,3 +93,7 @@ mod test_index_reference_bounds;
 mod test_native_history_structure;
 
 mod test_native_history_cse;
+
+mod test_pixel_layout;
+
+mod test_partial_cell_shift_results;

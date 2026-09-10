@@ -38,7 +38,7 @@ pub(crate) fn new_runtime_metadata_id_allocator() -> cell_types::IdAllocator {
 }
 
 /// A projection revision belongs to one native storage instance. Clones receive
-/// a fresh token so a provider retained by a cloned mirror cannot mistake a
+/// a fresh token so a provider retained by a cloned store cannot mistake a
 /// different storage snapshot for the state it previously observed.
 #[derive(Debug)]
 struct MetadataRevision(AtomicU64);
@@ -79,7 +79,7 @@ pub struct WorkbookStorage {
     /// Spill members are package caches, rather than authored cells. They are
     /// deliberately omitted from the sparse snapshot/grid so they cannot act
     /// as blockers during projection registration. The cache is retained here
-    /// until a live mutation or recalculation makes the mirror authoritative.
+    /// until a live mutation or recalculation makes the cell store authoritative.
     pub(crate) imported_array_caches: std::collections::HashMap<
         cell_types::SheetId,
         Vec<crate::imported_array_cache::ImportedArrayCache>,

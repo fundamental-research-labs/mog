@@ -1,4 +1,4 @@
-use crate::identity::GridIndex;
+use crate::cells::SheetStore;
 use crate::storage::WorkbookStorage;
 use cell_types::SheetId;
 use domain_types::domain::merge::{CellMergeInfo, ResolvedMergedRegion};
@@ -6,7 +6,7 @@ use domain_types::domain::merge::{CellMergeInfo, ResolvedMergedRegion};
 pub fn get_all_merges(
     storage: &WorkbookStorage,
     sheet_id: SheetId,
-    grid: &GridIndex,
+    grid: &SheetStore,
 ) -> Vec<ResolvedMergedRegion> {
     let Some(meta) = storage.sheet_metadata.get(&sheet_id) else {
         return vec![];
@@ -23,7 +23,7 @@ pub fn get_all_merges(
 pub fn iter_merge_bounds(
     storage: &WorkbookStorage,
     sheet_id: SheetId,
-    grid: &GridIndex,
+    grid: &SheetStore,
 ) -> Vec<(u32, u32, u32, u32)> {
     get_all_merges(storage, sheet_id, grid)
         .into_iter()
@@ -41,7 +41,7 @@ pub fn iter_merge_bounds(
 pub fn get_merges_in_range(
     storage: &WorkbookStorage,
     sheet_id: SheetId,
-    grid: &GridIndex,
+    grid: &SheetStore,
     sr: u32,
     sc: u32,
     er: u32,
@@ -61,7 +61,7 @@ pub fn get_merges_in_range(
 pub fn get_merge_for_cell(
     storage: &WorkbookStorage,
     sheet_id: SheetId,
-    grid: &GridIndex,
+    grid: &SheetStore,
     row: u32,
     col: u32,
 ) -> Option<CellMergeInfo> {
@@ -77,11 +77,11 @@ pub fn get_merge_for_cell(
 pub fn is_merge_origin(
     storage: &WorkbookStorage,
     sheet_id: SheetId,
-    grid: &GridIndex,
+    grid: &SheetStore,
     row: u32,
     col: u32,
 ) -> bool {
-    let Some(id) = grid.cell_id_at(row, col) else {
+    let Some(id) = grid.cell_id_at(cell_types::SheetPos::new(row, col)) else {
         return false;
     };
     storage.sheet_metadata.get(&sheet_id).is_some_and(|meta| {

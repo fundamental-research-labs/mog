@@ -52,7 +52,7 @@ fn fixture(include_base_xfs: bool) -> Vec<u8> {
 fn stylesheet_extensions_and_referenced_dxfs_survive_engine_edit_and_reload() {
     for include_base_xfs in [true, false] {
         let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&fixture(include_base_xfs)).unwrap();
-        let sid = *engine.mirror().sheet_ids().next().unwrap();
+        let sid = *engine.cell_store().sheet_ids().next().unwrap();
         engine.set_cell_value_as_text(&sid, 0, 0, "edited").unwrap();
         for _ in 0..2 {
             let bytes = engine.export_to_xlsx_bytes().unwrap();

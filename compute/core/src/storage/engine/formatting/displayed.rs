@@ -30,21 +30,21 @@ struct PreparedRangeFormatLayers {
 
 impl PreparedRangeFormatLayers {
     fn new(
-        sheet_mirror: Option<&crate::mirror::SheetMirror>,
+        sheet_store: Option<&crate::cells::SheetStore>,
         requested_positions: &[(u32, u32)],
-        layer: crate::mirror::FormatRangeLayer,
+        layer: crate::cells::FormatRangeLayer,
     ) -> Self {
         let mut positions = requested_positions.to_vec();
         positions.sort_unstable();
         positions.dedup();
-        let Some(sheet_mirror) = sheet_mirror else {
+        let Some(sheet_store) = sheet_store else {
             return Self {
                 positions: Vec::new(),
                 format_ids: Vec::new(),
                 palette: Vec::new(),
             };
         };
-        if positions.is_empty() || sheet_mirror.format_ranges().is_empty() {
+        if positions.is_empty() || sheet_store.format_ranges().is_empty() {
             return Self {
                 positions: Vec::new(),
                 format_ids: Vec::new(),
@@ -65,12 +65,12 @@ impl PreparedRangeFormatLayers {
             start = end;
         }
 
-        let mut ranges = sheet_mirror
+        let mut ranges = sheet_store
             .format_ranges()
             .iter()
             .filter(|range| range.layer == layer)
             .filter_map(|range| {
-                sheet_mirror
+                sheet_store
                     .range_format_cache()
                     .get(&range.id)
                     .map(|format| (range, format))
@@ -178,13 +178,9 @@ impl<'a> PreparedDisplayedFormatContext<'a> {
         let mut cell_ids = positions
             .iter()
             .filter_map(|&(row, col)| {
-                grid_index
-                    .and_then(|grid| grid.cell_id_at(row, col))
-                    .or_else(|| {
-                        engine
-                            .mirror
-                            .resolve_cell_id(sheet_id, SheetPos::new(row, col))
-                    })
+                engine
+                    .cell_store
+                    .resolve_cell_id(sheet_id, SheetPos::new(row, col))
             })
             .collect::<Vec<_>>();
         cell_ids.sort_unstable_by_key(|cell_id| cell_id.as_u128());
@@ -211,30 +207,26 @@ impl<'a> PreparedDisplayedFormatContext<'a> {
             row_formats,
             col_formats,
             range_formats: PreparedRangeFormatLayers::new(
-                engine.mirror.get_sheet(sheet_id),
+                engine.cell_store.get_sheet(sheet_id),
                 positions,
-                crate::mirror::FormatRangeLayer::Inherited,
+                crate::cells::FormatRangeLayer::Inherited,
             ),
             direct_range_formats: PreparedRangeFormatLayers::new(
-                engine.mirror.get_sheet(sheet_id),
+                engine.cell_store.get_sheet(sheet_id),
                 positions,
-                crate::mirror::FormatRangeLayer::Direct,
+                crate::cells::FormatRangeLayer::Direct,
             ),
         }
     }
 
     fn resolve(&self, row: u32, col: u32) -> CellFormat {
-        let grid_index = self.engine.stores.grid_indexes.get(self.sheet_id);
-        let cell_id = grid_index
-            .and_then(|grid| grid.cell_id_at(row, col))
-            .or_else(|| {
-                self.engine
-                    .mirror
-                    .resolve_cell_id(self.sheet_id, SheetPos::new(row, col))
-            });
+        let cell_id = self
+            .engine
+            .cell_store
+            .resolve_cell_id(self.sheet_id, SheetPos::new(row, col));
         let structured_format = cell_id.and_then(|_| {
             services::resolve_structured_format_at_cell(
-                &self.engine.mirror,
+                &self.engine.cell_store,
                 self.sheet_id,
                 row,
                 col,
@@ -251,7 +243,7 @@ impl<'a> PreparedDisplayedFormatContext<'a> {
             self.direct_range_formats.get(row, col),
             structured_format.as_ref(),
             cell_format,
-            self.engine.mirror.get_sheet(self.sheet_id),
+            self.engine.cell_store.get_sheet(self.sheet_id),
             cell_id.is_none(),
         );
         finish_displayed_format(self.engine, self.sheet_id, row, col, format)
@@ -281,8 +273,12 @@ fn finish_displayed_format(
     // the value: range-resident value lookup is a spatial query and was the
     // dominant cost for large sheets even though its result was never used.
     if format_code.as_bytes().contains(&b'[')
-        && let Some(value) =
-            crate::storage::cells::values::get_effective_value(&engine.mirror, sheet_id, row, col)
+        && let Some(value) = crate::storage::cells::values::get_effective_value(
+            &engine.cell_store,
+            sheet_id,
+            row,
+            col,
+        )
     {
         let result = compute_formats::format_value(&value, format_code, &engine.settings.locale);
         if let Some(ref color) = result.color {
@@ -306,26 +302,20 @@ pub(super) fn get_displayed_cell_properties(
     col: u32,
 ) -> CellFormat {
     let pos = SheetPos::new(row, col);
-    let cell_id = engine
-        .stores
-        .grid_indexes
-        .get(sheet_id)
-        .and_then(|grid| grid.cell_id_at(row, col))
-        .or_else(|| engine.mirror.resolve_cell_id(sheet_id, pos));
+    let cell_id = engine.cell_store.resolve_cell_id(sheet_id, pos);
 
     let format = if let Some(cell_id) = cell_id {
-        let cell_hex = id_to_hex(cell_id.as_u128());
         let structured_format =
-            services::resolve_structured_format_at_cell(&engine.mirror, sheet_id, row, col);
-        properties::get_effective_format(
+            services::resolve_structured_format_at_cell(&engine.cell_store, sheet_id, row, col);
+        properties::get_effective_format_by_id(
             &engine.stores.storage,
             sheet_id,
-            &cell_hex,
+            Some(&cell_id),
             row,
             col,
             structured_format.as_ref(),
             engine.stores.grid_indexes.get(sheet_id),
-            engine.mirror.get_sheet(sheet_id),
+            engine.cell_store.get_sheet(sheet_id),
         )
     } else {
         properties::get_positional_format(
@@ -334,7 +324,7 @@ pub(super) fn get_displayed_cell_properties(
             row,
             col,
             engine.stores.grid_indexes.get(sheet_id),
-            engine.mirror.get_sheet(sheet_id),
+            engine.cell_store.get_sheet(sheet_id),
         )
     };
 

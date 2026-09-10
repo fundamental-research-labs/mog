@@ -1,8 +1,8 @@
 use super::*;
 
+use crate::cells::CellStore;
 use crate::formula_text::FormulaTextDepTarget;
 use crate::graph::RANGE_EXPANSION_THRESHOLD;
-use crate::mirror::CellMirror;
 use cell_types::SheetId;
 use compute_functions::helpers::VOLATILE_FUNCTIONS;
 use compute_parser::{ASTNode, AstVisitor, BinOp, CellRefNode, RangeRef};
@@ -22,7 +22,7 @@ use super::refs::{cell_ref_to_position, push_cell_ref_dep_targets, ref_in_sheet_
 /// in a single AST walk.
 pub(super) struct DepExtractor<'a> {
     pub(super) sheet_ctx: SheetId,
-    pub(super) mirror: &'a CellMirror,
+    pub(super) cell_store: &'a CellStore,
     pub(super) ordered_sheets: &'a [SheetId],
     pub(super) deps: Vec<DepTarget>,
     pub(super) formula_text_deps: Vec<FormulaTextDepTarget>,
@@ -37,13 +37,13 @@ pub(super) struct DepExtractor<'a> {
 impl<'a> DepExtractor<'a> {
     pub(super) fn new(
         current_sheet: &SheetId,
-        mirror: &'a CellMirror,
+        cell_store: &'a CellStore,
         ordered_sheets: &'a [SheetId],
         current_row: Option<u32>,
     ) -> Self {
         Self {
             sheet_ctx: *current_sheet,
-            mirror,
+            cell_store,
             ordered_sheets,
             deps: Vec::new(),
             formula_text_deps: Vec::new(),
@@ -70,7 +70,7 @@ impl<'a> DepExtractor<'a> {
             // Dependency extraction must be conservative when tab order is not
             // available. Evaluation gets the scheduler's ordered sheet cache,
             // but older test helpers and some direct callers do not.
-            return self.mirror.sheet_ids().copied().collect();
+            return self.cell_store.sheet_ids().copied().collect();
         }
 
         let start_pos = self.ordered_sheets.iter().position(|s| s == start);
@@ -85,9 +85,9 @@ impl<'a> DepExtractor<'a> {
     }
 
     fn push_cell_ref_dep(&mut self, cell_ref: &CellRef) {
-        let registry = Some(&self.mirror.projection_registry);
+        let registry = Some(&self.cell_store.projection_registry);
         let effective = ref_in_sheet_ctx(cell_ref, self.sheet_ctx);
-        push_cell_ref_dep_targets(&effective, self.mirror, registry, None, &mut self.deps);
+        push_cell_ref_dep_targets(&effective, self.cell_store, registry, None, &mut self.deps);
     }
 
     fn push_range_dep(
@@ -111,12 +111,15 @@ impl<'a> DepExtractor<'a> {
         if cell_count < RANGE_EXPANSION_THRESHOLD && access == RangeAccess::Aggregate {
             for row in min_row..=max_row {
                 for col in min_col..=max_col {
-                    if let Some(cell_id) =
-                        self.mirror.resolve_cell_id(&sheet, SheetPos::new(row, col))
+                    if let Some(cell_id) = self
+                        .cell_store
+                        .resolve_cell_id(&sheet, SheetPos::new(row, col))
                     {
                         self.deps.push(DepTarget::Cell(cell_id));
-                    } else if let Some((source, _, _)) =
-                        self.mirror.projection_registry.resolve(&sheet, row, col)
+                    } else if let Some((source, _, _)) = self
+                        .cell_store
+                        .projection_registry
+                        .resolve(&sheet, row, col)
                     {
                         self.deps.push(DepTarget::Cell(source));
                     }
@@ -132,12 +135,14 @@ impl<'a> DepExtractor<'a> {
     ) -> Option<(SheetId, u32, u32, u32, u32)> {
         match node {
             ASTNode::CellReference(CellRefNode { reference, .. }) => {
-                let (sheet, row, col) = cell_ref_to_position(reference, &sheet_ctx, self.mirror)?;
+                let (sheet, row, col) =
+                    cell_ref_to_position(reference, &sheet_ctx, self.cell_store)?;
                 Some((sheet, row, col, row, col))
             }
             ASTNode::Range(RangeRef { start, end, .. }) => {
-                let (s_sheet, s_row, s_col) = cell_ref_to_position(start, &sheet_ctx, self.mirror)?;
-                let (_, e_row, e_col) = cell_ref_to_position(end, &sheet_ctx, self.mirror)?;
+                let (s_sheet, s_row, s_col) =
+                    cell_ref_to_position(start, &sheet_ctx, self.cell_store)?;
+                let (_, e_row, e_col) = cell_ref_to_position(end, &sheet_ctx, self.cell_store)?;
                 Some((
                     s_sheet,
                     s_row.min(e_row),
@@ -148,7 +153,7 @@ impl<'a> DepExtractor<'a> {
             }
             ASTNode::SheetRef { sheet, inner } => self.node_static_area_in_sheet(inner, *sheet),
             ASTNode::UnresolvedSheetRef { sheet_name, inner } => {
-                let sheet = self.mirror.sheet_by_name(sheet_name)?;
+                let sheet = self.cell_store.sheet_by_name(sheet_name)?;
                 self.node_static_area_in_sheet(inner, sheet)
             }
             ASTNode::Paren(inner) => self.node_static_area_in_sheet(inner, sheet_ctx),
@@ -206,7 +211,7 @@ impl<'a> DepExtractor<'a> {
     fn collect_formulatext_dep(&mut self, node: &ASTNode) {
         let mut collector = FormulaTextDepCollector {
             sheet_ctx: &mut self.sheet_ctx,
-            mirror: self.mirror,
+            cell_store: self.cell_store,
             out: &mut self.formula_text_deps,
         };
         if matches!(collector.collect(node), FormulaTextCollectOutcome::Fallback) {
@@ -221,8 +226,8 @@ impl<'a> AstVisitor for DepExtractor<'a> {
     }
 
     fn visit_range(&mut self, r: &RangeRef) {
-        let start_pos = cell_ref_to_position(&r.start, &self.sheet_ctx, self.mirror);
-        let end_pos = cell_ref_to_position(&r.end, &self.sheet_ctx, self.mirror);
+        let start_pos = cell_ref_to_position(&r.start, &self.sheet_ctx, self.cell_store);
+        let end_pos = cell_ref_to_position(&r.end, &self.sheet_ctx, self.cell_store);
 
         match (start_pos, end_pos) {
             (Some((s_sheet, s_row, s_col)), Some((_e_sheet, e_row, e_col))) => {
@@ -302,10 +307,10 @@ impl<'a> AstVisitor for DepExtractor<'a> {
     }
 
     fn visit_unresolved_three_d_ref(&mut self, start_name: &str, end_name: &str, inner: &ASTNode) {
-        let Some(start) = self.mirror.sheet_by_name(start_name) else {
+        let Some(start) = self.cell_store.sheet_by_name(start_name) else {
             return;
         };
-        let Some(end) = self.mirror.sheet_by_name(end_name) else {
+        let Some(end) = self.cell_store.sheet_by_name(end_name) else {
             return;
         };
         self.visit_three_d_ref(&start, &end, inner);
@@ -367,9 +372,9 @@ impl<'a> AstVisitor for DepExtractor<'a> {
     }
 
     fn visit_structured_ref(&mut self, ref_: &formula_types::StructuredRef) {
-        // Look up the table definition from the mirror to resolve structured
+        // Look up the table definition from the cell store to resolve structured
         // references (e.g., Table1[Revenue]) into concrete dependency edges.
-        if let Some(table_def) = self.mirror.get_table_def(&ref_.table_name) {
+        if let Some(table_def) = self.cell_store.get_table_def(&ref_.table_name) {
             let ranges = crate::table::structured_refs::resolve_ranges_from_table_def(
                 ref_,
                 table_def,
@@ -413,12 +418,14 @@ impl<'a> AstVisitor for DepExtractor<'a> {
                             for row in range.start_row..=range.end_row {
                                 for &col in &range.columns {
                                     if let Some(cell_id) = self
-                                        .mirror
+                                        .cell_store
                                         .resolve_cell_id(&sheet_id, SheetPos::new(row, col))
                                     {
                                         self.deps.push(DepTarget::Cell(cell_id));
-                                    } else if let Some((source, _, _)) =
-                                        self.mirror.projection_registry.resolve(&sheet_id, row, col)
+                                    } else if let Some((source, _, _)) = self
+                                        .cell_store
+                                        .projection_registry
+                                        .resolve(&sheet_id, row, col)
                                     {
                                         // Phantom cell (spill target) — add dep on projection source.
                                         self.deps.push(DepTarget::Cell(source));
@@ -460,7 +467,7 @@ impl DepExtractor<'_> {
         // the actual cell/range refs from the named range definition.
         use formula_types::IdentityFormulaRef;
 
-        if let Some((var_cell_id, def)) = self.mirror.variables.resolve_with_id(name, chain) {
+        if let Some((var_cell_id, def)) = self.cell_store.variables.resolve_with_id(name, chain) {
             // Keep synthetic variable dep (for LET chain cycle detection)
             self.deps.push(DepTarget::Cell(var_cell_id));
 
@@ -478,12 +485,12 @@ impl DepExtractor<'_> {
                         let start = cell_ref_to_position(
                             &CellRef::Resolved(range_ref.start_id),
                             &self.sheet_ctx,
-                            self.mirror,
+                            self.cell_store,
                         );
                         let end = cell_ref_to_position(
                             &CellRef::Resolved(range_ref.end_id),
                             &self.sheet_ctx,
-                            self.mirror,
+                            self.cell_store,
                         );
                         if let (Some((s_sheet, s_row, s_col)), Some((_, e_row, e_col))) =
                             (start, end)
@@ -513,14 +520,14 @@ impl DepExtractor<'_> {
                     }
                     IdentityFormulaRef::RectRange(rect_ref) => {
                         let (Some((start_row_sheet, start_row)), Some((end_row_sheet, end_row))) = (
-                            self.mirror.row_index_lookup(&rect_ref.start_row_id),
-                            self.mirror.row_index_lookup(&rect_ref.end_row_id),
+                            self.cell_store.row_index_lookup(&rect_ref.start_row_id),
+                            self.cell_store.row_index_lookup(&rect_ref.end_row_id),
                         ) else {
                             continue;
                         };
                         let (Some((start_col_sheet, start_col)), Some((end_col_sheet, end_col))) = (
-                            self.mirror.col_index_lookup(&rect_ref.start_col_id),
-                            self.mirror.col_index_lookup(&rect_ref.end_col_id),
+                            self.cell_store.col_index_lookup(&rect_ref.start_col_id),
+                            self.cell_store.col_index_lookup(&rect_ref.end_col_id),
                         ) else {
                             continue;
                         };
@@ -543,7 +550,7 @@ impl DepExtractor<'_> {
                         }
                     }
                     // FullRow/RowRange/FullCol/ColRange use RowId/ColId which
-                    // CellMirror cannot resolve yet — skip gracefully.
+                    // CellStore cannot resolve yet — skip gracefully.
                     // External refs are indexed separately by the workbook
                     // dependency coordinator, not as local DepTarget edges.
                     _ => {}

@@ -11,7 +11,7 @@ use super::WorkbookStorage;
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct CellMetadata {
     pub array_ref: Option<String>,
-    pub formula_result_mode: Option<crate::mirror::cell_metadata::FormulaResultMode>,
+    pub formula_result_mode: Option<crate::cells::cell_metadata::FormulaResultMode>,
     pub formula: Option<FormulaMetadata>,
     pub rich_string: Option<domain_types::RichSharedString>,
 }
@@ -83,7 +83,7 @@ impl CellMetadata {
         Self {
             array_ref: cell.array_ref.clone(),
             formula_result_mode: cell.formula.as_ref().map(|_| {
-                use crate::mirror::cell_metadata::FormulaResultMode;
+                use crate::cells::cell_metadata::FormulaResultMode;
                 if cell.projection_role
                     == domain_types::ImportedCellProjectionRole::DynamicArraySource
                 {
@@ -154,7 +154,7 @@ impl WorkbookStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mirror::cell_metadata::FormulaResultMode;
+    use crate::cells::cell_metadata::FormulaResultMode;
     use domain_types::{CellData, ImportedCellProjectionRole};
 
     #[test]

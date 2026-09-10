@@ -4,7 +4,7 @@ mod stress_common;
 use stress_common::*;
 
 use cell_types::{CellId, SheetId};
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, CellEdit, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use formula_types::{NamedRangeDef, Scope};
@@ -18,7 +18,7 @@ use value_types::{CellError, CellValue};
 #[test]
 fn test_100_formula_replacements_same_cell() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -27,16 +27,16 @@ fn test_100_formula_replacements_same_cell() {
             (0, 1, CellValue::number(10.0), None), // B1=10
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     for i in 0u32..100 {
         let formula = format!("=B1+{}", i);
-        let _r = set(&mut core, &mut mirror, 0, 0, 0, &formula);
-        assert_mirror_number(&mirror, 0, 0, 0, 10.0 + i as f64);
+        let _r = set(&mut core, &mut cell_store, 0, 0, 0, &formula);
+        assert_store_number(&cell_store, 0, 0, 0, 10.0 + i as f64);
     }
 
     // Final state: A1 = 10 + 99 = 109
-    assert_mirror_number(&mirror, 0, 0, 0, 109.0);
+    assert_store_number(&cell_store, 0, 0, 0, 109.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -50,7 +50,7 @@ fn test_100_formula_replacements_same_cell() {
 #[test]
 fn test_alternating_formula_value_clear() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -60,24 +60,24 @@ fn test_alternating_formula_value_clear() {
             (0, 2, CellValue::number(20.0), None), // C1=20
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     for _ in 0..50 {
         // A1="=B1+1" → 11
-        let _r = set(&mut core, &mut mirror, 0, 0, 0, "=B1+1");
-        assert_mirror_number(&mirror, 0, 0, 0, 11.0);
+        let _r = set(&mut core, &mut cell_store, 0, 0, 0, "=B1+1");
+        assert_store_number(&cell_store, 0, 0, 0, 11.0);
 
         // A1="42" → 42
-        let _r = set(&mut core, &mut mirror, 0, 0, 0, "42");
-        assert_mirror_number(&mirror, 0, 0, 0, 42.0);
+        let _r = set(&mut core, &mut cell_store, 0, 0, 0, "42");
+        assert_store_number(&cell_store, 0, 0, 0, 42.0);
 
         // A1="=C1+1" → 21
-        let _r = set(&mut core, &mut mirror, 0, 0, 0, "=C1+1");
-        assert_mirror_number(&mirror, 0, 0, 0, 21.0);
+        let _r = set(&mut core, &mut cell_store, 0, 0, 0, "=C1+1");
+        assert_store_number(&cell_store, 0, 0, 0, 21.0);
 
         // Clear A1 → Null
-        let _r = core.clear_cells(&mut mirror, &[cid(0, 0, 0)]).unwrap();
-        assert_mirror_null(&mirror, 0, 0, 0);
+        let _r = core.clear_cells(&mut cell_store, &[cid(0, 0, 0)]).unwrap();
+        assert_store_null(&cell_store, 0, 0, 0);
     }
 }
 
@@ -88,7 +88,7 @@ fn test_alternating_formula_value_clear() {
 #[test]
 fn test_parse_error_precedent_cycling() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -97,16 +97,16 @@ fn test_parse_error_precedent_cycling() {
             (0, 1, CellValue::number(10.0), None), // B1=10
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     for _ in 0..20 {
         // Parse error formula
-        let _r = set(&mut core, &mut mirror, 0, 0, 0, "=@@@");
-        assert_mirror_is_any_error(&mirror, 0, 0, 0);
+        let _r = set(&mut core, &mut cell_store, 0, 0, 0, "=@@@");
+        assert_store_is_any_error(&cell_store, 0, 0, 0);
 
         // Valid formula
-        let _r = set(&mut core, &mut mirror, 0, 0, 0, "=B1+1");
-        assert_mirror_number(&mirror, 0, 0, 0, 11.0);
+        let _r = set(&mut core, &mut cell_store, 0, 0, 0, "=B1+1");
+        assert_store_number(&cell_store, 0, 0, 0, 11.0);
     }
 }
 
@@ -118,9 +118,9 @@ fn test_parse_error_precedent_cycling() {
 #[test]
 fn test_batch_create_break_cycle_repeatedly() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![("Sheet1", 100, 26, vec![])]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     let s = sid(0);
 
@@ -152,7 +152,7 @@ fn test_batch_create_break_cycle_repeatedly() {
                 },
             ),
         ];
-        let r = core.set_cells(&mut mirror, &edits_cycle, true).unwrap();
+        let r = core.set_cells(&mut cell_store, &edits_cycle, true).unwrap();
         assert!(r.metrics.has_circular_refs, "Should detect circular refs");
 
         // Break cycle with plain values
@@ -182,9 +182,11 @@ fn test_batch_create_break_cycle_repeatedly() {
                 },
             ),
         ];
-        let _r = core.set_cells(&mut mirror, &edits_break, false).unwrap();
-        assert_mirror_number(&mirror, 0, 0, 0, 1.0);
-        assert_mirror_number(&mirror, 0, 0, 1, 2.0);
+        let _r = core
+            .set_cells(&mut cell_store, &edits_break, false)
+            .unwrap();
+        assert_store_number(&cell_store, 0, 0, 0, 1.0);
+        assert_store_number(&cell_store, 0, 0, 1, 2.0);
     }
 }
 
@@ -196,7 +198,7 @@ fn test_batch_create_break_cycle_repeatedly() {
 #[test]
 fn test_fan_out_100_dependents() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
 
     // Build snapshot with A1=100 and B1..B100 = "=A1*i"
     let mut cell_data: Vec<CellData> = Vec::new();
@@ -247,23 +249,23 @@ fn test_fan_out_100_dependents() {
         max_change: value_types::FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Assert B_i = 100*i for i=1..100
     for i in 1u32..=100 {
-        assert_mirror_number(&mirror, 0, i - 1, 1, 100.0 * i as f64);
+        assert_store_number(&cell_store, 0, i - 1, 1, 100.0 * i as f64);
     }
 
     // Clear A1 → Null coerces to 0, so B_i = 0*i = 0
-    let _r = core.clear_cells(&mut mirror, &[cid(0, 0, 0)]).unwrap();
-    assert_mirror_number(&mirror, 0, 0, 1, 0.0); // B1
-    assert_mirror_number(&mirror, 0, 49, 1, 0.0); // B50
-    assert_mirror_number(&mirror, 0, 99, 1, 0.0); // B100
+    let _r = core.clear_cells(&mut cell_store, &[cid(0, 0, 0)]).unwrap();
+    assert_store_number(&cell_store, 0, 0, 1, 0.0); // B1
+    assert_store_number(&cell_store, 0, 49, 1, 0.0); // B50
+    assert_store_number(&cell_store, 0, 99, 1, 0.0); // B100
 
     // Set A1=200 → B_i = 200*i
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, "200");
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, "200");
     for i in 1u32..=100 {
-        assert_mirror_number(&mirror, 0, i - 1, 1, 200.0 * i as f64);
+        assert_store_number(&cell_store, 0, i - 1, 1, 200.0 * i as f64);
     }
 }
 
@@ -275,7 +277,7 @@ fn test_fan_out_100_dependents() {
 #[test]
 fn test_fan_in_25_cells_to_sum() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
 
     // A1=1 (col=0) .. Y1=25 (col=24), Z1=SUM(A1:Y1) (col=25)
     let mut cells: Vec<(u32, u32, CellValue, Option<&str>)> = Vec::new();
@@ -285,18 +287,18 @@ fn test_fan_in_25_cells_to_sum() {
     cells.push((0, 25, CellValue::number(0.0), Some("SUM(A1:Y1)")));
 
     let snapshot = build_snapshot(vec![("Sheet1", 100, 27, cells)]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Z1 = SUM(1..25) = 325
-    assert_mirror_number(&mirror, 0, 0, 25, 325.0);
+    assert_store_number(&cell_store, 0, 0, 25, 325.0);
 
     // Edit A1=100: Z1 = 325 - 1 + 100 = 424
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, "100");
-    assert_mirror_number(&mirror, 0, 0, 25, 424.0);
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, "100");
+    assert_store_number(&cell_store, 0, 0, 25, 424.0);
 
     // Edit B1=200: Z1 = 424 - 2 + 200 = 622
-    let _r = set(&mut core, &mut mirror, 0, 0, 1, "200");
-    assert_mirror_number(&mirror, 0, 0, 25, 622.0);
+    let _r = set(&mut core, &mut cell_store, 0, 0, 1, "200");
+    assert_store_number(&cell_store, 0, 0, 25, 622.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +311,7 @@ fn test_fan_in_25_cells_to_sum() {
 #[test]
 fn test_diamond_dependency_with_cycle() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_iterative_snapshot(
         vec![(
             "Sheet1",
@@ -326,24 +328,24 @@ fn test_diamond_dependency_with_cycle() {
         200,
         0.001,
     );
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
     assert!(result.metrics.has_circular_refs);
 
     // A1=10, B1=11, C1=12
-    assert_mirror_number(&mirror, 0, 0, 0, 10.0);
-    assert_mirror_number(&mirror, 0, 0, 1, 11.0);
-    assert_mirror_number(&mirror, 0, 0, 2, 12.0);
+    assert_store_number(&cell_store, 0, 0, 0, 10.0);
+    assert_store_number(&cell_store, 0, 0, 1, 11.0);
+    assert_store_number(&cell_store, 0, 0, 2, 12.0);
 
     // D1=46, E1=23
-    assert_mirror_number_tol(&mirror, 0, 0, 3, 46.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 4, 23.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 3, 46.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 4, 23.0, 0.01);
 
     // set A1=20: B1=21, C1=22, D1=86, E1=43
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, "20");
-    assert_mirror_number(&mirror, 0, 0, 1, 21.0);
-    assert_mirror_number(&mirror, 0, 0, 2, 22.0);
-    assert_mirror_number_tol(&mirror, 0, 0, 3, 86.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 4, 43.0, 0.01);
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, "20");
+    assert_store_number(&cell_store, 0, 0, 1, 21.0);
+    assert_store_number(&cell_store, 0, 0, 2, 22.0);
+    assert_store_number_tol(&cell_store, 0, 0, 3, 86.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 4, 43.0, 0.01);
 }
 
 // ---------------------------------------------------------------------------
@@ -354,7 +356,7 @@ fn test_diamond_dependency_with_cycle() {
 #[test]
 fn test_named_range_in_convergent_cycle() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let mut snapshot = build_iterative_snapshot(
         vec![(
             "Sheet1",
@@ -380,13 +382,13 @@ fn test_named_range_in_convergent_cycle() {
         0,
         1,
     ));
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
     assert!(result.metrics.has_circular_refs);
 
     // A1=20, C1=10
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 20.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 2, 10.0, 0.01);
-    assert_mirror_number(&mirror, 0, 0, 1, 10.0); // B1 unchanged
+    assert_store_number_tol(&cell_store, 0, 0, 0, 20.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 2, 10.0, 0.01);
+    assert_store_number(&cell_store, 0, 0, 1, 10.0); // B1 unchanged
 }
 
 // ---------------------------------------------------------------------------
@@ -398,7 +400,7 @@ fn test_named_range_in_convergent_cycle() {
 #[test]
 fn test_delete_sheet_feeding_cycle() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_iterative_snapshot(
         vec![
             (
@@ -422,19 +424,19 @@ fn test_delete_sheet_feeding_cycle() {
         200,
         0.001,
     );
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
     assert!(result.metrics.has_circular_refs);
 
     // FP: B1=200, C1=100
-    assert_mirror_number_tol(&mirror, 1, 0, 1, 200.0, 0.01);
-    assert_mirror_number_tol(&mirror, 1, 0, 2, 100.0, 0.01);
+    assert_store_number_tol(&cell_store, 1, 0, 1, 200.0, 0.01);
+    assert_store_number_tol(&cell_store, 1, 0, 2, 100.0, 0.01);
 
     // Delete Sheet1
     let sheet1_id = sid(0);
-    let _r = core.remove_sheet(&mut mirror, &sheet1_id).unwrap();
+    let _r = core.remove_sheet(&mut cell_store, &sheet1_id).unwrap();
 
     // Sheet2!B1 should be #REF! (reference to deleted sheet)
-    assert_mirror_error(&mirror, 1, 0, 1, CellError::Ref);
+    assert_store_error(&cell_store, 1, 0, 1, CellError::Ref);
 }
 
 // ---------------------------------------------------------------------------
@@ -447,7 +449,7 @@ fn test_delete_sheet_feeding_cycle() {
 #[test]
 fn test_rename_sheet_preserves_cycle() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_iterative_snapshot(
         vec![
             (
@@ -471,27 +473,27 @@ fn test_rename_sheet_preserves_cycle() {
         200,
         0.001,
     );
-    let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let result = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
     assert!(result.metrics.has_circular_refs);
 
     // FP: A1≈200, C1≈100
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 200.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 2, 100.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 0, 200.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 2, 100.0, 0.01);
 
     // Rename Sheet2 → "Data"
     let sheet2_id = sid(1);
-    core.rename_sheet(&mut mirror, &sheet2_id, "Data");
+    core.rename_sheet(&mut cell_store, &sheet2_id, "Data");
 
     // Values should be preserved (formulas use SheetIds internally)
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 200.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 2, 100.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 0, 200.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 2, 100.0, 0.01);
 
     // set "Data"!B1 = 200 (same sheet ID as old Sheet2, si=1)
-    let _r = set(&mut core, &mut mirror, 1, 0, 1, "200");
+    let _r = set(&mut core, &mut cell_store, 1, 0, 1, "200");
 
     // New FP: A1=200+C1, C1=A1/2 → A1=400, C1=200
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 400.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 2, 200.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 0, 400.0, 0.01);
+    assert_store_number_tol(&cell_store, 0, 0, 2, 200.0, 0.01);
 }
 
 // ---------------------------------------------------------------------------
@@ -506,7 +508,7 @@ fn test_rename_sheet_preserves_cycle() {
 #[test]
 fn test_agg_prepass_postop_boundary() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
 
     let mut cell_data: Vec<CellData> = Vec::new();
     // A1:A100 = 1..100 (row 0..99, col 0)
@@ -576,20 +578,20 @@ fn test_agg_prepass_postop_boundary() {
         max_change: value_types::FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // sum(51..100) = 3775
-    assert_mirror_number(&mirror, 0, 0, 1, 3775.0);
-    assert_mirror_number(&mirror, 0, 1, 1, 1887.5);
-    assert_mirror_number(&mirror, 0, 2, 1, 3785.0);
+    assert_store_number(&cell_store, 0, 0, 1, 3775.0);
+    assert_store_number(&cell_store, 0, 1, 1, 1887.5);
+    assert_store_number(&cell_store, 0, 2, 1, 3785.0);
 
     // set A75 (row=74, col=0) = 1000
-    let _r = set(&mut core, &mut mirror, 0, 74, 0, "1000");
+    let _r = set(&mut core, &mut cell_store, 0, 74, 0, "1000");
 
     // New sum = 3775 - 75 + 1000 = 4700
-    assert_mirror_number(&mirror, 0, 0, 1, 4700.0);
-    assert_mirror_number(&mirror, 0, 1, 1, 2350.0);
-    assert_mirror_number(&mirror, 0, 2, 1, 4710.0);
+    assert_store_number(&cell_store, 0, 0, 1, 4700.0);
+    assert_store_number(&cell_store, 0, 1, 1, 2350.0);
+    assert_store_number(&cell_store, 0, 2, 1, 4710.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -600,7 +602,7 @@ fn test_agg_prepass_postop_boundary() {
 #[test]
 fn test_spill_shrink_cache_invalidation() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         100,
@@ -610,27 +612,27 @@ fn test_spill_shrink_cache_invalidation() {
             (0, 1, CellValue::number(0.0), Some("SUM(A1:A10)")),
         ],
     )]);
-    let _r = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let _r = core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     // Initial: B1 = 55
-    assert_mirror_number(&mirror, 0, 0, 1, 55.0);
+    assert_store_number(&cell_store, 0, 0, 1, 55.0);
 
     // Shrink spill
-    let _r = set(&mut core, &mut mirror, 0, 0, 0, "=SEQUENCE(5)");
+    let _r = set(&mut core, &mut cell_store, 0, 0, 0, "=SEQUENCE(5)");
 
     // A1 = 1 (origin cell), A2:A5 = 2..5 (spill targets — position-based lookup)
-    assert_mirror_number(&mirror, 0, 0, 0, 1.0);
+    assert_store_number(&cell_store, 0, 0, 0, 1.0);
     for i in 1u32..5 {
-        assert_pos_number(&mirror, 0, i, 0, (i + 1) as f64);
+        assert_pos_number(&cell_store, 0, i, 0, (i + 1) as f64);
     }
 
     // A6:A10 must be Null (cleared spill targets — position-based lookup)
-    assert_pos_null(&mirror, 0, 5, 0);
-    assert_pos_null(&mirror, 0, 6, 0);
-    assert_pos_null(&mirror, 0, 7, 0);
-    assert_pos_null(&mirror, 0, 8, 0);
-    assert_pos_null(&mirror, 0, 9, 0);
+    assert_pos_null(&cell_store, 0, 5, 0);
+    assert_pos_null(&cell_store, 0, 6, 0);
+    assert_pos_null(&cell_store, 0, 7, 0);
+    assert_pos_null(&cell_store, 0, 8, 0);
+    assert_pos_null(&cell_store, 0, 9, 0);
 
     // B1 must be 15, NOT 55
-    assert_mirror_number(&mirror, 0, 0, 1, 15.0);
+    assert_store_number(&cell_store, 0, 0, 1, 15.0);
 }

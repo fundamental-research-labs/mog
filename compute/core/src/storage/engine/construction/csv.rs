@@ -135,11 +135,12 @@ pub(in crate::storage::engine) fn from_csv_bytes(
     let (storage, workbook_snap, import_report, _imported_formats) =
         parse_and_hydrate_csv(csv_data, options)?;
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut compute = ComputeCore::new();
-    let recalc_result = compute.init_from_snapshot_no_recalc(&mut mirror, workbook_snap.clone())?;
+    let recalc_result =
+        compute.init_from_snapshot_no_recalc(&mut cell_store, workbook_snap.clone())?;
 
-    let mut engine = assemble_engine(storage, mirror, compute, &workbook_snap)?;
+    let mut engine = assemble_engine(storage, cell_store, compute, &workbook_snap)?;
     engine.import_report = import_report;
 
     Ok((engine, recalc_result))

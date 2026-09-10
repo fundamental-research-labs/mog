@@ -1,18 +1,18 @@
-use compute_core::mirror::CellMirror;
-use compute_core::mirror::dense::{DenseBoolMask, DenseColumn};
+use compute_core::cells::CellStore;
+use compute_core::cells::dense::{DenseBoolMask, DenseColumn};
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{RecalcResult, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
 use crate::fixtures::cell_uuid;
 
-pub(crate) fn init_engine(snapshot: WorkbookSnapshot) -> (ComputeCore, CellMirror, RecalcResult) {
-    let mut mirror = CellMirror::new();
+pub(crate) fn init_engine(snapshot: WorkbookSnapshot) -> (ComputeCore, CellStore, RecalcResult) {
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init_from_snapshot failed");
-    (core, mirror, result)
+    (core, cell_store, result)
 }
 
 pub(crate) fn find_changed_value(result: &RecalcResult, row: u32, col: u32) -> Option<CellValue> {
@@ -49,9 +49,9 @@ pub(crate) fn assert_num(result: &RecalcResult, row: u32, col: u32, expected: f6
     }
 }
 
-pub(crate) fn col_data_value(mirror: &CellMirror, col: u32, row: u32) -> CellValue {
-    let sid = mirror.sheet_by_name("sheet1").expect("sheet not found");
-    let sheet = mirror.get_sheet(&sid).expect("sheet mirror not found");
+pub(crate) fn col_data_value(cell_store: &CellStore, col: u32, row: u32) -> CellValue {
+    let sid = cell_store.sheet_by_name("sheet1").expect("sheet not found");
+    let sheet = cell_store.get_sheet(&sid).expect("sheet store not found");
     sheet
         .get_column_view(col)
         .and_then(|s| s.get(row as usize))
@@ -59,19 +59,19 @@ pub(crate) fn col_data_value(mirror: &CellMirror, col: u32, row: u32) -> CellVal
         .unwrap_or(CellValue::Null)
 }
 
-pub(crate) fn col_version(mirror: &CellMirror, col: u32) -> u64 {
-    let sid = mirror.sheet_by_name("sheet1").expect("sheet not found");
-    mirror.col_version(&sid, col)
+pub(crate) fn col_version(cell_store: &CellStore, col: u32) -> u64 {
+    let sid = cell_store.sheet_by_name("sheet1").expect("sheet not found");
+    cell_store.col_version(&sid, col)
 }
 
-pub(crate) fn dense_cache_has(mirror: &CellMirror, col: u32) -> bool {
-    let sid = mirror.sheet_by_name("sheet1").expect("sheet not found");
-    mirror.dense_cache().get(&sid, col).is_some()
+pub(crate) fn dense_cache_has(cell_store: &CellStore, col: u32) -> bool {
+    let sid = cell_store.sheet_by_name("sheet1").expect("sheet not found");
+    cell_store.dense_cache().get(&sid, col).is_some()
 }
 
-pub(crate) fn warm_dense_cache(mirror: &mut CellMirror, col: u32) {
-    let sid = mirror.sheet_by_name("sheet1").expect("sheet not found");
-    let sheet = mirror.get_sheet(&sid).expect("sheet not found");
+pub(crate) fn warm_dense_cache(cell_store: &mut CellStore, col: u32) {
+    let sid = cell_store.sheet_by_name("sheet1").expect("sheet not found");
+    let sheet = cell_store.get_sheet(&sid).expect("sheet not found");
     let num_rows = sheet.rows as usize;
 
     let mut values = vec![f64::NAN; num_rows];
@@ -88,7 +88,9 @@ pub(crate) fn warm_dense_cache(mirror: &mut CellMirror, col: u32) {
     let dense = DenseColumn::new(values, numeric_count, 0, vec![]);
     let num_words = num_rows.div_ceil(64);
     let mask = DenseBoolMask::new(vec![0u64; num_words], 0, num_rows as u32);
-    mirror.dense_cache_mut().store_dense(sid, col, dense, mask);
+    cell_store
+        .dense_cache_mut()
+        .store_dense(sid, col, dense, mask);
 }
 
 pub(crate) fn assert_col_version_bumped(scenario: &str, col: u32, before: u64, after: u64) {
@@ -107,28 +109,28 @@ pub(crate) fn assert_col_version_unchanged(scenario: &str, col: u32, before: u64
 
 pub(crate) fn assert_col_value(
     scenario: &str,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     row: u32,
     col: u32,
     expected: CellValue,
 ) {
-    let observed = col_data_value(mirror, col, row);
+    let observed = col_data_value(cell_store, col, row);
     assert_eq!(
         observed, expected,
         "{scenario}: col_data at (row={row}, col={col}) mismatch; observed={observed:?}"
     );
 }
 
-pub(crate) fn assert_dense_invalidated(scenario: &str, mirror: &CellMirror, col: u32) {
+pub(crate) fn assert_dense_invalidated(scenario: &str, cell_store: &CellStore, col: u32) {
     assert!(
-        !dense_cache_has(mirror, col),
+        !dense_cache_has(cell_store, col),
         "{scenario}: DenseColumnCache for col {col} should be invalidated"
     );
 }
 
-pub(crate) fn assert_dense_retained(scenario: &str, mirror: &CellMirror, col: u32) {
+pub(crate) fn assert_dense_retained(scenario: &str, cell_store: &CellStore, col: u32) {
     assert!(
-        dense_cache_has(mirror, col),
+        dense_cache_has(cell_store, col),
         "{scenario}: DenseColumnCache for col {col} should be retained"
     );
 }
@@ -177,13 +179,13 @@ pub(crate) fn assert_changed_error_or_absent_not_old_number(
 
 pub(crate) fn assert_dense_value(
     scenario: &str,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     col: u32,
     row: usize,
     expected: f64,
 ) {
-    let sid = mirror.sheet_by_name("sheet1").expect("sheet not found");
-    let dense = mirror
+    let sid = cell_store.sheet_by_name("sheet1").expect("sheet not found");
+    let dense = cell_store
         .dense_cache()
         .get(&sid, col)
         .unwrap_or_else(|| panic!("{scenario}: DenseColumnCache for col {col} should be present"));

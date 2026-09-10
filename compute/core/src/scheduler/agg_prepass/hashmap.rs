@@ -10,7 +10,7 @@ use value_types::ColumnView;
 
 /// Pre-populate the thread-local SUMIFS result cache for a set of patterns.
 ///
-/// For each pattern, reads the criteria and sum column slices from the mirror
+/// For each pattern, reads the criteria and sum column slices from the cell store
 /// and calls `sumifs_result_cache::sumifs_lookup()` with the stable range key
 /// and sentinel criteria values. This triggers the cache to build a
 /// `SumifsResultMap` keyed by stable range identity plus the current recalc
@@ -25,7 +25,7 @@ use value_types::ColumnView;
 /// would contain stale data).
 pub fn warm_sumifs_result_cache(
     patterns: &[AggPattern],
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     check_data_formulas: &impl Fn(&SheetId, u32, u32, u32) -> bool,
     sumifs_epoch: SumifsCacheEpoch,
 ) -> usize {
@@ -45,7 +45,7 @@ pub fn warm_sumifs_result_cache(
         let mut stale = false;
         for pair in &pattern.pairs {
             let (start, end) = if pair.data_end_row == u32::MAX {
-                let Some(sheet) = mirror.get_sheet(&pair.data_sheet) else {
+                let Some(sheet) = cell_store.get_sheet(&pair.data_sheet) else {
                     stale = true;
                     break;
                 };
@@ -65,7 +65,7 @@ pub fn warm_sumifs_result_cache(
         // Check value column staleness
         {
             let (start, end) = if vend == u32::MAX {
-                let Some(sheet) = mirror.get_sheet(&vs) else {
+                let Some(sheet) = cell_store.get_sheet(&vs) else {
                     continue;
                 };
                 (vstart, sheet.rows)
@@ -81,7 +81,7 @@ pub fn warm_sumifs_result_cache(
         let mut criteria_slices: Vec<ColumnView<'_>> = Vec::new();
         let mut ok = true;
         for pair in &pattern.pairs {
-            let Some(sheet) = mirror.get_sheet(&pair.data_sheet) else {
+            let Some(sheet) = cell_store.get_sheet(&pair.data_sheet) else {
                 ok = false;
                 break;
             };
@@ -95,7 +95,7 @@ pub fn warm_sumifs_result_cache(
             continue;
         }
 
-        let Some(sum_sheet) = mirror.get_sheet(&vs) else {
+        let Some(sum_sheet) = cell_store.get_sheet(&vs) else {
             continue;
         };
         let Some(sum_slice) = sum_sheet.get_column_view(vc) else {
@@ -213,7 +213,7 @@ fn sumifs_cache_key_for_pattern(
 /// Returns `None` if any column slice is unavailable (e.g. sheet not found).
 pub fn build_agg_map(
     pattern: &AggPattern,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
 ) -> Option<FxHashMap<AggKey, AggAccum>> {
     if pattern.pairs.is_empty() {
         return None;
@@ -236,7 +236,7 @@ pub fn build_agg_map(
     let empty_col = ColumnView::empty();
     let mut criteria_slices: SmallVec<[ColumnView<'_>; 4]> = SmallVec::new();
     for pair in &pattern.pairs {
-        let sheet = mirror.get_sheet(&pair.data_sheet)?;
+        let sheet = cell_store.get_sheet(&pair.data_sheet)?;
         let slice = sheet.get_column_view(pair.data_col).unwrap_or(empty_col);
         criteria_slices.push(slice);
     }
@@ -245,7 +245,7 @@ pub fn build_agg_map(
     // can include it in the length calculation).
     // Missing column → empty slice (all values treated as Null).
     let value_slice: Option<ColumnView<'_>> = if let Some((vs, vc, _, _)) = &pattern.value_range {
-        let sheet = mirror.get_sheet(vs)?;
+        let sheet = cell_store.get_sheet(vs)?;
         Some(sheet.get_column_view(*vc).unwrap_or(empty_col))
     } else {
         None
@@ -415,7 +415,7 @@ pub fn build_agg_map(
 
 /// Execute an aggregation group using the prepass map.
 ///
-/// For each output cell in the group, reads dynamic criteria values from the mirror,
+/// For each output cell in the group, reads dynamic criteria values from the cell store,
 /// builds a lookup key, and resolves the result from the pre-built map.
 ///
 /// `check_data_formulas` is called with `(sheet, col, start_row, end_row)` to verify
@@ -428,14 +428,14 @@ pub fn build_agg_map(
 /// any position in the range has a dirty formula OR an unevaluated spill projection.
 pub fn execute_agg_group(
     group: &AggFormulaGroup,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     check_data_formulas: impl Fn(&SheetId, u32, u32, u32) -> bool,
     check_criteria_stale: impl Fn(&SheetId, u32, u32, u32) -> bool,
 ) -> Option<Vec<(CellId, CellValue)>> {
     // Guard: bail if any data column contains dirty formulas.
     for (pair_idx, pair) in group.pattern.pairs.iter().enumerate() {
         let (start, end) = if pair.data_end_row == u32::MAX {
-            let sheet = mirror.get_sheet(&pair.data_sheet)?;
+            let sheet = cell_store.get_sheet(&pair.data_sheet)?;
             (pair.data_start_row, sheet.rows)
         } else {
             (pair.data_start_row, pair.data_end_row)
@@ -454,7 +454,7 @@ pub fn execute_agg_group(
     }
     if let Some((vs, vc, vstart, vend)) = &group.pattern.value_range {
         let (start, end) = if *vend == u32::MAX {
-            let sheet = mirror.get_sheet(vs)?;
+            let sheet = cell_store.get_sheet(vs)?;
             (*vstart, sheet.rows)
         } else {
             (*vstart, *vend)
@@ -474,7 +474,7 @@ pub fn execute_agg_group(
     // Guard: bail if any dynamic criteria column contains dirty formulas
     // or stale spill projections in the output row range. Without this,
     // spill-target criteria (e.g., SUMIF(Data!A:A, B4, Data!B:B) where B4
-    // is a spill projection) would read stale/null values from the mirror
+    // is a spill projection) would read stale/null values from the cell store
     // before the spill source formula has been evaluated.
     //
     // Uses `check_criteria_stale` instead of `check_data_formulas` to also
@@ -512,20 +512,21 @@ pub fn execute_agg_group(
     }
 
     // Build the aggregation map.
-    let map = match build_agg_map(&group.pattern, mirror) {
+    let map = match build_agg_map(&group.pattern, cell_store) {
         Some(m) => m,
         None => {
             // Hash-map path failed (likely DynamicWithPrefix criteria).
             // Try the sorted-range prepass as a fallback.
             if let Some(plan) = try_build_range_prepass_plan(&group.pattern) {
-                if let Some(sorted_index) = build_sorted_range_index(&plan, &group.pattern, mirror)
+                if let Some(sorted_index) =
+                    build_sorted_range_index(&plan, &group.pattern, cell_store)
                 {
                     tracing::info!(
                         cells = group.cell_ids.len(),
                         filtered_rows = sorted_index.len(),
                         "sorted-range prepass activated"
                     );
-                    return execute_sorted_range_prepass(group, &plan, &sorted_index, mirror);
+                    return execute_sorted_range_prepass(group, &plan, &sorted_index, cell_store);
                 }
                 let _span = tracing::info_span!(
                     "agg_group_bail",
@@ -554,7 +555,7 @@ pub fn execute_agg_group(
     for pair in &group.pattern.pairs {
         match &pair.criteria {
             CriteriaSource::Dynamic { sheet, col } => {
-                let sm = mirror.get_sheet(sheet)?;
+                let sm = cell_store.get_sheet(sheet)?;
                 let slice = sm.get_column_view(*col)?;
                 dyn_cols.push(Some(DynCol { slice }));
             }
@@ -592,7 +593,7 @@ pub fn execute_agg_group(
                     key.push(NormalizedKey::Null);
                 }
                 CriteriaSource::StaticFromCell { sheet, row, col } => {
-                    let val = mirror
+                    let val = cell_store
                         .get_cell_value_at(sheet, SheetPos::new(*row, *col))
                         .unwrap_or(&CellValue::Null);
                     key.push(NormalizedKey::from_criteria(val));
@@ -645,7 +646,7 @@ pub fn execute_agg_group(
 
         // Apply post-op if present (e.g., SUMIFS(...) / $DD$2).
         let final_result = if let Some(ref post_op) = group.post_op {
-            apply_post_op(result, post_op, mirror)
+            apply_post_op(result, post_op, cell_store)
         } else {
             result
         };

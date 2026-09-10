@@ -79,7 +79,7 @@ fn import_directly(xlsx: &[u8], mdw: f64) -> ComputeEngine {
 
 fn first_sheet(engine: &ComputeEngine) -> cell_types::SheetId {
     *engine
-        .mirror()
+        .cell_store()
         .sheet_ids()
         .next()
         .expect("fixture should contain one sheet")
@@ -184,15 +184,6 @@ fn viewport_columns(bytes: &[u8]) -> (Vec<(u32, f32, bool)>, Vec<f64>) {
 
 fn assert_layout_and_viewport_width(engine: &ComputeEngine, expected_width: f64) {
     let sheet = first_sheet(engine);
-    let layout = engine
-        .layout_index(&sheet)
-        .expect("import should build a LayoutIndex");
-
-    assert_eq!(
-        layout.get_col_width(0).0,
-        expected_width,
-        "LayoutIndex default width"
-    );
     assert_eq!(
         engine.get_col_width_from_index(&sheet, 0),
         expected_width,

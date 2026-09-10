@@ -33,7 +33,7 @@ impl SheetOutline {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.group_rows(&sid, start_row, end_row).map(|(_, r)| r))
+            .call_engine(move |e| e.group_rows(&sid, start_row, end_row))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -45,7 +45,7 @@ impl SheetOutline {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.ungroup_rows(&sid, start_row, end_row).map(|(_, r)| r))
+            .call_engine(move |e| e.ungroup_rows(&sid, start_row, end_row))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -61,7 +61,7 @@ impl SheetOutline {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.group_columns(&sid, start_col, end_col).map(|(_, r)| r))
+            .call_engine(move |e| e.group_columns(&sid, start_col, end_col))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -73,7 +73,7 @@ impl SheetOutline {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.ungroup_columns(&sid, start_col, end_col).map(|(_, r)| r))
+            .call_engine(move |e| e.ungroup_columns(&sid, start_col, end_col))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -90,10 +90,7 @@ impl SheetOutline {
         let sid = self.sheet_id;
         let owned_id = group_id.to_owned();
         self.dispatch
-            .call_engine(move |e| {
-                e.set_group_collapsed(&sid, &owned_id, collapsed)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.set_group_collapsed(&sid, &owned_id, collapsed))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -105,7 +102,7 @@ impl SheetOutline {
         let sid = self.sheet_id;
         let owned_id = group_id.to_owned();
         self.dispatch
-            .call_engine(move |e| e.toggle_group_collapsed(&sid, &owned_id).map(|(_, r)| r))
+            .call_engine(move |e| e.toggle_group_collapsed(&sid, &owned_id))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -113,7 +110,7 @@ impl SheetOutline {
     pub fn expand_all_groups(&self) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.expand_all_groups(&sid).map(|(_, r)| r))
+            .call_engine(move |e| e.expand_all_groups(&sid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -121,7 +118,7 @@ impl SheetOutline {
     pub fn collapse_all_groups(&self) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.collapse_all_groups(&sid).map(|(_, r)| r))
+            .call_engine(move |e| e.collapse_all_groups(&sid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -150,10 +147,7 @@ impl SheetOutline {
         let (sr, sc, er, ec) = range.into().resolve()?;
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| {
-                e.create_subtotals(&sid, sr, sc, er, ec, options)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.create_subtotals(&sid, sr, sc, er, ec, options))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -165,7 +159,7 @@ impl SheetOutline {
         let (sr, sc, er, ec) = range.into().resolve()?;
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.remove_subtotals(&sid, sr, sc, er, ec).map(|(_, r)| r))
+            .call_engine(move |e| e.remove_subtotals(&sid, sr, sc, er, ec))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -177,7 +171,7 @@ impl SheetOutline {
         let (sr, sc, er, ec) = range.into().resolve()?;
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.auto_outline(&sid, sr, sc, er, ec).map(|(_, r)| r))
+            .call_engine(move |e| e.auto_outline(&sid, sr, sc, er, ec))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 }

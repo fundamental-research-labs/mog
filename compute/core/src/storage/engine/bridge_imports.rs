@@ -32,16 +32,16 @@ impl ComputeEngine {
     }
 
     /// Assemble an export-capable native engine from an already-initialized
-    /// formula-eval compute state without running another full recalculation.
+    /// compute state without running another full recalculation.
     #[cfg(feature = "__internal")]
     #[doc(hidden)]
     pub fn from_evaluated_snapshot_for_export(
         snapshot: WorkbookSnapshot,
-        mirror: crate::mirror::CellMirror,
+        cell_store: crate::cells::CellStore,
         compute: crate::scheduler::ComputeCore,
     ) -> Result<Self, ComputeError> {
         let storage = crate::storage::WorkbookStorage::from_snapshot(snapshot.clone())?;
-        construction::assemble_engine(storage, mirror, compute, &snapshot)
+        construction::assemble_engine(storage, cell_store, compute, &snapshot)
     }
 
     // -------------------------------------------------------------------
@@ -50,25 +50,15 @@ impl ComputeEngine {
 
     /// Import directly from raw XLSX file bytes (with recalculation).
     ///
-    /// Returns a [`MutationResult`] (with embedded [`RecalcResult`] in
-    /// `result.recalc`) so hydration flows through the same TS-side
-    /// `MutationResultHandler.applyAndNotify` pipeline as live mutations.
-    /// This populates per-domain TS projections (drawings, tables,
-    /// comments, filters, sparklines, named ranges, conditional formats,
-    /// pivot tables, grouping) immediately on hydration — no per-domain
-    /// follow-up event subscription / eager-fetch is required.
-    ///
-    /// The `Vec<u8>` slot in the tuple is the binary multi-viewport patches
-    /// payload (always empty for hydration: viewport buffers are populated
-    /// via the per-viewport prefetch path triggered by the renderer, not
-    /// via patches threaded through this call).
+    /// Returns recalculated cells and hydrated metadata in a [`MutationResult`].
+    /// Pixel consumers can request explicit viewport snapshots after import.
     #[bridge::write]
     #[tracing::instrument(name = "engine_import_from_xlsx_bytes", skip_all)]
     pub fn import_from_xlsx_bytes(
         &mut self,
         xlsx_data: &[u8],
         do_recalc: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         let result = self.without_history(|engine| {
             let recalc = {
                 let _span = tracing::info_span!("import_construction").entered();
@@ -78,14 +68,11 @@ impl ComputeEngine {
                 let _span = tracing::info_span!("import_mutation_result").entered();
                 services::mutation_handlers::build_mutation_result_for_hydration(
                     &engine.stores,
-                    &engine.mirror,
+                    &engine.cell_store,
                     recalc,
                 )
             };
-            Ok((
-                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-                result,
-            ))
+            Ok(result)
         });
         if result.is_ok() {
             self.clear_history();
@@ -119,18 +106,15 @@ impl ComputeEngine {
     pub fn import_from_xlsx_bytes_deferred(
         &mut self,
         xlsx_data: &[u8],
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         let result = self.without_history(|engine| {
             construction::import_from_xlsx_bytes_deferred(engine, xlsx_data)?;
             let result = services::mutation_handlers::build_mutation_result_for_hydration(
                 &engine.stores,
-                &engine.mirror,
+                &engine.cell_store,
                 RecalcResult::empty(),
             );
-            Ok((
-                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-                result,
-            ))
+            Ok(result)
         });
         if result.is_ok() {
             self.clear_history();
@@ -142,9 +126,7 @@ impl ComputeEngine {
     /// Retains the active sheet already installed by the initial load.
     #[bridge::write]
     #[tracing::instrument(name = "engine_complete_deferred_hydration", skip_all)]
-    pub fn complete_deferred_hydration(
-        &mut self,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn complete_deferred_hydration(&mut self) -> Result<MutationResult, ComputeError> {
         self.without_history(|engine| {
             let deferred_filter_created_keys = if engine.deferred_hydration.is_some() {
                 collect_deferred_filter_created_keys(engine)
@@ -154,13 +136,10 @@ impl ComputeEngine {
             let Some(mut completion) = construction::stage_deferred_hydration(engine)? else {
                 let result = services::mutation_handlers::build_mutation_result_for_hydration(
                     &engine.stores,
-                    &engine.mirror,
+                    &engine.cell_store,
                     RecalcResult::empty(),
                 );
-                return Ok((
-                    compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-                    result,
-                ));
+                return Ok(result);
             };
 
             let mut recalc = if completion.calculation.full_calc_on_load
@@ -178,17 +157,17 @@ impl ComputeEngine {
                 };
                 Self::materialize_all_pivots_for_import_open(
                     &mut completion.stores,
-                    &mut completion.mirror,
+                    &mut completion.cell_store,
                 );
                 crate::storage::engine::cell_metadata::refresh(
                     &completion.stores.storage,
-                    &mut completion.mirror,
+                    &mut completion.cell_store,
                     completion.stores.layout_metrics,
                 );
                 let result = completion
                     .stores
                     .compute
-                    .full_recalc_with_options(&mut completion.mirror, &options)?;
+                    .full_recalc_with_options(&mut completion.cell_store, &options)?;
                 completion.stores.compute.clear_dirty();
                 result
             } else {
@@ -199,17 +178,14 @@ impl ComputeEngine {
             engine.postprocess_import_open_recalc(&mut recalc);
             let mut result = services::mutation_handlers::build_mutation_result_for_hydration(
                 &engine.stores,
-                &engine.mirror,
+                &engine.cell_store,
                 recalc,
             );
             suppress_deferred_duplicate_filter_created_changes(
                 &mut result,
                 &deferred_filter_created_keys,
             );
-            Ok((
-                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-                result,
-            ))
+            Ok(result)
         })
     }
 
@@ -235,36 +211,26 @@ impl ComputeEngine {
     ///
     /// Idempotent for snapshot-replace variants (sheet/workbook settings,
     /// frozen panes, scroll position, ...): calling on top of an
-    /// already-settled mirror is safe and produces no observable change.
+    /// already-settled cell_store is safe and produces no observable change.
     /// Non-snapshot variants (charts, tables, comments, sparklines, CF
     /// rules, named ranges, pivots, grouping) are upserts on the TS side,
-    /// so a redundant settle on a doc whose mirror was already populated
+    /// so a redundant settle on a doc whose cell_store was already populated
     /// (e.g. XLSX import + IndexedDB replay) is also safe — but the
     /// lifecycle only calls this on the *pure replay* path to avoid
     /// double work.
     ///
-    /// Same shape as `import_from_xlsx_bytes`'s second return slot —
-    /// returns `(empty_viewport_patches, mutation_result)` so the bridge
-    /// transport's `BYTES_TUPLE_COMMANDS` plumbing matches the import path
-    /// and the auto-generated TS shim wraps the call with `core.mutate(...)`,
-    /// feeding the result through `MutationResultHandler.applyAndNotify`.
-    /// Tagged `bridge::write` (rather than `bridge::read`) only because the
-    /// TS code generator uses `MethodAccess::Write` + `(Uint8Array,
-    /// MutationResult)` return shape as the trigger for the mutate-wrapping
-    /// codegen path; this method does not actually mutate Rust state.
+    /// Returns hydration metadata directly as a `MutationResult` without
+    /// recording a history action.
     #[bridge::write]
-    #[tracing::instrument(name = "engine_settle_for_mirror", skip_all)]
-    pub fn settle_for_mirror(&mut self) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    #[tracing::instrument(name = "engine_settle_for_store", skip_all)]
+    pub fn settle_for_store(&mut self) -> Result<MutationResult, ComputeError> {
         self.without_history(|engine| {
             let result = services::mutation_handlers::build_mutation_result_for_hydration(
                 &engine.stores,
-                &engine.mirror,
+                &engine.cell_store,
                 RecalcResult::empty(),
             );
-            Ok((
-                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-                result,
-            ))
+            Ok(result)
         })
     }
 
@@ -281,18 +247,15 @@ impl ComputeEngine {
         &mut self,
         csv_data: &[u8],
         options: CsvImportOptions,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         let result = self.without_history(|engine| {
             let recalc = construction::import_from_csv_bytes(engine, csv_data, &options, true)?;
             let result = services::mutation_handlers::build_mutation_result_for_hydration(
                 &engine.stores,
-                &engine.mirror,
+                &engine.cell_store,
                 recalc,
             );
-            Ok((
-                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-                result,
-            ))
+            Ok(result)
         });
         if result.is_ok() {
             self.clear_history();

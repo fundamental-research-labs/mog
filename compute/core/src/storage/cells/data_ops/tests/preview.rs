@@ -1,5 +1,5 @@
 use super::super::*;
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use cell_types::{CellId, SheetPos};
 use value_types::CellValue;
@@ -7,7 +7,7 @@ use value_types::CellValue;
 #[test]
 fn preview_splits_native_values_respects_limit_and_preserves_cells() {
     let sheet_id = SheetId::from_raw(1);
-    let mirror = CellMirror::from_snapshot(WorkbookSnapshot {
+    let cell_store = CellStore::from_snapshot(WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
             identities: Vec::new(),
             row_axis: None,
@@ -42,18 +42,18 @@ fn preview_splits_native_values_respects_limit_and_preserves_cells() {
         fixed_width_breaks: vec![],
     };
     assert_eq!(
-        preview_text_to_columns(&mirror, sheet_id, 0, 99, 0, &options, 2),
+        preview_text_to_columns(&cell_store, sheet_id, 0, 99, 0, &options, 2),
         vec![vec!["a", "b", "c"], vec!["d", "e"]]
     );
-    assert_eq!(mirror.get_sheet(&sheet_id).unwrap().cell_count(), 3);
+    assert_eq!(cell_store.get_sheet(&sheet_id).unwrap().cell_count(), 3);
     assert_eq!(
-        mirror.get_cell_value_at(&sheet_id, SheetPos::new(0, 0)),
+        cell_store.get_cell_value_at(&sheet_id, SheetPos::new(0, 0)),
         Some(&CellValue::Text("a,b,c".into()))
     );
     assert_eq!(
-        mirror.get_cell_value_at(&sheet_id, SheetPos::new(0, 1)),
+        cell_store.get_cell_value_at(&sheet_id, SheetPos::new(0, 1)),
         None
     );
-    assert!(preview_text_to_columns(&mirror, sheet_id, 2, 1, 0, &options, 2).is_empty());
-    assert!(preview_text_to_columns(&mirror, sheet_id, 0, 99, 0, &options, 0).is_empty());
+    assert!(preview_text_to_columns(&cell_store, sheet_id, 2, 1, 0, &options, 2).is_empty());
+    assert!(preview_text_to_columns(&cell_store, sheet_id, 0, 99, 0, &options, 0).is_empty());
 }

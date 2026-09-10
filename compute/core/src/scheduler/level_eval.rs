@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::eval::Evaluator;
-use crate::eval_bridge::MirrorContext;
+use crate::eval_bridge::EvalContext;
 use crate::formula_text::FormulaTextProvider;
 
 /// Minimum number of cells in a topological level before rayon parallelism kicks in.
@@ -19,7 +19,7 @@ impl ComputeCore {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn topo_evaluate_level_sequential(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         level: &[CellId],
         changed_cells: &mut Vec<CellChange>,
         projection_changes: &mut Vec<ProjectionChange>,
@@ -37,18 +37,18 @@ impl ComputeCore {
                 None => continue,
             };
 
-            let sheet_id = match self.find_sheet_for_cell(mirror, &cell_id) {
+            let sheet_id = match self.find_sheet_for_cell(cell_store, &cell_id) {
                 Some(sid) => sid,
                 None => continue,
             };
 
             #[cfg(feature = "native")]
-            let mut ctx = MirrorContext::with_range_store(mirror, cell_id, sheet_id, range_store)
+            let mut ctx = EvalContext::with_range_store(cell_store, cell_id, sheet_id, range_store)
                 .with_sumifs_cache_epoch(self.current_sumifs_cache_epoch())
                 .with_recalc_clock(self.recalc_clock());
             #[cfg(not(feature = "native"))]
             let mut ctx = {
-                let mut c = MirrorContext::new(mirror, cell_id, sheet_id);
+                let mut c = EvalContext::new(cell_store, cell_id, sheet_id);
                 c.range_store = Some(range_store);
                 c.sumifs_cache_epoch = self.current_sumifs_cache_epoch();
                 c
@@ -69,12 +69,12 @@ impl ComputeCore {
                     .get(&cell_id)
                     .map(|s| truncate_chars(s, 120))
                     .unwrap_or("");
-                let pos = mirror
+                let pos = cell_store
                     .resolve_position(&cell_id)
                     .unwrap_or(SheetPos::new(0, 0));
                 row = pos.row();
                 col = pos.col();
-                sheet_name_owned = mirror
+                sheet_name_owned = cell_store
                     .get_sheet(&sheet_id)
                     .map(|s| s.name.clone())
                     .unwrap_or_default();
@@ -151,7 +151,7 @@ impl ComputeCore {
 
             // Dynamic array spill handling
             self.apply_spill_handling_with_deltas(
-                mirror,
+                cell_store,
                 cell_id,
                 sheet_id,
                 &mut new_value,
@@ -169,36 +169,36 @@ impl ComputeCore {
             if let CellValue::Array(ref arr) = new_value {
                 let top_left = arr.get(0, 0).cloned().unwrap_or(CellValue::Null);
                 // Compare by reference first to avoid cloning old_value when unchanged.
-                let stored = mirror.get_cell_value(&cell_id);
+                let stored = cell_store.get_cell_value(&cell_id);
                 let changed = stored.is_none_or(|s| !values_equal(s, &top_left));
                 let old_value = if changed {
                     stored.cloned().unwrap_or(CellValue::Null)
                 } else {
                     CellValue::Null // won't be used
                 };
-                mirror.set_value_mut(&cell_id, new_value.clone());
+                cell_store.set_value_mut(&cell_id, new_value.clone());
 
                 if changed
                     && let Some((_sid, mut change)) =
-                        self.make_cell_change(mirror, &cell_id, &top_left)
+                        self.make_cell_change(cell_store, &cell_id, &top_left)
                 {
                     change.old_value = Some(old_value);
                     changed_cells.push(change);
                 }
             } else {
                 // Compare by reference first to avoid cloning old_value when unchanged.
-                let stored = mirror.get_cell_value(&cell_id);
+                let stored = cell_store.get_cell_value(&cell_id);
                 let changed = stored.is_none_or(|s| !values_equal(s, &new_value));
                 let old_value = if changed {
                     stored.cloned().unwrap_or(CellValue::Null)
                 } else {
                     CellValue::Null // won't be used
                 };
-                mirror.set_value_mut(&cell_id, new_value.clone());
+                cell_store.set_value_mut(&cell_id, new_value.clone());
 
                 if changed
                     && let Some((_sid, mut change)) =
-                        self.make_cell_change(mirror, &cell_id, &new_value)
+                        self.make_cell_change(cell_store, &cell_id, &new_value)
                 {
                     change.old_value = Some(old_value);
                     changed_cells.push(change);
@@ -210,8 +210,8 @@ impl ComputeCore {
     /// Evaluate a level of cells in parallel using rayon (two-phase approach).
     ///
     /// Pass 1: Evaluate all formulas concurrently using shared `&self` references.
-    ///          Each cell reads from the mirror but does not write.
-    /// Pass 2: Apply results sequentially (writes to mirror, spill handling).
+    ///          Each cell reads from the cell store but does not write.
+    /// Pass 2: Apply results sequentially (writes to cell_store, spill handling).
     ///
     /// `sumifs_warm_data`: pre-warmed SUMIFS result cache entries from the agg
     /// prepass. If `Some`, each rayon worker thread seeds its thread-local cache
@@ -221,7 +221,7 @@ impl ComputeCore {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn topo_evaluate_level_parallel(
         &mut self,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         level: &[CellId],
         changed_cells: &mut Vec<CellChange>,
         projection_changes: &mut Vec<ProjectionChange>,
@@ -236,7 +236,7 @@ impl ComputeCore {
         // Pass 1: Parallel read-only evaluation with per-formula timing
         let results: Vec<(CellId, SheetId, CellValue, Option<String>, u64)> = {
             let _span = tracing::info_span!("par_eval_phase", cells = level.len()).entered();
-            let mirror_ref = &*mirror;
+            let store_ref = &*cell_store;
             let ast_cache = &self.ast_cache;
             let formula_strings = &self.formula_strings;
             let cell_formula_text = &self.cell_formula_text;
@@ -256,10 +256,10 @@ impl ComputeCore {
                         );
                     }
                     let entry = ast_cache.get(&cell_id)?;
-                    let sheet_id = Self::find_sheet_for_cell_in_mirror(mirror_ref, &cell_id)?;
+                    let sheet_id = Self::find_sheet_for_cell_in_store(store_ref, &cell_id)?;
 
                     let mut ctx =
-                        MirrorContext::with_range_store(mirror, cell_id, sheet_id, range_store)
+                        EvalContext::with_range_store(store_ref, cell_id, sheet_id, range_store)
                             .with_sumifs_cache_epoch(sumifs_epoch)
                             .with_recalc_clock(recalc_clock);
                     ctx.ast_cache = Some(ast_cache);
@@ -278,11 +278,11 @@ impl ComputeCore {
                             .get(&cell_id)
                             .map(|s| truncate_chars(s, 120))
                             .unwrap_or("");
-                        let pos = mirror
+                        let pos = cell_store
                             .resolve_position(&cell_id)
                             .unwrap_or(SheetPos::new(0, 0));
                         let (row, col) = (pos.row(), pos.col());
-                        let sheet_name = mirror
+                        let sheet_name = cell_store
                             .get_sheet(&sheet_id)
                             .map(|s| s.name.as_str())
                             .unwrap_or("");
@@ -343,7 +343,7 @@ impl ComputeCore {
             .entered();
         }
 
-        // Pass 2: Sequential apply (writes to mirror + spill handling)
+        // Pass 2: Sequential apply (writes to cell_store + spill handling)
         #[cfg(feature = "journal")]
         {
             crate::journal::record(crate::journal::JournalEvent::ParallelApplyStart {
@@ -377,10 +377,10 @@ impl ComputeCore {
                     .get(&cell_id)
                     .map(|s| super::truncate_chars(s, 120).to_string())
                     .unwrap_or_default();
-                let pos = mirror
+                let pos = cell_store
                     .resolve_position(&cell_id)
                     .unwrap_or(cell_types::SheetPos::new(0, 0));
-                let sheet_name_j = mirror
+                let sheet_name_j = cell_store
                     .get_sheet(&sheet_id)
                     .map(|s| s.name.clone())
                     .unwrap_or_default();
@@ -409,7 +409,7 @@ impl ComputeCore {
 
             // Dynamic array spill handling (must be sequential)
             self.apply_spill_handling_with_deltas(
-                mirror,
+                cell_store,
                 cell_id,
                 sheet_id,
                 &mut new_value,
@@ -427,36 +427,36 @@ impl ComputeCore {
             if let CellValue::Array(ref arr) = new_value {
                 let top_left = arr.get(0, 0).cloned().unwrap_or(CellValue::Null);
                 // Compare by reference first to avoid cloning old_value when unchanged.
-                let stored = mirror.get_cell_value(&cell_id);
+                let stored = cell_store.get_cell_value(&cell_id);
                 let changed = stored.is_none_or(|s| !values_equal(s, &top_left));
                 let old_value = if changed {
                     stored.cloned().unwrap_or(CellValue::Null)
                 } else {
                     CellValue::Null // won't be used
                 };
-                mirror.set_value_mut(&cell_id, new_value.clone());
+                cell_store.set_value_mut(&cell_id, new_value.clone());
 
                 if changed
                     && let Some((_sid, mut change)) =
-                        self.make_cell_change(mirror, &cell_id, &top_left)
+                        self.make_cell_change(cell_store, &cell_id, &top_left)
                 {
                     change.old_value = Some(old_value);
                     changed_cells.push(change);
                 }
             } else {
                 // Compare by reference first to avoid cloning old_value when unchanged.
-                let stored = mirror.get_cell_value(&cell_id);
+                let stored = cell_store.get_cell_value(&cell_id);
                 let changed = stored.is_none_or(|s| !values_equal(s, &new_value));
                 let old_value = if changed {
                     stored.cloned().unwrap_or(CellValue::Null)
                 } else {
                     CellValue::Null // won't be used
                 };
-                mirror.set_value_mut(&cell_id, new_value.clone());
+                cell_store.set_value_mut(&cell_id, new_value.clone());
 
                 if changed
                     && let Some((_sid, mut change)) =
-                        self.make_cell_change(mirror, &cell_id, &new_value)
+                        self.make_cell_change(cell_store, &cell_id, &new_value)
                 {
                     change.old_value = Some(old_value);
                     changed_cells.push(change);
@@ -466,13 +466,13 @@ impl ComputeCore {
     }
 
     /// Find which sheet a cell belongs to (static helper for parallel evaluation).
-    /// Takes `&CellMirror` instead of `&self` to avoid capturing `&mut self`.
+    /// Takes `&CellStore` instead of `&self` to avoid capturing `&mut self`.
     /// Uses O(1) reverse index lookup.
     #[cfg(feature = "native")]
-    pub(super) fn find_sheet_for_cell_in_mirror(
-        mirror: &CellMirror,
+    pub(super) fn find_sheet_for_cell_in_store(
+        cell_store: &CellStore,
         cell_id: &CellId,
     ) -> Option<SheetId> {
-        mirror.sheet_for_cell(cell_id)
+        cell_store.sheet_for_cell(cell_id)
     }
 }

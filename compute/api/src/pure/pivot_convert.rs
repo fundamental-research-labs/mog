@@ -2,8 +2,7 @@
 //!
 //! Most of the old PivotSpec ↔ PivotTableConfig converters have been removed
 //! now that the parser produces `ParsedPivotTable` directly. Only `build_source_data`
-//! remains — it is still used by `formula-eval` to prepare cache records for
-//! `compute_pivot::compute()`.
+//! remains — it prepares cache records for `compute_pivot::compute()`.
 
 use domain_types::domain::pivot::PivotCacheSourceDef;
 use value_types::CellValue;

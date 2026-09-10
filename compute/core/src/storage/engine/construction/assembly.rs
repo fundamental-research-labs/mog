@@ -23,17 +23,23 @@ pub(in crate::storage::engine) fn from_snapshot_with_layout_metrics(
         WorkbookStorage::from_snapshot(snapshot.clone())?
     };
 
-    let (compute, recalc_result, mirror) = {
+    let (compute, recalc_result, cell_store) = {
         let _span = tracing::info_span!("compute_init_from_snapshot").entered();
         let mut compute = ComputeCore::new();
-        let mut mirror = super::rebuild::build_initial_mirror(&storage, &snapshot, layout_metrics)?;
+        let mut cell_store =
+            super::rebuild::build_initial_store(&storage, &snapshot, layout_metrics)?;
         let recalc_result =
-            compute.init_from_snapshot_with_prebuilt_mirror(&mut mirror, snapshot.clone())?;
-        (compute, recalc_result, mirror)
+            compute.init_from_snapshot_with_prebuilt_store(&mut cell_store, snapshot.clone())?;
+        (compute, recalc_result, cell_store)
     };
 
-    let mut engine =
-        assemble_engine_with_layout_metrics(storage, mirror, compute, &snapshot, layout_metrics)?;
+    let mut engine = assemble_engine_with_layout_metrics(
+        storage,
+        cell_store,
+        compute,
+        &snapshot,
+        layout_metrics,
+    )?;
     engine.mark_metadata_evaluated();
 
     Ok((engine, recalc_result))
@@ -60,13 +66,13 @@ fn validate_layout_metrics(
 /// preventing collisions with XLSX-imported cell/sheet identities.
 pub(in crate::storage::engine) fn assemble_engine(
     storage: WorkbookStorage,
-    mirror: CellMirror,
+    cell_store: CellStore,
     compute: ComputeCore,
     snapshot: &WorkbookSnapshot,
 ) -> Result<ComputeEngine, ComputeError> {
     assemble_engine_with_layout_metrics(
         storage,
-        mirror,
+        cell_store,
         compute,
         snapshot,
         domain_types::units::LayoutMetrics::default(),
@@ -75,7 +81,7 @@ pub(in crate::storage::engine) fn assemble_engine(
 
 pub(in crate::storage::engine) fn assemble_engine_with_layout_metrics(
     storage: WorkbookStorage,
-    mirror: CellMirror,
+    mut cell_store: CellStore,
     mut compute: ComputeCore,
     snapshot: &WorkbookSnapshot,
     layout_metrics: domain_types::units::LayoutMetrics,
@@ -92,10 +98,11 @@ pub(in crate::storage::engine) fn assemble_engine_with_layout_metrics(
     // Share the same allocator with ComputeCore to prevent CellId collisions
     // between ghost cells (formula resolution) and real cells (mutation handlers).
     compute.set_id_alloc(std::sync::Arc::clone(&grid_id_alloc));
+    cell_store.set_id_alloc(std::sync::Arc::clone(&grid_id_alloc));
     let id_alloc = std::sync::Arc::new(crate::storage::new_runtime_metadata_id_allocator());
     assemble_engine_inner(
         storage,
-        mirror,
+        cell_store,
         compute,
         snapshot,
         grid_id_alloc,
@@ -106,39 +113,35 @@ pub(in crate::storage::engine) fn assemble_engine_with_layout_metrics(
 
 fn assemble_engine_inner(
     mut storage: WorkbookStorage,
-    mut mirror: CellMirror,
+    mut cell_store: CellStore,
     compute: ComputeCore,
     snapshot: &WorkbookSnapshot,
     grid_id_alloc: std::sync::Arc<cell_types::IdAllocator>,
     id_alloc: std::sync::Arc<cell_types::IdAllocator>,
     layout_metrics: domain_types::units::LayoutMetrics,
 ) -> Result<ComputeEngine, ComputeError> {
-    // A caller may provide a mirror that has already evaluated imported
+    // A caller may provide a cell store that has already evaluated imported
     // arrays. Propagate those publication invalidations before copying the
-    // durable sidecar into the assembled mirror, or a rebuild would restore
+    // durable sidecar into the assembled store, or a rebuild would restore
     // stale package values over the live projection.
-    let invalidated = mirror.take_imported_array_cache_invalidations();
+    let invalidated = cell_store.take_imported_array_cache_invalidations();
     storage.invalidate_imported_array_caches_at(invalidated);
 
-    // `from_evaluated_snapshot_for_export` supplies a live mirror whose
+    // `from_evaluated_snapshot_for_export` supplies a live cell store whose
     // imported caches are already attached, while its snapshot-derived
     // storage intentionally has no import sidecar. Do not erase that state;
     // ordinary snapshot assembly installs the storage-owned caches.
     if !storage.imported_array_caches.is_empty() {
-        mirror.install_imported_array_caches(&storage.imported_array_caches);
+        cell_store.install_imported_array_caches(&storage.imported_array_caches);
     }
-    crate::storage::engine::cell_metadata::refresh(&storage, &mut mirror, layout_metrics);
-    mirror.date1904 = crate::storage::workbook::settings::get_settings(&storage.metadata).date1904;
-    let grid_indexes = build_grid_indexes(&mirror, snapshot, grid_id_alloc.clone())?;
-    let merge_indexes = build_merge_indexes(&storage, snapshot, &grid_indexes)?;
-    let layout_indexes = build_layout_indexes(&storage, snapshot, &grid_indexes, layout_metrics)?;
+    crate::storage::engine::cell_metadata::refresh(&storage, &mut cell_store, layout_metrics);
+    cell_store.date1904 =
+        crate::storage::workbook::settings::get_settings(&storage.metadata).date1904;
+    let grid_indexes = build_grid_indexes(&cell_store, snapshot, grid_id_alloc.clone())?;
+    let merge_indexes = build_merge_indexes(&storage, snapshot, &cell_store)?;
 
-    // unified reference model — seed the mirror's `RowId → (SheetId, row)` /
-    // `ColId → (SheetId, col)` reverse index from the grid indexes so
-    // `MirrorPositionLookup::row_index` / `col_index` can answer display
-    // queries for full-row/full-col refs. Mutations that change row/col
-    // identities re-seed via the same `install_row_col_indexes` entry point.
-    mirror.install_native_axes(
+    // Share compact axes and register run ownership for cross-sheet references.
+    cell_store.install_native_axes(
         grid_indexes
             .iter()
             .map(|(sid, grid)| (*sid, grid.row_axis(), grid.col_axis())),
@@ -147,23 +150,19 @@ fn assemble_engine_inner(
     let settings = derive_settings(&storage);
 
     let mut engine = ComputeEngine {
-        mirror,
+        cell_store,
         stores: EngineStores {
             storage,
             grid_id_alloc,
             id_alloc,
             layout_metrics,
             grid_indexes,
-            layout_indexes,
+            pixel_layouts: Default::default(),
             merge_indexes,
             compute,
             cf_cache: FxHashMap::default(),
-            font_db: compute_text_measurement::FontDb::with_defaults(),
+            font_db: Default::default(),
             measurement_cache: compute_text_measurement::MeasurementCache::new(),
-        },
-        mutation: MutationCoordinator {
-            pending_recalc: None,
-            pending_format_patches: None,
         },
         history: Default::default(),
         viewport: ViewportService::new(),
@@ -178,7 +177,7 @@ fn assemble_engine_inner(
 
     crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
         &mut engine.stores,
-        &mut engine.mirror,
+        &mut engine.cell_store,
         None,
         domain_types::ImportPhase::FullHydration,
     );
@@ -190,36 +189,36 @@ fn assemble_engine_inner(
 }
 
 /// Sync per-sheet `enable_calculation` flags from native metadata into the
-/// `CellMirror`'s `SheetMirror` structs. This ensures the scheduler respects
+/// `CellStore`'s `SheetStore` structs. This ensures the scheduler respects
 pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
     engine: &mut ComputeEngine,
     new_storage: WorkbookStorage,
     workbook_snap: WorkbookSnapshot,
     do_recalc: bool,
 ) -> Result<RecalcResult, ComputeError> {
-    let char_code_page = engine.mirror.char_code_page;
+    let char_code_page = engine.cell_store.char_code_page;
     engine.stores.storage = new_storage;
 
-    // CellMirror is built inside init_from_snapshot / init_from_snapshot_minimal.
+    // CellStore is built inside init_from_snapshot / init_from_snapshot_minimal.
     // Don't build it separately to avoid the double-build overhead.
-    // Rebuild ComputeCore (also rebuilds CellMirror)
+    // Rebuild ComputeCore (also rebuilds CellStore)
     let recalc_result = {
-        let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "mirror_compute_rebuild");
+        let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "store_compute_rebuild");
         engine.stores.compute = ComputeCore::new();
         let date1904 = workbook_settings::get_settings(&engine.stores.storage.metadata).date1904;
         let recalc_result = if do_recalc {
-            engine.mirror = super::rebuild::build_initial_mirror(
+            engine.cell_store = super::rebuild::build_initial_store(
                 &engine.stores.storage,
                 &workbook_snap,
                 engine.stores.layout_metrics,
             )?;
-            engine.mirror.char_code_page = char_code_page;
-            engine.mirror.date1904 = date1904;
+            engine.cell_store.char_code_page = char_code_page;
+            engine.cell_store.date1904 = date1904;
             engine
                 .stores
                 .compute
-                .init_from_snapshot_with_prebuilt_mirror(
-                    &mut engine.mirror,
+                .init_from_snapshot_with_prebuilt_store(
+                    &mut engine.cell_store,
                     workbook_snap.clone(),
                 )?
         } else {
@@ -228,22 +227,22 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
                 engine
                     .stores
                     .compute
-                    .init_from_snapshot_minimal(&mut engine.mirror, workbook_snap.clone())?
+                    .init_from_snapshot_minimal(&mut engine.cell_store, workbook_snap.clone())?
             }
             #[cfg(not(target_arch = "wasm32"))]
             {
                 engine
                     .stores
                     .compute
-                    .init_from_snapshot_no_recalc(&mut engine.mirror, workbook_snap.clone())?
+                    .init_from_snapshot_no_recalc(&mut engine.cell_store, workbook_snap.clone())?
             }
         };
-        // The no-recalc/minimal branches replace the mirror inside the
+        // The no-recalc/minimal branches replace the store inside the
         // scheduler initializer. Reapply the runtime-only calculation option
         // after either branch; the recalc branch also set it before parsing.
-        engine.mirror.char_code_page = char_code_page;
-        engine.mirror.date1904 = date1904;
-        engine.mirror.install_cell_metadata_provider(
+        engine.cell_store.char_code_page = char_code_page;
+        engine.cell_store.date1904 = date1904;
+        engine.cell_store.install_cell_metadata_provider(
             crate::storage::engine::cell_metadata::provider(
                 &engine.stores.storage,
                 engine.stores.layout_metrics,
@@ -253,7 +252,7 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
             engine.sync_imported_array_cache_invalidations();
         } else {
             engine
-                .mirror
+                .cell_store
                 .install_imported_array_caches(&engine.stores.storage.imported_array_caches);
         }
         profile.counter("sheets", workbook_snap.sheets.len() as u64);
@@ -282,30 +281,23 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
             .saturating_sub(1),
     ));
     engine.stores.grid_id_alloc = std::sync::Arc::clone(&shared_alloc);
+    engine.cell_store.set_id_alloc(shared_alloc.clone());
     engine.stores.compute.set_id_alloc(shared_alloc);
     engine.stores.id_alloc =
         std::sync::Arc::new(crate::storage::new_runtime_metadata_id_allocator());
 
     // Rebuild indexes
     engine.stores.grid_indexes = build_grid_indexes(
-        &engine.mirror,
+        &engine.cell_store,
         &workbook_snap,
         engine.stores.grid_id_alloc.clone(),
     )?;
-    engine.stores.merge_indexes = build_merge_indexes(
-        &engine.stores.storage,
-        &workbook_snap,
-        &engine.stores.grid_indexes,
-    )?;
-    engine.stores.layout_indexes = build_layout_indexes(
-        &engine.stores.storage,
-        &workbook_snap,
-        &engine.stores.grid_indexes,
-        engine.stores.layout_metrics,
-    )?;
+    engine.stores.merge_indexes =
+        build_merge_indexes(&engine.stores.storage, &workbook_snap, &engine.cell_store)?;
+    engine.stores.pixel_layouts = Default::default();
 
-    // unified reference model — re-seed mirror's row/col reverse index after the rebuild.
-    engine.mirror.install_native_axes(
+    // Share rebuilt axes and refresh compact run ownership.
+    engine.cell_store.install_native_axes(
         engine
             .stores
             .grid_indexes

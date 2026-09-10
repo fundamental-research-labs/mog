@@ -1,5 +1,4 @@
 use cell_types::{CellId, SheetId, SheetPos};
-use compute_wire::constants::{MUTATION_HEADER_SIZE, OFF_FLAGS, PATCH_STRIDE};
 use compute_wire::flags as render_flags;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellError, CellValue, ComputeError};
@@ -73,49 +72,6 @@ fn cell_change_at(
         .find(|change| change.position.as_ref().map(|pos| (pos.row, pos.col)) == Some((row, col)))
 }
 
-fn first_viewport_patch(packed: &[u8]) -> Option<&[u8]> {
-    if packed.len() < 2 {
-        return None;
-    }
-    let viewport_count = u16::from_le_bytes([packed[0], packed[1]]) as usize;
-    if viewport_count == 0 {
-        return None;
-    }
-    let mut offset = 2;
-    let id_len = *packed.get(offset)? as usize;
-    offset += 1 + id_len;
-    let len_bytes: [u8; 4] = packed.get(offset..offset + 4)?.try_into().ok()?;
-    let patch_len = u32::from_le_bytes(len_bytes) as usize;
-    offset += 4;
-    packed.get(offset..offset + patch_len)
-}
-
-fn patch_flags_for_position(packed: &[u8], row: u32, col: u32) -> Option<u16> {
-    let mutation = first_viewport_patch(packed)?;
-    let patch_count = u32::from_le_bytes(mutation.get(0..4)?.try_into().ok()?) as usize;
-    let sheet_id_len = u16::from_le_bytes(mutation.get(8..10)?.try_into().ok()?) as usize;
-    let patches_start = MUTATION_HEADER_SIZE + sheet_id_len;
-
-    for i in 0..patch_count {
-        let patch_off = patches_start + i * PATCH_STRIDE;
-        let patch_row =
-            u32::from_le_bytes(mutation.get(patch_off..patch_off + 4)?.try_into().ok()?);
-        let patch_col = u32::from_le_bytes(
-            mutation
-                .get(patch_off + 4..patch_off + 8)?
-                .try_into()
-                .ok()?,
-        );
-        if patch_row == row && patch_col == col {
-            let flags_off = patch_off + 8 + OFF_FLAGS;
-            return Some(u16::from_le_bytes(
-                mutation.get(flags_off..flags_off + 2)?.try_into().ok()?,
-            ));
-        }
-    }
-    None
-}
-
 #[test]
 fn mutation_set_cells_by_position_trusted_path_errors_newly_created_cycle() {
     let snapshot = snapshot_with_cells(vec![]);
@@ -137,7 +93,7 @@ fn mutation_set_cells_by_position_trusted_path_errors_newly_created_cycle() {
         .expect("set A1");
 
     let ghost_b1_id = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&sheet_id, SheetPos::new(0, 1))
         .expect("A1 formula should create a ghost identity for B1");
 
@@ -156,7 +112,7 @@ fn mutation_set_cells_by_position_trusted_path_errors_newly_created_cycle() {
         .expect("set B1");
 
     let written_b1_id = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&sheet_id, SheetPos::new(0, 1))
         .expect("B1 should resolve after position write");
     assert_eq!(
@@ -166,7 +122,7 @@ fn mutation_set_cells_by_position_trusted_path_errors_newly_created_cycle() {
 
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sheet_id, SheetPos::new(0, 0))
             .cloned(),
         Some(CellValue::Error(CellError::Circ, None)),
@@ -174,7 +130,7 @@ fn mutation_set_cells_by_position_trusted_path_errors_newly_created_cycle() {
     );
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sheet_id, SheetPos::new(0, 1))
             .cloned(),
         Some(CellValue::Error(CellError::Circ, None)),
@@ -230,7 +186,7 @@ fn mutation_cross_sheet_cycle_viewport_preserves_formula_flag() {
         )
         .expect("set Sheet2 D1");
 
-    let (patches, mutation_result) = engine
+    let mutation_result = engine
         .batch_set_cells_by_position(
             vec![(
                 sheet2,
@@ -259,14 +215,6 @@ fn mutation_cross_sheet_cycle_viewport_preserves_formula_flag() {
         changed_c1.value,
         CellValue::Error(CellError::Circ, None),
         "mutation result should surface the circular reference error"
-    );
-
-    let patched_c1_flags =
-        patch_flags_for_position(&patches, 0, 2).expect("patch should include Sheet2 C1");
-    assert_ne!(
-        patched_c1_flags & render_flags::HAS_FORMULA,
-        0,
-        "binary viewport patch must mark Sheet2 C1 as formula-owned"
     );
 
     let queried = engine.query_range(&sheet2, 0, 2, 0, 3);
@@ -332,7 +280,7 @@ fn mutation_clear_range_whole_sheet_uses_sparse_grid_targets() {
     let j10_id = CellId::from_uuid_str(J10_UUID).expect("J10 uuid");
 
     let started = std::time::Instant::now();
-    let (_patches, result) = engine
+    let result = engine
         .clear_range(&sheet_id, 0, 0, FULL_SHEET_END_ROW, FULL_SHEET_END_COL)
         .expect("clear_range");
     assert!(
@@ -342,11 +290,11 @@ fn mutation_clear_range_whole_sheet_uses_sparse_grid_targets() {
     );
 
     assert_eq!(
-        engine.mirror().get_cell_value(&a1_id).cloned(),
+        engine.cell_store().get_cell_value(&a1_id).cloned(),
         Some(CellValue::Null),
     );
     assert_eq!(
-        engine.mirror().get_cell_value(&j10_id).cloned(),
+        engine.cell_store().get_cell_value(&j10_id).cloned(),
         Some(CellValue::Null),
     );
     assert!(
@@ -387,7 +335,7 @@ fn mutation_clear_range_by_position_whole_sheet_uses_sparse_grid_targets() {
     let j10_id = CellId::from_uuid_str(J10_UUID).expect("J10 uuid");
 
     let started = std::time::Instant::now();
-    let (_patches, result) = engine
+    let result = engine
         .clear_range_by_position(sheet_id, 0, 0, FULL_SHEET_END_ROW, FULL_SHEET_END_COL)
         .expect("clear_range_by_position");
     assert!(
@@ -397,11 +345,11 @@ fn mutation_clear_range_by_position_whole_sheet_uses_sparse_grid_targets() {
     );
 
     assert_eq!(
-        engine.mirror().get_cell_value(&a1_id).cloned(),
+        engine.cell_store().get_cell_value(&a1_id).cloned(),
         Some(CellValue::Null),
     );
     assert_eq!(
-        engine.mirror().get_cell_value(&j10_id).cloned(),
+        engine.cell_store().get_cell_value(&j10_id).cloned(),
         Some(CellValue::Null),
     );
     assert!(
@@ -430,7 +378,7 @@ fn mutation_clear_range_sparse_projection_overlap_rejects_partial_cse_clear() {
     let anchor_id = CellId::from_uuid_str(CSE_A1_UUID).expect("CSE anchor uuid");
 
     assert!(
-        engine.mirror().is_cse_anchor(&anchor_id),
+        engine.cell_store().is_cse_anchor(&anchor_id),
         "precondition: snapshot array_ref should register a CSE anchor",
     );
 
@@ -443,11 +391,11 @@ fn mutation_clear_range_sparse_projection_overlap_rejects_partial_cse_clear() {
         "expected PartialArrayWrite, got {err:?}",
     );
     assert!(
-        engine.mirror().is_cse_anchor(&anchor_id),
+        engine.cell_store().is_cse_anchor(&anchor_id),
         "partial CSE range clear must leave the anchor intact",
     );
     assert_eq!(
-        engine.mirror().get_cell_value(&anchor_id).cloned(),
+        engine.cell_store().get_cell_value(&anchor_id).cloned(),
         Some(CellValue::number(1.0)),
     );
 }
@@ -467,16 +415,16 @@ fn mutation_clear_range_full_cse_extent_clears_anchor() {
     let sheet_id = SheetId::from_uuid_str(SHEET_UUID).expect("sheet uuid");
     let anchor_id = CellId::from_uuid_str(CSE_A1_UUID).expect("CSE anchor uuid");
 
-    let (_patches, result) = engine
+    let result = engine
         .clear_range(&sheet_id, 0, 0, 1, 2)
         .expect("clear_range over full CSE extent");
 
     assert!(
-        !engine.mirror().is_cse_anchor(&anchor_id),
+        !engine.cell_store().is_cse_anchor(&anchor_id),
         "full CSE extent clear should tear down the anchor",
     );
     assert_eq!(
-        engine.mirror().get_cell_value(&anchor_id).cloned(),
+        engine.cell_store().get_cell_value(&anchor_id).cloned(),
         Some(CellValue::Null),
     );
     assert!(
@@ -514,7 +462,7 @@ fn mutation_clear_range_dynamic_spill_member_rejects_without_blocker() {
 
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sheet_id, SheetPos::new(2, 0))
             .cloned(),
         Some(CellValue::number(3.0)),
@@ -530,13 +478,13 @@ fn mutation_clear_range_dynamic_spill_member_rejects_without_blocker() {
         "expected PartialArrayWrite, got {err:?}",
     );
     assert_eq!(
-        engine.mirror().get_cell_value(&a1_id).cloned(),
+        engine.cell_store().get_cell_value(&a1_id).cloned(),
         Some(CellValue::number(1.0)),
         "A1 should remain the spill anchor value after rejected clear",
     );
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .get_cell_value_at(&sheet_id, SheetPos::new(2, 0))
             .cloned(),
         Some(CellValue::number(3.0)),
@@ -568,7 +516,7 @@ fn mutation_clear_range_by_position_rejects_partial_cse_clear() {
         "expected PartialArrayWrite, got {err:?}",
     );
     assert!(
-        engine.mirror().is_cse_anchor(&anchor_id),
+        engine.cell_store().is_cse_anchor(&anchor_id),
         "partial clear-all must leave the CSE anchor intact",
     );
 }
@@ -577,9 +525,9 @@ fn mutation_clear_range_by_position_rejects_partial_cse_clear() {
 /// iterative-calc convergence seed when re-entering the same formula.
 ///
 /// Before the fix, step 4 of `mutation_set_cells_raw` unconditionally
-/// overwrote the mirror with the caller-supplied `value` (which, for a
+/// overwrote the cell store with the caller-supplied `value` (which, for a
 /// formula edit, is typically `CellValue::Null`). By the time step 5
-/// dispatched to `set_cells_raw` → `process_value_input`, the mirror had
+/// dispatched to `set_cells_raw` → `process_value_input`, the cell store had
 /// already been nulled, defeating the same-formula seed detection.
 ///
 /// We pre-converge A1 at 10.0 using a formula whose fixed point depends
@@ -618,7 +566,7 @@ fn mutation_set_cells_raw_preserves_iterative_seed_on_same_formula_reentry() {
     let a1_id = CellId::from_uuid_str(A1_UUID).expect("cell uuid");
 
     // Precondition: A1 converged at ~10.0 (seeded at 10; formula holds).
-    let before = engine.mirror().get_cell_value(&a1_id).cloned();
+    let before = engine.cell_store().get_cell_value(&a1_id).cloned();
     let before_n = match before {
         Some(value_types::CellValue::Number(n)) => n.get(),
         _ => panic!("pre-check: A1 must be Number, got {:?}", before),
@@ -630,7 +578,7 @@ fn mutation_set_cells_raw_preserves_iterative_seed_on_same_formula_reentry() {
     );
 
     // Re-enter the SAME formula via mutation_set_cells_raw.
-    engine.with_internals_for_test(|stores, mirror, mutation| {
+    engine.with_internals_for_test(|stores, cell_store| {
         let edits = vec![(
             sheet_id,
             a1_id,
@@ -643,12 +591,12 @@ fn mutation_set_cells_raw_preserves_iterative_seed_on_same_formula_reentry() {
         // self-cycles. Matches how init_from_snapshot (via
         // `bulk_parse_and_register` + `set_precedents_fresh`) avoids
         // per-edge cycle detection.
-        mutation_set_cells_raw(stores, mirror, edits, true).expect("mutation_set_cells_raw");
+        mutation_set_cells_raw(stores, cell_store, edits, true).expect("mutation_set_cells_raw");
     });
 
     // Post-check: A1 must still hold ~10.0. If the pre-write destroyed
     // the seed, iterative calc would restart from 0 → converge to 5.0.
-    let after = engine.mirror().get_cell_value(&a1_id).cloned();
+    let after = engine.cell_store().get_cell_value(&a1_id).cloned();
     let after_n = match after {
         Some(value_types::CellValue::Number(n)) => n.get(),
         _ => panic!("post-check: A1 must be Number, got {:?}", after),

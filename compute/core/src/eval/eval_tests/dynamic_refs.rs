@@ -9,14 +9,14 @@ use super::*;
 #[test]
 fn test_omitted_arg_evaluates_to_null() {
     // ASTNode::Omitted should evaluate to CellValue::Null (not Number(0.0))
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     assert_eq!(eval(&ASTNode::Omitted, &ctx), CellValue::Null);
 }
 
 #[test]
 fn test_log_omitted_base_defaults_to_10() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // LOG(100, ) — omitted base should default to 10
     let result = eval(
@@ -28,7 +28,7 @@ fn test_log_omitted_base_defaults_to_10() {
 
 #[test]
 fn test_left_omitted_num_chars_defaults_to_1() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // LEFT("hello", ) — omitted num_chars should default to 1
     let result = eval(
@@ -43,7 +43,7 @@ fn test_left_omitted_num_chars_defaults_to_1() {
 
 #[test]
 fn test_right_omitted_num_chars_defaults_to_1() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // RIGHT("hello", ) — omitted num_chars should default to 1
     let result = eval(
@@ -58,7 +58,7 @@ fn test_right_omitted_num_chars_defaults_to_1() {
 
 #[test]
 fn test_round_no_digits_defaults_to_zero() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // ROUND(3.14159) with just one arg — no Omitted node, just one arg
     #[allow(clippy::approx_constant)]
@@ -69,7 +69,7 @@ fn test_round_no_digits_defaults_to_zero() {
 
 #[test]
 fn test_explicit_zero_not_replaced_by_default() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // LOG(100, 0) — explicit 0 should NOT be replaced by default 10
     // LOG base 0 is invalid → should return #NUM! error
@@ -83,12 +83,12 @@ fn test_explicit_zero_not_replaced_by_default() {
 // -----------------------------------------------------------------------
 // OFFSET tests
 // -----------------------------------------------------------------------
-// Test mirror: 5x5 grid where cell(r,c) = Number(r*10 + c)
+// Test cell_store: 5x5 grid where cell(r,c) = Number(r*10 + c)
 // So cell(0,0)=0, cell(1,2)=12, cell(2,3)=23, cell(4,4)=44, etc.
 
 #[test]
 fn test_offset_single_cell() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // OFFSET(A1, 2, 3) -> cell(2,3) = 23
     let base = ASTNode::CellReference(CellRefNode {
@@ -112,7 +112,7 @@ fn test_offset_single_cell() {
 
 #[test]
 fn test_offset_with_height_width() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // OFFSET(A1, 1, 1, 2, 2) -> 2x2 range starting at (1,1)
     // = [[11,12],[21,22]]
@@ -153,7 +153,7 @@ fn test_offset_with_height_width() {
 
 #[test]
 fn test_offset_negative_offset() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // OFFSET(C3, -1, -1) -> cell(1,1) = 11
     // C3 is (row=2, col=2)
@@ -178,7 +178,7 @@ fn test_offset_negative_offset() {
 
 #[test]
 fn test_offset_out_of_bounds() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // OFFSET(A1, -1, 0) -> row=-1 -> #REF!
     let base = ASTNode::CellReference(CellRefNode {
@@ -202,7 +202,7 @@ fn test_offset_out_of_bounds() {
 
 #[test]
 fn test_offset_zero_height_returns_ref() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // OFFSET(A1, 0, 0, 0, 1) -> height=0 -> #REF!
     let base = ASTNode::CellReference(CellRefNode {
@@ -232,7 +232,7 @@ fn test_offset_zero_height_returns_ref() {
 
 #[test]
 fn test_offset_from_range() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // OFFSET(A1:B2, 1, 1) -> 2x2 range starting at (1,1)
     // = [[11,12],[21,22]]
@@ -273,7 +273,7 @@ fn test_offset_from_range() {
 
 #[test]
 fn test_offset_range_with_resize() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // OFFSET(A1:B2, 0, 0, 3, 1) -> resize to 3 rows x 1 col starting at (0,0)
     // = [[0],[10],[20]]
@@ -318,7 +318,7 @@ fn test_offset_range_with_resize() {
 
 #[test]
 fn test_offset_omitted_height_width() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // OFFSET(A1, 1, 1, , ) -> height/width omitted -> defaults to base (1x1)
     // -> cell(1,1) = 11
@@ -353,7 +353,7 @@ fn test_offset_omitted_height_width() {
 
 #[test]
 fn test_indirect_simple_cell() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // INDIRECT("C3") -> cell(2,2) = 22
     let result = eval(&func("INDIRECT", vec![ASTNode::Text("C3".into())]), &ctx);
@@ -362,7 +362,7 @@ fn test_indirect_simple_cell() {
 
 #[test]
 fn test_indirect_absolute_ref() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // INDIRECT("$B$2") -> cell(1,1) = 11
     let result = eval(&func("INDIRECT", vec![ASTNode::Text("$B$2".into())]), &ctx);
@@ -371,7 +371,7 @@ fn test_indirect_absolute_ref() {
 
 #[test]
 fn test_indirect_range() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // INDIRECT("A1:B2") -> 2x2 array [[0,1],[10,11]]
     let result = eval(&func("INDIRECT", vec![ASTNode::Text("A1:B2".into())]), &ctx);
@@ -390,7 +390,7 @@ fn test_indirect_range() {
 
 #[test]
 fn test_indirect_with_sheet_name() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // INDIRECT("Sheet1!D4") -> cell(3,3) = 33
     let result = eval(
@@ -402,7 +402,7 @@ fn test_indirect_with_sheet_name() {
 
 #[test]
 fn test_indirect_invalid_ref() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // INDIRECT("not_a_ref") -> #REF!
     let result = eval(
@@ -414,7 +414,7 @@ fn test_indirect_invalid_ref() {
 
 #[test]
 fn test_indirect_empty_string() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // INDIRECT("") -> #REF!
     let result = eval(&func("INDIRECT", vec![ASTNode::Text("".into())]), &ctx);
@@ -423,7 +423,7 @@ fn test_indirect_empty_string() {
 
 #[test]
 fn test_indirect_r1c1_absolute_reference() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // INDIRECT("R1C1", FALSE) resolves the top-left cell.
     let result = eval(
@@ -438,7 +438,7 @@ fn test_indirect_r1c1_absolute_reference() {
 
 #[test]
 fn test_indirect_bad_sheet_name() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // INDIRECT("NoSuchSheet!A1") -> #REF!
     let result = eval(
@@ -450,7 +450,7 @@ fn test_indirect_bad_sheet_name() {
 
 #[test]
 fn test_indirect_quoted_sheet_name() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // INDIRECT("'Sheet1'!E5") -> cell(4,4) = 44
     let result = eval(
@@ -462,7 +462,7 @@ fn test_indirect_quoted_sheet_name() {
 
 #[test]
 fn test_offset_in_sum() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // SUM(OFFSET(A1, 0, 0, 3, 1)) -> SUM of cells (0,0),(1,0),(2,0) = 0+10+20 = 30
     let offset_node = func(
@@ -489,8 +489,8 @@ fn test_offset_in_sum() {
 
 #[test]
 fn indirect_r1c1_resolves_absolute_relative_omitted_and_mixed_axes() {
-    let (mirror, sheet) = test_mirror();
-    let context = MirrorContext::new(&mirror, cell_id_at(2, 2), sheet);
+    let (cell_store, sheet) = test_store();
+    let context = EvalContext::new(&cell_store, cell_id_at(2, 2), sheet);
     for (reference, expected) in [
         ("R2C4", 13.0),
         ("R[-1]C[1]", 13.0),
@@ -543,8 +543,8 @@ fn indirect_r1c1_resolves_absolute_relative_omitted_and_mixed_axes() {
 
 #[test]
 fn dynamic_reference_consumers_share_indirect_geometry() {
-    let (mirror, sheet) = test_mirror();
-    let context = make_ctx(&mirror, sheet);
+    let (cell_store, sheet) = test_store();
+    let context = make_ctx(&cell_store, sheet);
     for (function, reference, a1, expected) in [
         ("ROW", "B4", true, 4.0),
         ("COLUMN", "E1", true, 5.0),
@@ -596,7 +596,7 @@ fn dynamic_reference_consumers_share_indirect_geometry() {
 #[test]
 fn workbook_qualified_names_bypass_sheet_local_shadowing() {
     let sheet = SheetId::from_uuid_str(TEST_SHEET_UUID).unwrap();
-    let (mirror, sheet) = test_mirror_with_named_ranges(vec![
+    let (cell_store, sheet) = test_store_with_named_ranges(vec![
         NamedRangeDef::from_expression("Revenue".into(), Scope::Workbook, "=Sheet1!A2:A3".into()),
         NamedRangeDef::from_expression(
             "Revenue".into(),
@@ -604,7 +604,7 @@ fn workbook_qualified_names_bypass_sheet_local_shadowing() {
             "=Sheet1!B2:B3".into(),
         ),
     ]);
-    let context = make_ctx(&mirror, sheet);
+    let context = make_ctx(&cell_store, sheet);
     for (formula, expected) in [
         ("=SUM(Revenue)", 32.0),
         ("=SUM([0]!Revenue)", 30.0),

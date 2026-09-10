@@ -1,4 +1,4 @@
-//! Entry-sized inverses for authoritative catalogs held by the native mirror.
+//! Entry-sized inverses for authoritative catalogs held by the native cell_store.
 
 use domain_types::domain::table::TableCatalogEntry;
 use snapshot_types::{DataTableRegionDef, PivotTableDef};
@@ -60,9 +60,8 @@ impl CatalogKey {
     }
 }
 
-type CatalogRead<T> = for<'a> fn(&'a CellMirror) -> &'a [T];
-type CatalogSwap<T> =
-    fn(&mut CellMirror, &CatalogKey, &mut Option<(VectorPosition<CatalogKey>, T)>);
+type CatalogRead<T> = for<'a> fn(&'a CellStore) -> &'a [T];
+type CatalogSwap<T> = fn(&mut CellStore, &CatalogKey, &mut Option<(VectorPosition<CatalogKey>, T)>);
 type CatalogEmit<T> = fn(&T, crate::snapshot::ChangeKind, &mut HistoryEffects);
 
 #[derive(Debug)]
@@ -76,8 +75,8 @@ struct CatalogPatch<T> {
 }
 
 impl<T: Debug + PartialEq + Send + Sync + 'static> MetadataSwap for CatalogPatch<T> {
-    fn is_changed(&self, _: &WorkbookStorage, mirror: &CellMirror) -> bool {
-        (self.read)(mirror)
+    fn is_changed(&self, _: &WorkbookStorage, cell_store: &CellStore) -> bool {
+        (self.read)(cell_store)
             .iter()
             .find(|value| (self.identity)(value) == self.key)
             != self.old.as_ref().map(|(_, value)| value)
@@ -86,11 +85,11 @@ impl<T: Debug + PartialEq + Send + Sync + 'static> MetadataSwap for CatalogPatch
     fn swap(
         &mut self,
         _: &mut WorkbookStorage,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         effects: &mut HistoryEffects,
     ) {
-        (self.swap_value)(mirror, &self.key, &mut self.old);
-        if let Some(value) = (self.read)(mirror)
+        (self.swap_value)(cell_store, &self.key, &mut self.old);
+        if let Some(value) = (self.read)(cell_store)
             .iter()
             .find(|value| (self.identity)(value) == self.key)
         {
@@ -103,27 +102,27 @@ impl<T: Debug + PartialEq + Send + Sync + 'static> MetadataSwap for CatalogPatch
 }
 
 fn capture_catalog<T: Debug + Clone + PartialEq + Send + Sync + 'static>(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     key: CatalogKey,
     read: CatalogRead<T>,
     identity: fn(&T) -> CatalogKey,
     swap_value: CatalogSwap<T>,
     emit: CatalogEmit<T>,
 ) {
-    if !mirror.history.is_active() {
+    if !cell_store.history.is_active() {
         return;
     }
-    mirror.history.record_once(
+    cell_store.history.record_once(
         HistoryKey::Metadata(MetadataKey::Catalog(key.clone())),
         || {
             HistoryPatch::Metadata(MetadataPatch(Box::new(CatalogPatch {
-                old: read(mirror)
+                old: read(cell_store)
                     .iter()
                     .enumerate()
                     .find(|(_, value)| identity(value) == key)
                     .map(|(index, value)| {
                         (
-                            VectorPosition::capture(read(mirror), index, identity),
+                            VectorPosition::capture(read(cell_store), index, identity),
                             value.clone(),
                         )
                     }),
@@ -137,20 +136,20 @@ fn capture_catalog<T: Debug + Clone + PartialEq + Send + Sync + 'static>(
     );
 }
 
-pub(crate) fn capture_table(mirror: &CellMirror, id: &str) {
-    if !mirror.history.is_active() {
+pub(crate) fn capture_table(cell_store: &CellStore, id: &str) {
+    if !cell_store.history.is_active() {
         return;
     }
     capture_catalog(
-        mirror,
+        cell_store,
         CatalogKey::Table(id.to_owned()),
-        CellMirror::all_tables,
+        CellStore::all_tables,
         |table| CatalogKey::Table(table.id.clone()),
-        |mirror, key, old| {
+        |cell_store, key, old| {
             let CatalogKey::Table(id) = key else {
                 unreachable!()
             };
-            mirror.history_swap_table(id, old);
+            cell_store.history_swap_table(id, old);
         },
         |table: &TableCatalogEntry, kind, effects| {
             effects.tables = true;
@@ -174,16 +173,16 @@ pub(crate) fn capture_table(mirror: &CellMirror, id: &str) {
     );
 }
 
-pub(crate) fn capture_pivot_def(mirror: &CellMirror, def: &PivotTableDef) {
-    if !mirror.history.is_active() {
+pub(crate) fn capture_pivot_def(cell_store: &CellStore, def: &PivotTableDef) {
+    if !cell_store.history.is_active() {
         return;
     }
     capture_catalog(
-        mirror,
+        cell_store,
         CatalogKey::pivot(def),
-        CellMirror::all_pivot_tables,
+        CellStore::all_pivot_tables,
         CatalogKey::pivot,
-        CellMirror::history_swap_pivot_def,
+        CellStore::history_swap_pivot_def,
         |def: &PivotTableDef, kind, effects| {
             if let Ok(sheet) = SheetId::from_uuid_str(&def.sheet) {
                 effects.sheets.insert(sheet);
@@ -209,16 +208,16 @@ pub(crate) fn capture_pivot_def(mirror: &CellMirror, def: &PivotTableDef) {
     );
 }
 
-pub(crate) fn capture_data_table(mirror: &CellMirror, def: &DataTableRegionDef) {
-    if !mirror.history.is_active() {
+pub(crate) fn capture_data_table(cell_store: &CellStore, def: &DataTableRegionDef) {
+    if !cell_store.history.is_active() {
         return;
     }
     capture_catalog(
-        mirror,
+        cell_store,
         CatalogKey::data_table(def),
-        CellMirror::all_data_table_regions,
+        CellStore::all_data_table_regions,
         CatalogKey::data_table,
-        CellMirror::history_swap_data_table,
+        CellStore::history_swap_data_table,
         |def: &DataTableRegionDef, _, effects| {
             if let Ok(sheet) = SheetId::from_uuid_str(&def.sheet) {
                 effects.sheets.insert(sheet);
@@ -234,11 +233,11 @@ mod tests {
     #[test]
     fn catalog_history_restores_order_after_prior_touches_and_bulk_removal() {
         let mut storage = WorkbookStorage::new();
-        let mut mirror = CellMirror::new();
-        mirror.bind_history_capture(storage.history.share());
+        let mut cell_store = CellStore::new();
+        cell_store.bind_history_capture(storage.history.share());
         let sheet = SheetId::from_raw(123).to_uuid_string();
         for (row, name) in ["First", "Second", "Third"].into_iter().enumerate() {
-            mirror.upsert_pivot_table_def(PivotTableDef {
+            cell_store.upsert_pivot_table_def(PivotTableDef {
                 grand_total_cells: Vec::new(),
                 id: name.into(),
                 name: name.into(),
@@ -261,13 +260,13 @@ mod tests {
                 show_column_grand_totals: None,
             });
         }
-        let original = mirror.all_pivot_tables().to_vec();
+        let original = cell_store.all_pivot_tables().to_vec();
         storage.history.begin();
         for mut def in original.clone() {
             def.show_row_grand_totals = Some(false);
-            mirror.upsert_pivot_table_def(def);
+            cell_store.upsert_pivot_table_def(def);
         }
-        mirror.remove_pivot_table_defs_for_sheet(&sheet);
+        cell_store.remove_pivot_table_defs_for_sheet(&sheet);
         let mut patches: Vec<_> = storage
             .history
             .finish()
@@ -280,16 +279,24 @@ mod tests {
             })
             .collect();
         assert_eq!(patches.len(), 3);
-        assert!(mirror.all_pivot_tables().is_empty());
+        assert!(cell_store.all_pivot_tables().is_empty());
         for _ in 0..3 {
             for patch in patches.iter_mut().rev() {
-                patch.swap(&mut storage, &mut mirror, &mut HistoryEffects::default());
+                patch.swap(
+                    &mut storage,
+                    &mut cell_store,
+                    &mut HistoryEffects::default(),
+                );
             }
-            assert_eq!(mirror.all_pivot_tables(), original);
+            assert_eq!(cell_store.all_pivot_tables(), original);
             for patch in &mut patches {
-                patch.swap(&mut storage, &mut mirror, &mut HistoryEffects::default());
+                patch.swap(
+                    &mut storage,
+                    &mut cell_store,
+                    &mut HistoryEffects::default(),
+                );
             }
-            assert!(mirror.all_pivot_tables().is_empty());
+            assert!(cell_store.all_pivot_tables().is_empty());
         }
     }
 }

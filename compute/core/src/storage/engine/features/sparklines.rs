@@ -5,33 +5,12 @@ use crate::storage::sheet::sparklines;
 use cell_types::SheetId;
 use value_types::ComputeError;
 
-fn sparkline_change_positions(result: &MutationResult) -> Vec<(u32, u32)> {
-    let mut positions = Vec::new();
-    for change in &result.sparkline_changes {
-        let Some(position) = change.position.as_ref() else {
-            continue;
-        };
-        let key = (position.row, position.col);
-        if !positions.contains(&key) {
-            positions.push(key);
-        }
-    }
-    positions
-}
-
 pub(super) fn add_sparkline(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     sparkline: sparklines::Sparkline,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let result = svc::add_sparkline(&mut engine.stores, sheet_id, &sparkline)?;
-    let positions = sparkline_change_positions(&result);
-    let patches = if positions.is_empty() {
-        compute_wire::mutation::serialize_multi_viewport_patches(&[])
-    } else {
-        engine.produce_sparkline_viewport_patches(sheet_id, &positions)
-    };
-    Ok((patches, result))
+) -> Result<MutationResult, ComputeError> {
+    svc::add_sparkline(&mut engine.stores, &engine.cell_store, sheet_id, &sparkline)
 }
 
 pub(super) fn update_sparkline(
@@ -39,30 +18,27 @@ pub(super) fn update_sparkline(
     sheet_id: &SheetId,
     sparkline_id: &str,
     updates: sparklines::SparklineUpdate,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let result = svc::update_sparkline(&mut engine.stores, sheet_id, sparkline_id, &updates)?;
-    let positions = sparkline_change_positions(&result);
-    let patches = if positions.is_empty() {
-        compute_wire::mutation::serialize_multi_viewport_patches(&[])
-    } else {
-        engine.produce_sparkline_viewport_patches(sheet_id, &positions)
-    };
-    Ok((patches, result))
+) -> Result<MutationResult, ComputeError> {
+    svc::update_sparkline(
+        &mut engine.stores,
+        &engine.cell_store,
+        sheet_id,
+        sparkline_id,
+        &updates,
+    )
 }
 
 pub(super) fn delete_sparkline(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     sparkline_id: &str,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let result = svc::delete_sparkline(&mut engine.stores, sheet_id, sparkline_id)?;
-    let positions = sparkline_change_positions(&result);
-    let patches = if positions.is_empty() {
-        compute_wire::mutation::serialize_multi_viewport_patches(&[])
-    } else {
-        engine.produce_sparkline_viewport_patches(sheet_id, &positions)
-    };
-    Ok((patches, result))
+) -> Result<MutationResult, ComputeError> {
+    svc::delete_sparkline(
+        &mut engine.stores,
+        &engine.cell_store,
+        sheet_id,
+        sparkline_id,
+    )
 }
 
 pub(super) fn get_sparklines_in_sheet(
@@ -93,15 +69,8 @@ pub(super) fn add_sparkline_group(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     group: sparklines::SparklineGroup,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let result = svc::add_sparkline_group(&mut engine.stores, sheet_id, &group)?;
-    let positions = sparkline_change_positions(&result);
-    let patches = if positions.is_empty() {
-        compute_wire::mutation::serialize_multi_viewport_patches(&[])
-    } else {
-        engine.produce_sparkline_viewport_patches(sheet_id, &positions)
-    };
-    Ok((patches, result))
+) -> Result<MutationResult, ComputeError> {
+    svc::add_sparkline_group(&mut engine.stores, &engine.cell_store, sheet_id, &group)
 }
 
 pub(super) fn get_sparkline_group(
@@ -124,20 +93,14 @@ pub(super) fn delete_sparkline_group(
     sheet_id: &SheetId,
     group_id: &str,
     delete_sparklines: bool,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let result =
-        svc::delete_sparkline_group(&mut engine.stores, sheet_id, group_id, delete_sparklines)?;
-    let positions = if delete_sparklines {
-        sparkline_change_positions(&result)
-    } else {
-        Vec::new()
-    };
-    let patches = if positions.is_empty() {
-        compute_wire::mutation::serialize_multi_viewport_patches(&[])
-    } else {
-        engine.produce_sparkline_viewport_patches(sheet_id, &positions)
-    };
-    Ok((patches, result))
+) -> Result<MutationResult, ComputeError> {
+    svc::delete_sparkline_group(
+        &mut engine.stores,
+        &engine.cell_store,
+        sheet_id,
+        group_id,
+        delete_sparklines,
+    )
 }
 
 pub(super) fn clear_sparklines_in_range(
@@ -147,38 +110,23 @@ pub(super) fn clear_sparklines_in_range(
     start_col: u32,
     end_row: u32,
     end_col: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     svc::clear_sparklines_in_range(
         &mut engine.stores,
+        &engine.cell_store,
         sheet_id,
         start_row,
         start_col,
         end_row,
         end_col,
     )
-    .map(|result| {
-        let positions = sparkline_change_positions(&result);
-        let patches = if positions.is_empty() {
-            compute_wire::mutation::serialize_multi_viewport_patches(&[])
-        } else {
-            engine.produce_sparkline_viewport_patches(sheet_id, &positions)
-        };
-        (patches, result)
-    })
 }
 
 pub(super) fn clear_sparklines_for_sheet(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let result = svc::clear_sparklines_for_sheet(&mut engine.stores, sheet_id)?;
-    let positions = sparkline_change_positions(&result);
-    let patches = if positions.is_empty() {
-        compute_wire::mutation::serialize_multi_viewport_patches(&[])
-    } else {
-        engine.produce_sparkline_viewport_patches(sheet_id, &positions)
-    };
-    Ok((patches, result))
+) -> Result<MutationResult, ComputeError> {
+    svc::clear_sparklines_for_sheet(&mut engine.stores, &engine.cell_store, sheet_id)
 }
 
 pub(super) fn has_sparkline(

@@ -72,7 +72,7 @@ fn cell_change_at(
 fn replace_all_existing_literals_returns_direct_changes_without_dependents() {
     let (mut engine, _) = ComputeEngine::from_snapshot(literal_snapshot()).unwrap();
 
-    let (_patches, mutation_result) = engine
+    let mutation_result = engine
         .replace_all_in_range(
             &sheet_id(),
             0,

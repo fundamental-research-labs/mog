@@ -6,7 +6,7 @@ use cell_types::{CellId, SheetId, SheetPos};
 use formula_types::CellRef;
 use snapshot_types::DataTableRegionDef;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::WorkbookStorage;
 
 fn data_table_region_id(def: &DataTableRegionDef) -> String {
@@ -59,7 +59,7 @@ pub struct DataTableRegionMutation {
 /// is invalidated rather than replayed on the wrong sheet. Partial and
 /// destination-conflicting regions are also invalidated.
 pub fn relocate_regions(
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     source_sheet: &SheetId,
     source_start_row: u32,
     source_start_col: u32,
@@ -69,7 +69,7 @@ pub fn relocate_regions(
     target_start_row: u32,
     target_start_col: u32,
 ) -> DataTableRegionMutation {
-    let regions: Vec<(String, DataTableRegionDef)> = mirror
+    let regions: Vec<(String, DataTableRegionDef)> = cell_store
         .all_data_table_regions()
         .iter()
         .map(|region| (data_table_region_id(region), region.clone()))
@@ -274,7 +274,7 @@ pub fn relocate_regions(
                 (!invalidated_keys.contains(&key)).then_some(moved)
             }),
         );
-        mirror.replace_data_table_regions(updated);
+        cell_store.replace_data_table_regions(updated);
     }
     mutation
 }
@@ -283,7 +283,7 @@ pub fn relocate_regions(
 /// has no single translation delta because duplicate rows are skipped, so any
 /// intersecting authoritative region is unsafe to retain.
 pub fn invalidate_regions(
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -291,7 +291,7 @@ pub fn invalidate_regions(
     end_col: u32,
 ) -> DataTableRegionMutation {
     let bounds = (start_row, start_col, end_row, end_col);
-    let (invalidated, retained): (Vec<_>, Vec<_>) = mirror
+    let (invalidated, retained): (Vec<_>, Vec<_>) = cell_store
         .all_data_table_regions()
         .iter()
         .cloned()
@@ -321,7 +321,7 @@ pub fn invalidate_regions(
         })
         .collect();
     if changed {
-        mirror.replace_data_table_regions(retained);
+        cell_store.replace_data_table_regions(retained);
     }
     DataTableRegionMutation {
         changed,
@@ -563,13 +563,13 @@ fn shifted_a1_cell(original: &str, shifted: SheetPos) -> String {
 /// Callers replay the returned cells as literals through the compute scheduler.
 pub fn clear_table_formula_cells(
     storage: &mut WorkbookStorage,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     cell_ids: &[CellId],
 ) -> Vec<CellId> {
     let mut cleared = Vec::new();
     for cell_id in cell_ids {
-        let body_is_table = mirror.get_formula(cell_id).is_some_and(|formula| {
+        let body_is_table = cell_store.get_formula(cell_id).is_some_and(|formula| {
             let body = formula.template.trim_start();
             body.strip_prefix('=')
                 .unwrap_or(body)
@@ -583,13 +583,13 @@ pub fn clear_table_formula_cells(
         if !body_is_table && !metadata_is_table {
             continue;
         }
-        let Some(pos) = mirror.resolve_position(cell_id) else {
+        let Some(pos) = cell_store.resolve_position(cell_id) else {
             continue;
         };
-        if mirror.sheet_for_cell(cell_id) != Some(*sheet_id) {
+        if cell_store.sheet_for_cell(cell_id) != Some(*sheet_id) {
             continue;
         }
-        let value = mirror
+        let value = cell_store
             .get_cell_value_raw(cell_id)
             .cloned()
             .unwrap_or(value_types::CellValue::Null);
@@ -599,7 +599,7 @@ pub fn clear_table_formula_cells(
             metadata.formula_result_mode = None;
             storage.set_cell_metadata(*cell_id, metadata);
         }
-        mirror.apply_edit(sheet_id, *cell_id, pos, value, None);
+        cell_store.apply_edit(sheet_id, *cell_id, pos, value, None);
         cleared.push(*cell_id);
     }
     cleared
@@ -632,7 +632,7 @@ mod tests {
 
     #[test]
     fn complete_cross_sheet_move_translates_inputs_inside_the_moved_range() {
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let source = SheetId::from_raw(11);
         let target = SheetId::from_raw(12);
         let mut original = region(
@@ -663,13 +663,13 @@ mod tests {
             del1: false,
             del2: false,
         });
-        mirror.upsert_data_table_region(original);
+        cell_store.upsert_data_table_region(original);
 
-        let mutation = relocate_regions(&mut mirror, &source, 2, 2, 3, 3, &target, 8, 9);
+        let mutation = relocate_regions(&mut cell_store, &source, 2, 2, 3, 3, &target, 8, 9);
 
         assert!(mutation.changed);
         assert!(mutation.invalidated.is_empty());
-        let regions = mirror.all_data_table_regions();
+        let regions = cell_store.all_data_table_regions();
         assert_eq!(regions.len(), 1);
         let moved = &regions[0];
         assert_eq!(moved.sheet, target.to_uuid_string());
@@ -698,7 +698,7 @@ mod tests {
 
     #[test]
     fn complete_cross_sheet_move_drops_external_positional_input() {
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let source = SheetId::from_raw(21);
         let target = SheetId::from_raw(22);
         let original = region(
@@ -714,18 +714,18 @@ mod tests {
             }),
             None,
         );
-        mirror.upsert_data_table_region(original);
+        cell_store.upsert_data_table_region(original);
 
-        let mutation = relocate_regions(&mut mirror, &source, 2, 2, 3, 3, &target, 8, 9);
+        let mutation = relocate_regions(&mut cell_store, &source, 2, 2, 3, 3, &target, 8, 9);
 
         assert!(mutation.changed);
         assert_eq!(mutation.invalidated.len(), 1);
-        assert!(mirror.all_data_table_regions().is_empty());
+        assert!(cell_store.all_data_table_regions().is_empty());
     }
 
     #[test]
     fn destination_overlap_invalidates_both_regions_before_insert() {
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let source = SheetId::from_raw(23);
         let target = SheetId::from_raw(24);
         let unrelated = SheetId::from_raw(25);
@@ -744,22 +744,22 @@ mod tests {
         );
         let destination_region = region(target, 8, 9, 10, 10, None, None);
         let unrelated_region = region(unrelated, 8, 9, 10, 10, None, None);
-        mirror.upsert_data_table_region(source_region);
-        mirror.upsert_data_table_region(destination_region);
-        mirror.upsert_data_table_region(unrelated_region);
+        cell_store.upsert_data_table_region(source_region);
+        cell_store.upsert_data_table_region(destination_region);
+        cell_store.upsert_data_table_region(unrelated_region);
 
-        let mutation = relocate_regions(&mut mirror, &source, 2, 2, 3, 3, &target, 8, 9);
+        let mutation = relocate_regions(&mut cell_store, &source, 2, 2, 3, 3, &target, 8, 9);
 
         assert!(mutation.changed);
         assert_eq!(mutation.invalidated.len(), 2);
-        let remaining = mirror.all_data_table_regions();
+        let remaining = cell_store.all_data_table_regions();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].sheet, unrelated.to_uuid_string());
     }
 
     #[test]
     fn same_sheet_move_preserves_external_input_and_translates_region() {
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let sheet = SheetId::from_raw(31);
         let external = CellRef::Positional {
             sheet,
@@ -767,13 +767,13 @@ mod tests {
             col: 0,
         };
         let original = region(sheet, 2, 2, 3, 3, Some(external), None);
-        mirror.upsert_data_table_region(original);
+        cell_store.upsert_data_table_region(original);
 
-        let mutation = relocate_regions(&mut mirror, &sheet, 2, 2, 3, 3, &sheet, 8, 9);
+        let mutation = relocate_regions(&mut cell_store, &sheet, 2, 2, 3, 3, &sheet, 8, 9);
 
         assert!(mutation.changed);
         assert!(mutation.invalidated.is_empty());
-        let moved = &mirror.all_data_table_regions()[0];
+        let moved = &cell_store.all_data_table_regions()[0];
         assert_eq!(moved.row_input_ref, Some(external));
         assert_eq!((moved.start_row, moved.start_col), (8, 9));
     }
@@ -781,15 +781,15 @@ mod tests {
     #[test]
     fn clearing_invalidated_table_body_keeps_cached_value_but_removes_formula() {
         let mut storage = WorkbookStorage::new();
-        let mut mirror = CellMirror::new();
+        let mut cell_store = CellStore::new();
         let sheet = SheetId::from_raw(41);
         let cell_id = CellId::from_raw(42);
-        mirror.add_sheet_mirror(
+        cell_store.add_sheet_store(
             sheet,
             "Sheet1".to_string(),
-            crate::mirror::SheetMirror::new(sheet, "Sheet1".to_string(), 10, 10),
+            crate::cells::SheetStore::new(sheet, "Sheet1".to_string(), 10, 10),
         );
-        mirror.apply_edit(
+        cell_store.apply_edit(
             &sheet,
             cell_id,
             SheetPos::new(0, 0),
@@ -814,13 +814,13 @@ mod tests {
                 ..Default::default()
             },
         );
-        let cleared = clear_table_formula_cells(&mut storage, &mut mirror, &sheet, &[cell_id]);
+        let cleared = clear_table_formula_cells(&mut storage, &mut cell_store, &sheet, &[cell_id]);
         assert_eq!(cleared, vec![cell_id]);
         assert_eq!(
-            mirror.get_cell_value_raw(&cell_id),
+            cell_store.get_cell_value_raw(&cell_id),
             Some(&value_types::CellValue::number(5.0))
         );
-        assert!(mirror.get_formula(&cell_id).is_none());
+        assert!(cell_store.get_formula(&cell_id).is_none());
         assert!(storage.cell_metadata(&cell_id).is_none());
     }
 }

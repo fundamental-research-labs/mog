@@ -1,8 +1,8 @@
 use cell_types::SheetId;
 use value_types::ComputeError;
 
-use crate::mirror::CellMirror;
-use crate::range_manager::RangeSpatialIndex;
+use crate::cells::CellStore;
+use crate::range_manager::MergeList;
 use crate::snapshot::{
     ChangeKind, MutationResult, RecalcResult, SheetChange, SheetChangeField,
     SheetLifecycleRuntimeHint,
@@ -18,31 +18,32 @@ use domain_types::units::Pixels;
 /// Create a new sheet with full store synchronization.
 pub(in crate::storage::engine) fn mutation_create_sheet(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     name: &str,
     default_col_width_px: Option<f64>,
 ) -> Result<(String, MutationResult), ComputeError> {
-    create_sheet(stores, mirror, name, default_col_width_px)
+    create_sheet(stores, cell_store, name, default_col_width_px)
 }
 
 /// Create the implicit default sheet and return complete initial workbook state.
 pub(in crate::storage::engine) fn mutation_create_default_sheet(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     name: &str,
     default_col_width_px: Option<f64>,
 ) -> Result<(String, MutationResult), ComputeError> {
     // Run the standard store-sync work; discard the slim per-mutation
     // `MutationResult` it builds — we re-emit a hydration-shape result
-    // below so first-paint mirror state matches Rust exactly.
-    let (hex, _slim_result) = create_sheet(stores, mirror, name, default_col_width_px)?;
-    let result = super::build_mutation_result_for_hydration(stores, mirror, RecalcResult::empty());
+    // below so first-paint cell_store state matches Rust exactly.
+    let (hex, _slim_result) = create_sheet(stores, cell_store, name, default_col_width_px)?;
+    let result =
+        super::build_mutation_result_for_hydration(stores, cell_store, RecalcResult::empty());
     Ok((hex, result))
 }
 
 fn create_sheet(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     name: &str,
     default_col_width_px: Option<f64>,
 ) -> Result<(String, MutationResult), ComputeError> {
@@ -65,13 +66,13 @@ fn create_sheet(
     // Create sheet metadata and native values.
     let sheet_id = {
         stores.storage.create_sheet_with_width(
-            mirror,
+            cell_store,
             &name,
             &stores.grid_id_alloc,
             default_col_width_cw,
         )?
     };
-    crate::storage::engine::history::structure::capture_sheet(stores, mirror, sheet_id, true);
+    crate::storage::engine::history::structure::capture_sheet(stores, cell_store, sheet_id, true);
     let hex: String = id_to_hex(sheet_id.as_u128()).into();
 
     // Initialize the shared row and column identities.
@@ -87,7 +88,7 @@ fn create_sheet(
         ranges: vec![],
     };
     let grid = super::super::super::build_grid_from_native_sheet(
-        mirror,
+        cell_store,
         sheet_id,
         &snap_for_grid,
         stores.grid_id_alloc.clone(),
@@ -96,21 +97,10 @@ fn create_sheet(
     let col_axis = grid.col_axis();
     stores.grid_indexes.insert(sheet_id, grid);
 
-    // 3b. Create empty merge spatial index
+    // 3b. Create empty merge list
     stores
         .merge_indexes
-        .insert(sheet_id, RangeSpatialIndex::with_items(vec![]));
-
-    // 3c. Create LayoutIndex (all defaults)
-    stores.layout_indexes.insert(
-        sheet_id,
-        compute_layout_index::LayoutIndex::with_defaults(
-            100,
-            26,
-            stores.layout_metrics.default_row_height(),
-            default_col_width,
-        ),
-    );
+        .insert(sheet_id, MergeList::with_items(vec![]));
 
     // 4. Add to ComputeCore via add_sheet with empty snapshot
     let snap = crate::snapshot::SheetSnapshot {
@@ -124,19 +114,19 @@ fn create_sheet(
         cells: vec![],
         ranges: vec![],
     };
-    stores.compute.add_sheet(mirror, snap)?;
-    mirror.install_sheet_axes(sheet_id, row_axis, col_axis);
+    stores.compute.add_sheet(cell_store, snap)?;
+    cell_store.install_sheet_axes(sheet_id, row_axis, col_axis);
 
     // Build MutationResult via the canonical hydration helper. The helper
     // emits the `SheetChange { field: Sheet, kind: Set }` creation event
-    // itself plus every per-sheet mirror dimension (settings, print
+    // itself plus every per-sheet store dimension (settings, print
     // settings, scroll position, etc.) — closing the eight-of-nine
-    // `mirror-matches-rust` dimensions that the slim shape used to leave
+    // `cell_store-matches-rust` dimensions that the slim shape used to leave
     // uninitialized for the new sheet.
     let mut result = MutationResult::empty();
     super::result_building::build_sheet_hydration_changes(
         stores,
-        mirror,
+        cell_store,
         &sheet_id,
         None,
         &mut result,
@@ -165,7 +155,7 @@ fn resolve_default_col_width(
 /// Delete a sheet with full store synchronization.
 pub(in crate::storage::engine) fn mutation_delete_sheet(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
 ) -> Result<(MutationResult, RecalcResult), ComputeError> {
     // Validate: cannot delete last sheet
@@ -181,7 +171,7 @@ pub(in crate::storage::engine) fn mutation_delete_sheet(
         });
     }
 
-    crate::storage::engine::history::structure::capture_sheet(stores, mirror, *sheet_id, false);
+    crate::storage::engine::history::structure::capture_sheet(stores, cell_store, *sheet_id, false);
     let name = crate::storage::sheet::properties::get_sheet_name(&stores.storage, sheet_id);
     let sheet_id_str = sheet_id.to_uuid_string();
 
@@ -194,7 +184,7 @@ pub(in crate::storage::engine) fn mutation_delete_sheet(
         sheet_id,
     );
 
-    let table_names: Vec<_> = mirror
+    let table_names: Vec<_> = cell_store
         .all_tables()
         .iter()
         .rev()
@@ -202,10 +192,10 @@ pub(in crate::storage::engine) fn mutation_delete_sheet(
         .map(|table| table.name.clone())
         .collect();
     for name in table_names {
-        stores.compute.remove_table(mirror, &name);
+        stores.compute.remove_table(cell_store, &name);
     }
-    mirror.remove_pivot_table_defs_for_sheet(&sheet_id_str);
-    mirror.remove_data_table_regions_for_sheet(&sheet_id_str);
+    cell_store.remove_pivot_table_defs_for_sheet(&sheet_id_str);
+    cell_store.remove_data_table_regions_for_sheet(&sheet_id_str);
 
     // Remove native OOXML payloads while their owning identities still resolve.
     let metadata_cells: Vec<_> = stores
@@ -213,25 +203,23 @@ pub(in crate::storage::engine) fn mutation_delete_sheet(
         .cell_metadata
         .keys()
         .copied()
-        .filter(|id| {
-            mirror.sheet_for_cell(id) == Some(*sheet_id)
-                || stores
-                    .grid_indexes
-                    .get(sheet_id)
-                    .is_some_and(|grid| grid.cell_position(id).is_some())
-        })
+        .filter(|id| cell_store.sheet_for_cell(id) == Some(*sheet_id))
         .collect();
     for id in metadata_cells {
         stores.storage.cell_metadata.remove(&id);
     }
 
-    // 1. Remove from ComputeCore first — needs mirror data to find external dependents.
-    //    This also calls mirror.remove_sheet internally.
-    crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
-    let recalc = stores.compute.remove_sheet(mirror, sheet_id)?;
+    // 1. Remove from ComputeCore first — needs cell-store data to find external dependents.
+    //    This also calls cell_store.remove_sheet internally.
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
+    let recalc = stores.compute.remove_sheet(cell_store, sheet_id)?;
 
     // 2. Remove native metadata (values were cleared by compute.remove_sheet)
-    stores.storage.remove_sheet(mirror, sheet_id);
+    stores.storage.remove_sheet(cell_store, sheet_id);
     if let Some(name) = name.as_deref() {
         crate::storage::sheet::schemas::invalidate_validation_sheet_references(
             &mut stores.storage,
@@ -239,10 +227,10 @@ pub(in crate::storage::engine) fn mutation_delete_sheet(
         );
     }
 
-    // 3. Remove GridIndex, merge spatial index, and layout index
+    // 3. Remove GridIndex, merge list, and layout index
     stores.grid_indexes.remove(sheet_id);
     stores.merge_indexes.remove(sheet_id);
-    stores.layout_indexes.remove(sheet_id);
+    stores.invalidate_pixel_layout(sheet_id);
 
     let mut result = MutationResult::empty();
     result.sheet_changes.push(SheetChange {
@@ -273,7 +261,7 @@ pub(in crate::storage::engine) fn mutation_delete_sheet(
 /// Rename a sheet with full store synchronization.
 pub(in crate::storage::engine) fn mutation_rename_sheet(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     name: &str,
 ) -> Result<MutationResult, ComputeError> {
@@ -281,8 +269,8 @@ pub(in crate::storage::engine) fn mutation_rename_sheet(
     let old_name = crate::storage::sheet::properties::get_sheet_name(&stores.storage, sheet_id);
 
     crate::storage::sheet::properties::rename_sheet(&mut stores.storage, sheet_id, name);
-    // 2. Rename in ComputeCore, which updates the mirror and authored formula text.
-    stores.compute.rename_sheet(mirror, sheet_id, name);
+    // 2. Rename in ComputeCore, which updates the cell store and authored formula text.
+    stores.compute.rename_sheet(cell_store, sheet_id, name);
     if let Some(old_name) = old_name.as_deref() {
         crate::storage::sheet::schemas::rewrite_validation_sheet_references(
             &mut stores.storage,
@@ -329,14 +317,13 @@ pub(in crate::storage::engine) fn mutation_rename_sheet(
 /// Copy a sheet with full store synchronization.
 pub(in crate::storage::engine) fn mutation_copy_sheet(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     source_sheet_id: &SheetId,
     new_name: &str,
 ) -> Result<(String, MutationResult), ComputeError> {
     use crate::identity::GridIndex;
-    use crate::storage::engine::construction;
 
-    let formulas_by_pos: std::collections::HashMap<_, _> = mirror
+    let formulas_by_pos: std::collections::HashMap<_, _> = cell_store
         .get_sheet(source_sheet_id)
         .into_iter()
         .flat_map(|sheet| {
@@ -344,7 +331,7 @@ pub(in crate::storage::engine) fn mutation_copy_sheet(
                 let pos = sheet.position_of(id)?;
                 let text = crate::storage::engine::formula_read::formula_text_for_cell_id(
                     stores,
-                    mirror,
+                    cell_store,
                     source_sheet_id,
                     id,
                 )?;
@@ -353,75 +340,56 @@ pub(in crate::storage::engine) fn mutation_copy_sheet(
         })
         .collect();
 
-    // Preserve sparse identities used only by formatting, merges, or comments.
     if let Some(grid) = stores.grid_indexes.get(source_sheet_id) {
-        mirror.install_sheet_axes(*source_sheet_id, grid.row_axis(), grid.col_axis());
-        for (id, row, col) in grid.cells() {
-            mirror.register_identity_position(
-                *source_sheet_id,
-                cell_types::SheetPos::new(row, col),
-                id,
-            );
-        }
+        cell_store.install_sheet_axes(*source_sheet_id, grid.row_axis(), grid.col_axis());
     }
 
     // Copy the native values and their identity indexes together.
     let new_id = {
         stores
             .storage
-            .copy_sheet(mirror, source_sheet_id, new_name, &stores.grid_id_alloc)?
+            .copy_sheet(cell_store, source_sheet_id, new_name, &stores.grid_id_alloc)?
     };
-    crate::storage::engine::history::structure::capture_sheet(stores, mirror, new_id, true);
+    crate::storage::engine::history::structure::capture_sheet(stores, cell_store, new_id, true);
     let hex: String = id_to_hex(new_id.as_u128()).into();
 
-    let sheet = mirror
+    let sheet = cell_store
         .get_sheet(&new_id)
         .ok_or_else(|| ComputeError::SheetNotFound {
             sheet_id: hex.clone(),
         })?;
-    let (rows, cols) = (sheet.grid_rows, sheet.grid_cols);
-    let mut new_grid = GridIndex::from_shared_axes(
+    let new_grid = GridIndex::from_shared_axes(
         new_id,
         sheet.row_axis.clone(),
         sheet.col_axis.clone(),
         stores.grid_id_alloc.clone(),
     );
-    for (id, pos) in &sheet.id_to_pos {
-        new_grid.register_cell(*id, pos.row(), pos.col());
-    }
     let mut formula_cells: Vec<_> = formulas_by_pos
         .into_iter()
         .filter_map(|(pos, text)| sheet.cell_id_at(pos).map(|id| (id, text)))
         .collect();
     stores.grid_indexes.insert(new_id, new_grid);
 
-    // 3b. Build merge spatial index for the new sheet, and sync into mirror.
-    super::super::mutation::rebuild_merge_index(stores, &new_id);
-    super::super::mutation::sync_mirror_merge_regions(stores, mirror, &new_id);
-
-    // 3c. Build LayoutIndex
-    let li = construction::build_layout_index_for_sheet(
-        &stores.storage,
-        &new_id,
-        rows,
-        cols,
-        stores.grid_indexes.get(&new_id),
-        stores.layout_metrics,
-    );
-    stores.layout_indexes.insert(new_id, li);
+    // 3b. Build merge list for the new sheet, and sync into cell_store.
+    super::super::mutation::rebuild_merge_index(stores, cell_store, &new_id);
+    super::super::mutation::sync_store_merge_regions(stores, cell_store, &new_id);
 
     super::super::tables::copy_sheet_tables(
         stores,
-        mirror,
+        cell_store,
         source_sheet_id,
         &new_id,
         &mut formula_cells,
     )?;
-    crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
     stores
         .compute
-        .register_sheet_formulas(mirror, new_id, formula_cells);
-    super::super::objects::refresh_copied_cell_annotations(stores, mirror, &new_id)?;
+        .register_sheet_formulas(cell_store, new_id, formula_cells);
+    super::super::objects::refresh_copied_cell_annotations(stores, cell_store, &new_id)?;
 
     // Build MutationResult via the canonical hydration helper, threading
     // `source_sheet_id = Some(source)` so the creation event carries copy
@@ -434,7 +402,7 @@ pub(in crate::storage::engine) fn mutation_copy_sheet(
     let mut result = MutationResult::empty();
     super::result_building::build_sheet_hydration_changes(
         stores,
-        mirror,
+        cell_store,
         &new_id,
         Some(source_sheet_id),
         &mut result,

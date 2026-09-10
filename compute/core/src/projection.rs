@@ -23,12 +23,12 @@
 
 use rustc_hash::FxHashMap;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use cell_types::{CellId, SheetId, SheetPos};
 use value_types::CellValue;
 
 // ---------------------------------------------------------------------------
-// Render views — the unified return type for `CellMirror::cell_render_at`.
+// Render views — the unified return type for `CellStore::cell_render_at`.
 // ---------------------------------------------------------------------------
 
 /// Projection-aware view of a cell at `(sheet, row, col)`.
@@ -42,7 +42,7 @@ pub struct ProjectionView<'a> {
     pub anchor_row: u32,
     pub anchor_col: u32,
     pub value: &'a CellValue,
-    /// `true` iff `anchor_id` is registered in `mirror.cse_anchors`. CSE
+    /// `true` iff `anchor_id` is registered in `cell_store.cse_anchors`. CSE
     /// distinguishes the legacy Ctrl+Shift+Enter array formulas (extent is
     /// reserved; partial-edit is rejected) from automatic dynamic-array
     /// spills (members may be displaced as `#SPILL!`).
@@ -52,7 +52,7 @@ pub struct ProjectionView<'a> {
 /// View of a non-projection cell that has a CellId at `(sheet, row, col)`.
 ///
 /// The render path stitches in the formula text via the scheduler's
-/// `formula_strings`; the mirror does not own that map.
+/// `formula_strings`; the cell store does not own that map.
 ///
 /// `region` carries non-projection region membership — Data Tables today;
 /// pivot value cells / table column / defined-name multi / cross-workbook
@@ -68,7 +68,7 @@ pub struct PlainCellView<'a> {
 ///
 /// Pivot output and other generated grid projections can live in `col_data`
 /// without allocating editable cell identities. They are still first-class
-/// renderable grid values and must flow through the same mirror chokepoint as
+/// renderable grid values and must flow through the same cell_store chokepoint as
 /// CellId-backed cells.
 #[derive(Debug)]
 pub struct MaterializedCellView<'a> {
@@ -103,8 +103,8 @@ pub enum RegionKind {
 /// `is_anchor` distinguishes the formula-owning cell (e.g., the Data
 /// Table master) from body cells. `anchor_row`/`anchor_col` plus
 /// `rows`/`cols` describe the full region rectangle, so wire-side
-/// `RegionMeta` populates without a parallel mirror lookup — keeping
-/// the chokepoint complete (no second read of `mirror.data_table_regions`
+/// `RegionMeta` populates without a parallel cell_store lookup — keeping
+/// the chokepoint complete (no second read of `cell_store.data_table_regions`
 /// from render code).
 #[derive(Debug, Clone, Copy)]
 pub struct RegionRef {
@@ -117,7 +117,7 @@ pub struct RegionRef {
     pub cols: u32,
 }
 
-/// Result of `CellMirror::cell_render_at` — the chokepoint that every
+/// Result of `CellStore::cell_render_at` — the chokepoint that every
 /// render path keys off of.
 ///
 /// The `Projection` arm exists so the renderer cannot accidentally route
@@ -362,7 +362,7 @@ impl ProjectionRegistry {
     /// Conflict detection for a proposed projection.
     ///
     /// A target position is a conflict if:
-    /// - A cell exists in the mirror with a non-null value or formula, OR
+    /// - A cell exists in the cell store with a non-null value or formula, OR
     /// - The position falls inside another source's projection in this registry, OR
     /// - The position overlaps a multi-cell merge region in this sheet
     ///   (Excel parity: spilling into a merged range yields `#SPILL!`).
@@ -373,7 +373,7 @@ impl ProjectionRegistry {
     #[allow(clippy::too_many_arguments)]
     pub fn check_conflict(
         &self,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         sheet: &SheetId,
         origin_row: u32,
         origin_col: u32,
@@ -384,8 +384,8 @@ impl ProjectionRegistry {
         // Precompute the multi-cell merges for this sheet once. 1x1 "merges"
         // are no-ops (some import paths can produce degenerate single-cell
         // entries) — skipping them keeps benign metadata from blocking spills.
-        let merges = mirror.get_merge_regions(sheet);
-        let multi_merges: Vec<&crate::mirror::MergeRegion> = merges
+        let merges = cell_store.get_merge_regions(sheet);
+        let multi_merges: Vec<&crate::cells::MergeRegion> = merges
             .iter()
             .filter(|m| m.start_row != m.end_row || m.start_col != m.end_col)
             .collect();
@@ -404,7 +404,7 @@ impl ProjectionRegistry {
                 // If it belongs to the source's own pre-registered projection,
                 // it's not a conflict — the source is re-spilling into its
                 // own range (e.g., after XLSX import where cached spill-target
-                // values are loaded into the mirror).
+                // values are loaded into the cell store).
                 if let Some((proj_source, _, _)) = self.resolve(sheet, row, col) {
                     if proj_source == *source {
                         continue; // Own projection target — allow re-spill
@@ -413,12 +413,13 @@ impl ProjectionRegistry {
                     return Err(proj_source);
                 }
 
-                // Check mirror for existing cell content.
-                if let Some(cell_id) = mirror.resolve_cell_id(sheet, SheetPos::new(row, col))
-                    && let Some(sheet_mirror) = mirror.get_sheet(sheet)
-                    && let Some(entry) = sheet_mirror.get_cell(&cell_id)
+                // Check cell_store for existing cell content.
+                if let Some(cell_id) = cell_store.resolve_cell_id(sheet, SheetPos::new(row, col))
+                    && let Some(sheet_store) = cell_store.get_sheet(sheet)
+                    && let Some(entry) = sheet_store.get_cell(&cell_id)
                 {
-                    let has_content = !entry.value.is_null() || entry.formula.is_some();
+                    let has_content =
+                        !entry.value.is_null() || sheet_store.formula(&cell_id).is_some();
                     if has_content {
                         return Err(cell_id);
                     }
@@ -435,10 +436,10 @@ impl ProjectionRegistry {
                         && col >= m.start_col
                         && col <= m.end_col
                     {
-                        let conflict_cell = mirror
+                        let conflict_cell = cell_store
                             .resolve_cell_id(sheet, SheetPos::new(row, col))
                             .or_else(|| {
-                                mirror
+                                cell_store
                                     .resolve_cell_id(sheet, SheetPos::new(m.start_row, m.start_col))
                             })
                             .unwrap_or(*source);
@@ -469,7 +470,7 @@ impl ProjectionRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mirror::{CellEntry, CellMirror, SheetMirror};
+    use crate::cells::{CellEntry, CellStore, SheetStore};
     use value_types::{CellValue, FiniteF64};
 
     // -----------------------------------------------------------------------
@@ -484,21 +485,18 @@ mod tests {
         SheetId::from_raw(n)
     }
 
-    fn make_mirror_with_sheet(
+    fn make_store_with_sheet(
         sheet_id: SheetId,
         cells: Vec<(CellId, u32, u32, CellValue)>,
-    ) -> CellMirror {
-        let mut mirror = CellMirror::new();
-        let sheet_mirror = SheetMirror::new(sheet_id, "Sheet1".to_string(), 100, 26);
-        mirror.add_sheet_mirror(sheet_id, "Sheet1".to_string(), sheet_mirror);
+    ) -> CellStore {
+        let mut cell_store = CellStore::new();
+        let sheet_store = SheetStore::new(sheet_id, "Sheet1".to_string(), 100, 26);
+        cell_store.add_sheet_store(sheet_id, "Sheet1".to_string(), sheet_store);
         for (cell_id, row, col, value) in cells {
-            let entry = CellEntry {
-                value,
-                formula: None,
-            };
-            mirror.insert_cell(&sheet_id, cell_id, SheetPos::new(row, col), entry);
+            let entry = CellEntry { value };
+            cell_store.insert_cell(&sheet_id, cell_id, SheetPos::new(row, col), entry);
         }
-        mirror
+        cell_store
     }
 
     // -----------------------------------------------------------------------
@@ -835,9 +833,9 @@ mod tests {
         let source = make_cell_id(1);
         let sheet = make_sheet_id(100);
 
-        let mirror = make_mirror_with_sheet(sheet, vec![(source, 0, 0, CellValue::Null)]);
+        let cell_store = make_store_with_sheet(sheet, vec![(source, 0, 0, CellValue::Null)]);
 
-        let result = reg.check_conflict(&mirror, &sheet, 0, 0, 3, 1, &source);
+        let result = reg.check_conflict(&cell_store, &sheet, 0, 0, 3, 1, &source);
         assert!(result.is_ok());
     }
 
@@ -852,7 +850,7 @@ mod tests {
         let blocker = make_cell_id(2);
         let sheet = make_sheet_id(100);
 
-        let mirror = make_mirror_with_sheet(
+        let cell_store = make_store_with_sheet(
             sheet,
             vec![
                 (source, 0, 0, CellValue::Null),
@@ -860,7 +858,7 @@ mod tests {
             ],
         );
 
-        let result = reg.check_conflict(&mirror, &sheet, 0, 0, 3, 1, &source);
+        let result = reg.check_conflict(&cell_store, &sheet, 0, 0, 3, 1, &source);
         assert_eq!(result, Err(blocker));
     }
 
@@ -875,15 +873,15 @@ mod tests {
         let sheet = make_sheet_id(100);
 
         // Source at (0,0), with existing 2x1 projection.
-        // Projected positions don't have CellIds in the mirror.
-        let mirror = make_mirror_with_sheet(sheet, vec![(source, 0, 0, CellValue::Null)]);
+        // Projected positions don't have CellIds in the cell store.
+        let cell_store = make_store_with_sheet(sheet, vec![(source, 0, 0, CellValue::Null)]);
 
         // Register source's own projection (2 rows x 1 col).
         reg.register(source, sheet, 0, 0, 2, 1);
 
         // Expanding to 3 rows: (0,0), (1,0), (2,0).
         // (1,0) is in own projection — should not conflict.
-        let result = reg.check_conflict(&mirror, &sheet, 0, 0, 3, 1, &source);
+        let result = reg.check_conflict(&cell_store, &sheet, 0, 0, 3, 1, &source);
         assert!(result.is_ok());
     }
 
@@ -901,7 +899,7 @@ mod tests {
         // Source A has a projection covering rows 0..3, col 0.
         reg.register(source_a, sheet, 0, 0, 3, 1);
 
-        let mirror = make_mirror_with_sheet(
+        let cell_store = make_store_with_sheet(
             sheet,
             vec![
                 (source_a, 0, 0, CellValue::Null),
@@ -911,7 +909,7 @@ mod tests {
 
         // Source B tries to project 3 rows x 2 cols from (0, 0).
         // Position (1, 0) is inside source A's projection → conflict.
-        let result = reg.check_conflict(&mirror, &sheet, 0, 0, 3, 2, &source_b);
+        let result = reg.check_conflict(&cell_store, &sheet, 0, 0, 3, 2, &source_b);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), source_a);
     }
@@ -929,10 +927,10 @@ mod tests {
         // Source already has a 3x1 projection.
         reg.register(source, sheet, 0, 0, 3, 1);
 
-        let mirror = make_mirror_with_sheet(sheet, vec![(source, 0, 0, CellValue::Null)]);
+        let cell_store = make_store_with_sheet(sheet, vec![(source, 0, 0, CellValue::Null)]);
 
         // Expanding to 5x2 — own projection positions are NOT conflicts.
-        let result = reg.check_conflict(&mirror, &sheet, 0, 0, 5, 2, &source);
+        let result = reg.check_conflict(&cell_store, &sheet, 0, 0, 5, 2, &source);
         assert!(result.is_ok());
     }
 
@@ -947,7 +945,7 @@ mod tests {
         let empty = make_cell_id(2);
         let sheet = make_sheet_id(100);
 
-        let mirror = make_mirror_with_sheet(
+        let cell_store = make_store_with_sheet(
             sheet,
             vec![
                 (source, 0, 0, CellValue::Null),
@@ -955,7 +953,7 @@ mod tests {
             ],
         );
 
-        let result = reg.check_conflict(&mirror, &sheet, 0, 0, 2, 1, &source);
+        let result = reg.check_conflict(&cell_store, &sheet, 0, 0, 2, 1, &source);
         assert!(result.is_ok());
     }
 

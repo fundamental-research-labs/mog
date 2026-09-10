@@ -1,11 +1,11 @@
-//! Merge spatial-index item types shared by construction, mutation, stores,
+//! Resolved merge rectangle types shared by construction, mutation, stores,
 //! and query services.
 
 use crate::range_manager;
 
-/// A merge region item for the spatial index.
+/// A resolved rectangle in a merge list.
 ///
-/// Wraps resolved merge bounds so the `RangeSpatialIndex` can efficiently
+/// Wraps resolved merge bounds for the `MergeList` to
 /// query which merges contain a cell or intersect a viewport.
 #[derive(Debug, Clone)]
 pub(crate) struct MergeSpatialItem {

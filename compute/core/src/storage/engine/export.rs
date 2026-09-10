@@ -38,7 +38,7 @@ pub struct ExportParseResult {
 }
 
 // =============================================================================
-// Bridge API (exposed to TS via WASM / N-API / Tauri)
+// Bridge API
 // =============================================================================
 
 #[bridge::api(
@@ -115,7 +115,8 @@ impl ComputeEngine {
     #[tracing::instrument(name = "build_parse_output", skip_all)]
     pub fn build_parse_output(&self) -> Result<ParseOutput, ComputeError> {
         let mut profile = crate::xlsx_profile::PhaseTimer::new("export", "build_parse_output");
-        let parse_output = super::services::export::build_parse_output(&self.stores, &self.mirror)?;
+        let parse_output =
+            super::services::export::build_parse_output(&self.stores, &self.cell_store)?;
         profile.counter("sheets", parse_output.sheets.len() as u64);
         profile.counter(
             "cells",
@@ -159,7 +160,7 @@ impl ComputeEngine {
     /// Export all cells for a sheet as position-keyed `CellData`.
     ///
     /// Iterates the grid_index (which maps CellId → position) and reads
-    /// values from ComputeCore (for recalc'd formulas) or the mirror.
+    /// values from ComputeCore (for recalc'd formulas) or the cell store.
     /// Builds style_palette entries for cells with formatting.
     ///
     /// Style ids are derived from the current semantic formats and the generated
@@ -173,7 +174,7 @@ impl ComputeEngine {
         let palette = super::services::export::LocalPalette::from_vec(style_palette);
         let result = super::services::export::export_cells_for_sheet(
             &self.stores,
-            &self.mirror,
+            &self.cell_store,
             sheet_id,
             &palette,
         );
@@ -189,7 +190,7 @@ impl ComputeEngine {
     ) -> SheetDimensions {
         super::services::export::export_dimensions_for_sheet(
             &self.stores,
-            &self.mirror,
+            &self.cell_store,
             sheet_id,
             override_max_col,
         )
@@ -219,7 +220,7 @@ impl ComputeEngine {
         result
     }
 
-    /// Resolve a cell_id string to (row, col) using the compute mirror.
+    /// Resolve a cell_id string to (row, col) using the compute cell_store.
     fn resolve_cell_position(&self, sheet_id: &SheetId, cell_id_hex: &str) -> Option<(u32, u32)> {
         let result = self.get_cell_position(sheet_id, cell_id_hex)?;
         Some((result.row, result.col))
@@ -228,7 +229,11 @@ impl ComputeEngine {
     /// Export all hyperlinks for a sheet, reading both cell-level hyperlinks
     /// and any range hyperlinks stored in the sheet meta.
     fn export_hyperlinks_for_sheet(&self, sheet_id: &SheetId) -> Vec<Hyperlink> {
-        super::services::export::export_hyperlinks_for_sheet(&self.stores, sheet_id)
+        super::services::export::export_hyperlinks_for_sheet(
+            &self.stores,
+            &self.cell_store,
+            sheet_id,
+        )
     }
 
     /// Export the container-level `disablePrompts` flag for data validations.
@@ -303,7 +308,7 @@ impl ComputeEngine {
     ) {
         super::services::export::export_floating_objects_for_sheet(
             &self.stores,
-            &self.mirror,
+            &self.cell_store,
             sheet_id,
         )
     }
@@ -329,7 +334,7 @@ impl ComputeEngine {
     ) -> Vec<domain_types::domain::pivot::ParsedPivotTable> {
         super::services::export::export_workbook_parsed_pivot_tables(
             &self.stores,
-            &self.mirror,
+            &self.cell_store,
             None,
         )
     }

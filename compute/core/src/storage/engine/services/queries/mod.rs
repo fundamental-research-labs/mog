@@ -1,16 +1,16 @@
 //! Extracted read-only query functions.
 //!
 //! Each function takes explicit references to the engine sub-structs it needs
-//! (e.g. `&EngineStores`, `&CellMirror`) instead of `&self`.  The original
+//! (e.g. `&EngineStores`, `&CellStore`) instead of `&self`.  The original
 //! bridge methods in `queries.rs` delegate to these with one-line calls.
 
+use crate::cells::CellStore;
 use crate::engine_types::{
     CellPosition, CellPositionResult, ColumnEdge, DataBounds, DefaultFont, ProjectionData,
     RectBounds, RegexSearchMatch, RegexSearchOptions, RegexSearchResult, RowEdge,
     SheetProtectionConfig, SignAnomaly, SignCheckOptions, SignCheckResult, SignNeighbor,
     WorkbookSearchMatch, WorkbookSearchResult,
 };
-use crate::mirror::CellMirror;
 use crate::range_manager::{self, A1CellRef, A1RangeRef, ViewportBounds};
 use crate::snapshot::{
     CalcMode, CalculationSettings, ProtectedWorkbookOperation, WorkbookProtectionOptions,
@@ -42,8 +42,8 @@ use crate::storage::engine::stores::EngineStores;
 /// Resolve a cell's (row, col) from its hex id via the authoritative
 /// `GridIndex`. Returns `None` if the hex fails to parse or the cell is
 /// unknown to the index.
-fn resolve_pos_from_grid(
-    grid: Option<&crate::identity::GridIndex>,
+fn resolve_cell_position(
+    grid: Option<&crate::cells::SheetStore>,
     cell_id_hex: &str,
 ) -> Option<(u32, u32)> {
     let grid = grid?;

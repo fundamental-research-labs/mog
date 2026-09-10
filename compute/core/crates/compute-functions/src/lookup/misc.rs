@@ -43,7 +43,7 @@ impl PureFunction for FnHyperlink {
 }
 
 pub(super) fn register(registry: &mut FunctionRegistry) {
-    // GETPIVOTDATA is handled directly in eval_primitives.rs (needs AST/mirror access)
+    // GETPIVOTDATA is handled directly in eval_primitives.rs (needs AST/cell_store access)
     // FORMULATEXT also needs evaluator-level access and must not be advertised
     // as a normal function until that support exists.
     registry.register(Box::new(FnHyperlink));

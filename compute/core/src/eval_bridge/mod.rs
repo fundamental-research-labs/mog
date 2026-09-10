@@ -1,15 +1,15 @@
-//! Concrete trait implementations wiring eval traits to CellMirror.
+//! Concrete trait implementations wiring eval traits to CellStore.
 //!
 //! These adapters implement compute-eval's abstract traits for compute-core's
-//! concrete CellMirror data store. They live in compute-core (not compute-eval)
-//! because they depend on CellMirror — standard dependency inversion.
+//! concrete CellStore data store. They live in compute-core (not compute-eval)
+//! because they depend on CellStore — standard dependency inversion.
 
-pub mod mirror_access;
-mod mirror_cell_ref_resolver;
-pub mod mirror_context;
+pub mod eval_context;
 pub mod override_context;
+pub mod store_access;
+mod store_cell_ref_resolver;
 
-pub use mirror_access::MirrorAccess;
-pub(crate) use mirror_cell_ref_resolver::MirrorCellRefResolver;
-pub use mirror_context::MirrorContext;
+pub use eval_context::EvalContext;
 pub use override_context::OverrideContext;
+pub use store_access::StoreAccess;
+pub(crate) use store_cell_ref_resolver::StoreCellRefResolver;

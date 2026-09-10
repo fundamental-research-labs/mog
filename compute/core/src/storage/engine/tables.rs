@@ -2,7 +2,6 @@
 
 use bridge_core as bridge;
 use cell_types::SheetId;
-use compute_wire::mutation::serialize_multi_viewport_patches;
 use domain_types::CellFormat;
 use domain_types::domain::table::TableCatalogEntry as CanonicalTable;
 use formula_types::{StructureChange, TableDef};
@@ -28,7 +27,7 @@ impl ComputeEngine {
     /// Get all tables in a specific sheet.
     #[bridge::read]
     pub fn get_all_tables_in_sheet(&self, sheet_id: &SheetId) -> Vec<CanonicalTable> {
-        services::tables::get_all_tables_in_sheet(&self.mirror, sheet_id)
+        services::tables::get_all_tables_in_sheet(&self.cell_store, sheet_id)
     }
 
     /// Get the table containing a specific cell, if any.
@@ -39,14 +38,14 @@ impl ComputeEngine {
         row: u32,
         col: u32,
     ) -> Option<CanonicalTable> {
-        services::tables::get_table_at_cell(&self.mirror, sheet_id, row, col)
+        services::tables::get_table_at_cell(&self.cell_store, sheet_id, row, col)
     }
 
     /// Look up a table definition by name (case-insensitive).
     /// Eliminates N+1 sheet iteration on the TS side.
     #[bridge::read]
     pub fn get_table_by_name(&self, table_name: &str) -> Option<CanonicalTable> {
-        services::tables::get_table_by_name(&self.mirror, table_name)
+        services::tables::get_table_by_name(&self.cell_store, table_name)
     }
 
     /// Get which table region a cell falls in (header, data, or totals).
@@ -58,12 +57,12 @@ impl ComputeEngine {
         row: u32,
         col: u32,
     ) -> Option<TableHitRegion> {
-        services::tables::get_table_hit_region(&self.mirror, sheet_id, row, col)
+        services::tables::get_table_hit_region(&self.cell_store, sheet_id, row, col)
     }
 
     // GROUP 2b: Table CRUD Mutations
 
-    /// Create a new table from parameters and register it in the compute mirror.
+    /// Create a new table from parameters and register it in the compute cell_store.
     #[bridge::write]
     #[allow(clippy::too_many_arguments)]
     pub fn create_table(
@@ -76,11 +75,11 @@ impl ComputeEngine {
         end_col: u32,
         columns: Vec<String>,
         has_headers: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::tables::create_table(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 sheet_id,
                 name,
                 start_row,
@@ -91,7 +90,7 @@ impl ComputeEngine {
                 has_headers,
                 None,
             )?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
@@ -114,12 +113,12 @@ impl ComputeEngine {
         columns: Vec<String>,
         has_headers: bool,
         style: Option<String>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let requested_name = requested_name.unwrap_or_default();
             let table_name = if requested_name.trim().is_empty() {
                 let existing: Vec<&str> = engine
-                    .mirror
+                    .cell_store
                     .all_tables()
                     .iter()
                     .map(|table| table.name.as_str())
@@ -134,7 +133,7 @@ impl ComputeEngine {
                 }
             })?;
             if engine
-                .mirror
+                .cell_store
                 .all_tables()
                 .iter()
                 .any(|table| table.name.eq_ignore_ascii_case(&table_name))
@@ -157,7 +156,7 @@ impl ComputeEngine {
                     count: 1,
                     new_row_ids: Vec::new(),
                 };
-                let (_patches, structure_result) = engine.structure_change(sheet_id, &change)?;
+                let structure_result = engine.structure_change(sheet_id, &change)?;
                 merge_mutation_result(&mut combined, structure_result);
 
                 let col_count = end_col.saturating_sub(start_col) + 1;
@@ -192,7 +191,7 @@ impl ComputeEngine {
                 for i in 0..col_count {
                     let col = start_col + i;
                     let existing = engine
-                        .mirror
+                        .cell_store
                         .get_cell_value_at(sheet_id, cell_types::SheetPos::new(start_row, col))
                         .and_then(|value| match value {
                             value_types::CellValue::Text(text) => {
@@ -236,10 +235,9 @@ impl ComputeEngine {
                 }
             }
 
-            let created_table_name = table_name.clone();
             let create_result = services::tables::create_table(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 sheet_id,
                 table_name,
                 start_row,
@@ -252,34 +250,21 @@ impl ComputeEngine {
             )?;
             merge_mutation_result(&mut combined, create_result);
 
-            let table_style_patches =
-                engine.build_table_style_viewport_patches(&created_table_name);
-            let patches = if !table_style_patches.is_empty() {
-                table_style_patches
-            } else if combined.recalc.changed_cells.is_empty()
-                && combined.recalc.projection_changes.is_empty()
-                && combined.recalc.errors.is_empty()
-            {
-                serialize_multi_viewport_patches(&[])
-            } else {
-                engine.flush_viewport_patches()
-            };
-
-            Ok((patches, combined))
+            Ok(combined)
         })
     }
 
     /// Delete a table by name.
     #[bridge::write]
-    pub fn delete_table(
-        &mut self,
-        table_name: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn delete_table(&mut self, table_name: &str) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
-            let result =
-                services::tables::delete_table(&mut engine.stores, &mut engine.mirror, table_name);
+            let result = services::tables::delete_table(
+                &mut engine.stores,
+                &mut engine.cell_store,
+                table_name,
+            );
 
-            Ok((serialize_multi_viewport_patches(&[]), result?))
+            Ok(result?)
         })
     }
 
@@ -289,16 +274,16 @@ impl ComputeEngine {
         &mut self,
         old_name: &str,
         new_name: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::tables::rename_table(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 old_name,
                 new_name,
             );
 
-            Ok((serialize_multi_viewport_patches(&[]), result?))
+            Ok(result?)
         })
     }
 
@@ -311,18 +296,18 @@ impl ComputeEngine {
         new_start_col: u32,
         new_end_row: u32,
         new_end_col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::tables::resize_table(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 table_name,
                 new_start_row,
                 new_start_col,
                 new_end_row,
                 new_end_col,
             )?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
@@ -332,10 +317,10 @@ impl ComputeEngine {
         &mut self,
         table_name: &str,
         style_name: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let mut table = engine
-                .mirror
+                .cell_store
                 .get_table(table_name)
                 .cloned()
                 .ok_or_else(|| ComputeError::Eval {
@@ -345,86 +330,80 @@ impl ComputeEngine {
                 &engine.stores,
                 Some(style_name.to_string()),
             )?;
-            engine.stores.compute.set_table(&mut engine.mirror, table);
+            engine
+                .stores
+                .compute
+                .set_table(&mut engine.cell_store, table);
 
-            let patches = engine.build_table_style_viewport_patches(table_name);
-            Ok((patches, MutationResult::empty()))
+            Ok(MutationResult::empty())
         })
     }
 
     /// Toggle the totals row on/off for a table.
     #[bridge::write]
-    pub fn toggle_totals_row(
-        &mut self,
-        table_name: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn toggle_totals_row(&mut self, table_name: &str) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::tables::toggle_totals_row(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 table_name,
             )?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
     /// Toggle the header row on/off for a table.
     #[bridge::write]
-    pub fn toggle_header_row(
-        &mut self,
-        table_name: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn toggle_header_row(&mut self, table_name: &str) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::tables::toggle_header_row(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 table_name,
             )?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
     /// Toggle banded rows for a table (updates the native table catalog).
     #[bridge::write]
-    pub fn toggle_banded_rows(
-        &mut self,
-        table_name: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn toggle_banded_rows(&mut self, table_name: &str) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let mut table = engine
-                .mirror
+                .cell_store
                 .get_table(table_name)
                 .cloned()
                 .ok_or_else(|| ComputeError::Eval {
                     message: format!("Table not found: {}", table_name),
                 })?;
             table.banded_rows = !table.banded_rows;
-            engine.stores.compute.set_table(&mut engine.mirror, table);
+            engine
+                .stores
+                .compute
+                .set_table(&mut engine.cell_store, table);
 
-            let patches = engine.build_table_style_viewport_patches(table_name);
-            Ok((patches, MutationResult::empty()))
+            Ok(MutationResult::empty())
         })
     }
 
     /// Toggle banded columns for a table (updates the native table catalog).
     #[bridge::write]
-    pub fn toggle_banded_cols(
-        &mut self,
-        table_name: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    pub fn toggle_banded_cols(&mut self, table_name: &str) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let mut table = engine
-                .mirror
+                .cell_store
                 .get_table(table_name)
                 .cloned()
                 .ok_or_else(|| ComputeError::Eval {
                     message: format!("Table not found: {}", table_name),
                 })?;
             table.banded_columns = !table.banded_columns;
-            engine.stores.compute.set_table(&mut engine.mirror, table);
+            engine
+                .stores
+                .compute
+                .set_table(&mut engine.cell_store, table);
 
-            let patches = engine.build_table_style_viewport_patches(table_name);
-            Ok((patches, MutationResult::empty()))
+            Ok(MutationResult::empty())
         })
     }
 
@@ -435,18 +414,17 @@ impl ComputeEngine {
         table_name: &str,
         option: &str,
         value: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::tables::set_table_bool_option(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 table_name,
                 option,
                 value,
             )?;
 
-            let patches = engine.build_table_style_viewport_patches(table_name);
-            Ok((patches, MutationResult::empty()))
+            Ok(MutationResult::empty())
         })
     }
 
@@ -456,15 +434,15 @@ impl ComputeEngine {
         &mut self,
         table_name: &str,
         enabled: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::tables::set_table_auto_expand(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 table_name,
                 enabled,
             )?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
@@ -474,15 +452,15 @@ impl ComputeEngine {
         &mut self,
         table_name: &str,
         enabled: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::tables::set_table_auto_calculated_columns(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 table_name,
                 enabled,
             )?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
@@ -493,16 +471,16 @@ impl ComputeEngine {
         table_name: &str,
         column_id: &str,
         func: compute_table::types::TotalsFunction,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::tables::set_table_totals_function(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 table_name,
                 column_id,
                 func,
             )?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
@@ -513,15 +491,15 @@ impl ComputeEngine {
         &mut self,
         table_name: &str,
         relative_row: Option<u32>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::tables::add_table_data_row(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 table_name,
                 relative_row,
             )?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
@@ -532,15 +510,15 @@ impl ComputeEngine {
         &mut self,
         table_name: &str,
         relative_row: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::tables::remove_table_data_row(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 table_name,
                 relative_row,
             )?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
@@ -551,18 +529,18 @@ impl ComputeEngine {
         table_name: &str,
         column_name: &str,
         position: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let mut result = services::tables::add_table_column(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 table_name,
                 column_name,
                 position,
             )?;
-            engine.prepare_recalc_for_flush(&mut result.recalc);
-            let patches = engine.flush_viewport_patches();
-            Ok((patches, result))
+            engine.postprocess_mutation_recalc(&mut result.recalc);
+
+            Ok(result)
         })
     }
 
@@ -577,18 +555,18 @@ impl ComputeEngine {
         table_name: &str,
         column_index: u32,
         new_column_name: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let mut result = services::tables::rename_table_column(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 table_name,
                 column_index,
                 new_column_name,
             )?;
-            engine.prepare_recalc_for_flush(&mut result.recalc);
-            let patches = engine.flush_viewport_patches();
-            Ok((patches, result))
+            engine.postprocess_mutation_recalc(&mut result.recalc);
+
+            Ok(result)
         })
     }
 
@@ -598,15 +576,15 @@ impl ComputeEngine {
         &mut self,
         table_name: &str,
         column_index: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::tables::remove_table_column(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 table_name,
                 column_index,
             )?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
@@ -616,10 +594,10 @@ impl ComputeEngine {
         table_name: &str,
         column_index: u32,
         formula: &str,
-    ) -> Result<(Vec<u8>, crate::snapshot::MutationResult), ComputeError> {
+    ) -> Result<crate::snapshot::MutationResult, ComputeError> {
         self.with_history(|engine| {
             let table = engine
-                .mirror
+                .cell_store
                 .get_table(table_name)
                 .cloned()
                 .ok_or_else(|| ComputeError::Eval {
@@ -640,20 +618,10 @@ impl ComputeEngine {
             let sheet_id = cell_types::SheetId::from_uuid_str(&table.sheet_id)
                 .unwrap_or(cell_types::SheetId::from_raw(0));
 
-            let mut last_result = (
-                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-                crate::snapshot::MutationResult::from_recalc(RecalcResult::empty()),
-            );
+            let mut last_result =
+                crate::snapshot::MutationResult::from_recalc(RecalcResult::empty());
             for row in data_start..=data_end {
-                let grid = engine
-                    .stores
-                    .grid_indexes
-                    .get_mut(&sheet_id)
-                    .ok_or_else(|| ComputeError::SheetNotFound {
-                        sheet_id: sheet_id.to_uuid_string(),
-                    })?;
-                let cell_id = grid.ensure_cell_id(row, col);
-                last_result = engine.set_cell(&sheet_id, cell_id, row, col, formula.into())?;
+                last_result = engine.set_cell_value_parsed(&sheet_id, row, col, formula)?;
             }
             Ok(last_result)
         })
@@ -668,10 +636,10 @@ impl ComputeEngine {
         table_name: &str,
         row: u32,
         formulas: Vec<(u32, String)>,
-    ) -> Result<(Vec<u8>, crate::snapshot::MutationResult), ComputeError> {
+    ) -> Result<crate::snapshot::MutationResult, ComputeError> {
         self.with_history(|engine| {
             let table = engine
-                .mirror
+                .cell_store
                 .get_table(table_name)
                 .cloned()
                 .ok_or_else(|| ComputeError::Eval {
@@ -680,22 +648,12 @@ impl ComputeEngine {
             let sheet_id = cell_types::SheetId::from_uuid_str(&table.sheet_id)
                 .unwrap_or(cell_types::SheetId::from_raw(0));
 
-            let mut last_result = (
-                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-                crate::snapshot::MutationResult::from_recalc(RecalcResult::empty()),
-            );
+            let mut last_result =
+                crate::snapshot::MutationResult::from_recalc(RecalcResult::empty());
             for (column_index, formula) in &formulas {
                 let col = table.range.start_col() + column_index;
-                let grid = engine
-                    .stores
-                    .grid_indexes
-                    .get_mut(&sheet_id)
-                    .ok_or_else(|| ComputeError::SheetNotFound {
-                        sheet_id: sheet_id.to_uuid_string(),
-                    })?;
-                let cell_id = grid.ensure_cell_id(row, col);
                 last_result =
-                    engine.set_cell(&sheet_id, cell_id, row, col, formula.as_str().into())?;
+                    engine.set_cell_value_parsed(&sheet_id, row, col, formula.as_str())?;
             }
             Ok(last_result)
         })
@@ -712,16 +670,16 @@ impl ComputeEngine {
         table_name: &str,
         column_name: &str,
         formula: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::tables::add_calculated_column(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 table_name,
                 column_name,
                 formula,
             )?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
@@ -731,15 +689,15 @@ impl ComputeEngine {
         &mut self,
         table_name: &str,
         column_index: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::tables::remove_calculated_column(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 table_name,
                 column_index,
             )?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
@@ -750,16 +708,16 @@ impl ComputeEngine {
         table_name: &str,
         column_index: u32,
         formula: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::tables::update_calculated_column(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 table_name,
                 column_index,
                 formula,
             )?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
@@ -774,7 +732,7 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         table_name: &str,
     ) -> Result<AutoExpansionResult, ComputeError> {
-        services::tables::detect_auto_expansion(&self.mirror, sheet_id, table_name)
+        services::tables::detect_auto_expansion(&self.cell_store, sheet_id, table_name)
     }
 
     /// Apply auto-expansion to a table.
@@ -783,11 +741,11 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         table_name: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result =
-                services::tables::apply_auto_expansion(&engine.mirror, sheet_id, table_name)?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+                services::tables::apply_auto_expansion(&engine.cell_store, sheet_id, table_name)?;
+            Ok(result)
         })
     }
 
@@ -796,10 +754,10 @@ impl ComputeEngine {
     pub fn create_custom_table_style(
         &mut self,
         style: compute_table::custom_styles::CustomTableStyleConfig,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result = services::tables::create_custom_table_style(&mut engine.stores, style)?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
@@ -808,11 +766,11 @@ impl ComputeEngine {
     pub fn delete_custom_table_style(
         &mut self,
         style_name: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result =
                 services::tables::delete_custom_table_style(&mut engine.stores, style_name)?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
@@ -822,11 +780,11 @@ impl ComputeEngine {
         &mut self,
         style_name: &str,
         style: compute_table::custom_styles::CustomTableStyleConfig,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let result =
                 services::tables::update_custom_table_style(&mut engine.stores, style_name, style)?;
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         })
     }
 
@@ -842,7 +800,7 @@ impl ComputeEngine {
     #[bridge::write]
     pub fn set_table_def(&mut self, table: TableDef) {
         self.with_history(|engine| {
-            services::tables::set_table_def(&mut engine.stores, &mut engine.mirror, table)
+            services::tables::set_table_def(&mut engine.stores, &mut engine.cell_store, table)
         })
     }
 
@@ -851,7 +809,7 @@ impl ComputeEngine {
     #[bridge::write]
     pub fn remove_table_def(&mut self, name: &str) {
         self.with_history(|engine| {
-            services::tables::remove_table_def(&mut engine.stores, &mut engine.mirror, name)
+            services::tables::remove_table_def(&mut engine.stores, &mut engine.cell_store, name)
         })
     }
 
@@ -866,7 +824,7 @@ impl ComputeEngine {
         row: u32,
         col: u32,
     ) -> Option<CellFormat> {
-        services::tables::resolve_table_format_at_cell(&self.mirror, sheet_id, row, col)
+        services::tables::resolve_table_format_at_cell(&self.cell_store, sheet_id, row, col)
     }
 
     /// Convert a table to a plain range.
@@ -878,78 +836,18 @@ impl ComputeEngine {
     pub fn convert_table_to_range(
         &mut self,
         table_name: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
-            let (converted_table, result) = {
-                let converted_table = engine.mirror.get_table(table_name).cloned();
+            let result = {
                 let result = services::tables::convert_table_to_range(
                     &mut engine.stores,
-                    &mut engine.mirror,
+                    &mut engine.cell_store,
                     table_name,
                 )?;
-                (converted_table, result)
+                result
             };
-            let patches = converted_table
-                .as_ref()
-                .and_then(|table| {
-                    let sheet_id = cell_types::SheetId::from_uuid_str(&table.sheet_id).ok()?;
-                    let grid = engine.stores.grid_indexes.get(&sheet_id)?;
-                    let mut affected_cells = Vec::new();
-                    for row in table.range.start_row()..=table.range.end_row() {
-                        for col in table.range.start_col()..=table.range.end_col() {
-                            if let Some(cell_id) = grid.cell_id_at(row, col) {
-                                affected_cells.push((cell_id.as_u128(), row, col));
-                            }
-                        }
-                    }
-                    Some(engine.produce_format_change_patches(&sheet_id, &affected_cells))
-                })
-                .unwrap_or_else(|| serialize_multi_viewport_patches(&[]));
-            Ok((patches, result))
+
+            Ok(result)
         })
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Private helpers (outside #[bridge::api] block)
-// ---------------------------------------------------------------------------
-
-impl ComputeEngine {
-    /// Build viewport patches for all cells in a table after a style change.
-    ///
-    /// Collects every cell within the table bounds, then delegates to
-    /// `produce_format_change_patches` which resolves effective formats
-    /// (including the table layer) and produces binary patches for the UI.
-    fn build_table_style_viewport_patches(&mut self, table_name: &str) -> Vec<u8> {
-        // 1. Get table bounds
-        let table = match self.mirror.get_table(table_name).cloned() {
-            Some(t) => t,
-            None => return Vec::new(),
-        };
-        let sheet_id = cell_types::SheetId::from_uuid_str(&table.sheet_id)
-            .unwrap_or(cell_types::SheetId::from_raw(0));
-
-        // 2. Get grid index for this sheet
-        let grid = match self.stores.grid_indexes.get(&sheet_id) {
-            Some(g) => g,
-            None => return Vec::new(),
-        };
-
-        // 3. Collect all cell IDs within the table bounds
-        let mut affected_cells: Vec<(u128, u32, u32)> = Vec::new();
-        for row in table.range.start_row()..=table.range.end_row() {
-            for col in table.range.start_col()..=table.range.end_col() {
-                if let Some(cell_id) = grid.cell_id_at(row, col) {
-                    affected_cells.push((cell_id.as_u128(), row, col));
-                }
-            }
-        }
-
-        if affected_cells.is_empty() {
-            return Vec::new();
-        }
-
-        // 4. Delegate to the format viewport patches builder
-        self.produce_format_change_patches(&sheet_id, &affected_cells)
     }
 }

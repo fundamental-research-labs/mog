@@ -21,8 +21,12 @@ impl ComputeEngine {
         if outer {
             crate::storage::engine::cell_metadata::refresh(
                 &self.stores.storage,
-                &mut self.mirror,
+                &mut self.cell_store,
                 self.stores.layout_metrics,
+            );
+            super::super::services::cell_editing::sync_grid_axes(
+                &mut self.stores,
+                &self.cell_store,
             );
             let patches = self
                 .stores
@@ -30,7 +34,7 @@ impl ComputeEngine {
                 .history
                 .finish()
                 .into_iter()
-                .filter(|patch| patch.is_changed(&self.stores, &self.mirror))
+                .filter(|patch| patch.is_changed(&self.stores, &self.cell_store))
                 .collect::<Vec<_>>();
             if !patches.is_empty() {
                 self.history.redo.clear();
@@ -57,6 +61,12 @@ impl ComputeEngine {
         self.history.suppressed += 1;
         let outcome = catch_unwind(AssertUnwindSafe(|| operation(self)));
         self.history.suppressed -= 1;
+        if self.history.suppressed == 0 {
+            super::super::services::cell_editing::sync_grid_axes(
+                &mut self.stores,
+                &self.cell_store,
+            );
+        }
         capture
             .0
             .active
@@ -68,8 +78,8 @@ impl ComputeEngine {
     }
 
     pub(crate) fn bind_history_capture(&mut self) {
-        if !std::sync::Arc::ptr_eq(&self.stores.storage.history.0, &self.mirror.history.0) {
-            self.mirror
+        if !std::sync::Arc::ptr_eq(&self.stores.storage.history.0, &self.cell_store.history.0) {
+            self.cell_store
                 .bind_history_capture(self.stores.storage.history.share());
         }
     }
@@ -121,42 +131,32 @@ impl ComputeEngine {
     #[bridge::write]
     pub fn begin_undo_group(
         &mut self,
-    ) -> Result<(Vec<u8>, crate::snapshot::MutationResult), value_types::ComputeError> {
+    ) -> Result<crate::snapshot::MutationResult, value_types::ComputeError> {
         self.history.group_depth += 1;
-        Ok((
-            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-            crate::snapshot::MutationResult::empty(),
-        ))
+        Ok(crate::snapshot::MutationResult::empty())
     }
 
     #[bridge::write]
     pub fn end_undo_group(
         &mut self,
-    ) -> Result<(Vec<u8>, crate::snapshot::MutationResult), value_types::ComputeError> {
+    ) -> Result<crate::snapshot::MutationResult, value_types::ComputeError> {
         if self.history.group_depth != 0 {
             self.history.group_depth -= 1;
             if self.history.group_depth == 0 {
                 self.finish_open_history_action();
             }
         }
-        Ok((
-            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-            crate::snapshot::MutationResult::empty(),
-        ))
+        Ok(crate::snapshot::MutationResult::empty())
     }
 
     #[bridge::write]
-    pub fn undo(
-        &mut self,
-    ) -> Result<(Vec<u8>, crate::snapshot::MutationResult), value_types::ComputeError> {
+    pub fn undo(&mut self) -> Result<crate::snapshot::MutationResult, value_types::ComputeError> {
         self.finish_open_history_action();
         self.replay_history(false)
     }
 
     #[bridge::write]
-    pub fn redo(
-        &mut self,
-    ) -> Result<(Vec<u8>, crate::snapshot::MutationResult), value_types::ComputeError> {
+    pub fn redo(&mut self) -> Result<crate::snapshot::MutationResult, value_types::ComputeError> {
         self.finish_open_history_action();
         self.replay_history(true)
     }

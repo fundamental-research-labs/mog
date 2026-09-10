@@ -29,7 +29,7 @@ fn set_thread_resolved_emits_comment_change_for_thread_cell() {
     let comments = engine.get_comments_for_cell_by_position(&sid, 0, 0);
     let root = comments.first().expect("thread root should exist");
 
-    let (_patches, result) = engine
+    let result = engine
         .set_thread_resolved(&sid, &root.id, true)
         .expect("resolve thread");
 
@@ -287,7 +287,7 @@ fn native_comments_copy_preserves_threads_note_geometry_annotations_and_xlsx() {
     let note = engine
         .get_comments_for_cell_by_position(&sid, 4, 4)
         .remove(0);
-    let (_, geometry) = engine
+    let geometry = engine
         .set_note_dimensions(&sid, &note.id, Some(105.0), Some(165.0))
         .unwrap();
     assert_eq!(geometry.comment_changes.len(), 1);
@@ -359,9 +359,9 @@ fn native_comments_copy_preserves_threads_note_geometry_annotations_and_xlsx() {
     let bytes = engine.export_to_xlsx_bytes().unwrap();
     let (reloaded, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
     let copy = *reloaded
-        .mirror()
+        .cell_store()
         .sheet_ids()
-        .find(|id| reloaded.mirror().get_sheet(id).unwrap().name == "Copied comments")
+        .find(|id| reloaded.cell_store().get_sheet(id).unwrap().name == "Copied comments")
         .unwrap();
     assert_eq!(reloaded.get_comment_count(&copy), 3);
     let note = reloaded
@@ -433,7 +433,7 @@ fn native_comments_and_annotations_follow_relocation_and_row_identity_deletion()
     assert_eq!(moved.cell_ref, original.cell_ref);
     assert_eq!(engine.get_comment_count(&target), 1);
     let moved_id = CellId::from_uuid_str(&moved.cell_ref).unwrap();
-    assert!(engine.mirror().get_cell_value_raw(&moved_id).is_none());
+    assert!(engine.cell_store().get_cell_value_raw(&moved_id).is_none());
     assert_eq!(
         engine
             .get_cell_annotation_by_position(&target, 5, 5)
@@ -495,7 +495,7 @@ fn selected_sheet_comment_import_preserves_colliding_person_identities() {
         )
         .unwrap();
     let imported_person = source.stores.storage.metadata.persons[0].clone();
-    let source_name = source.mirror().get_sheet(&sid).unwrap().name.clone();
+    let source_name = source.cell_store().get_sheet(&sid).unwrap().name.clone();
     let bytes = source.export_to_xlsx_bytes().unwrap();
     let (mut target, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let mut existing = imported_person.clone();
@@ -517,9 +517,9 @@ fn selected_sheet_comment_import_preserves_colliding_person_identities() {
         .import_sheets_from_xlsx(&bytes, vec![source_name], None)
         .unwrap();
     let imported = *target
-        .mirror()
+        .cell_store()
         .sheet_ids()
-        .find(|id| target.mirror().get_sheet(id).unwrap().name == imported[0])
+        .find(|id| target.cell_store().get_sheet(id).unwrap().name == imported[0])
         .unwrap();
     let thread = target
         .get_comments_for_cell_by_position(&imported, 2, 2)

@@ -91,7 +91,7 @@ fn groups_are_isolated_empty_groups_are_noops_and_new_edits_clear_redo() {
 
 fn rejected_mixed_sheet_batch(engine: &mut ComputeEngine) {
     let missing = SheetId::from_raw(0xdead_beef);
-    assert!(engine.mirror().get_sheet(&missing).is_none());
+    assert!(engine.cell_store().get_sheet(&missing).is_none());
     assert!(
         engine
             .batch_set_cells_by_position(
@@ -175,15 +175,15 @@ fn compact_range_undo_redo_preserves_payload_and_virtual_identity() {
         array_ref: None,
     });
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sid = *engine.mirror().sheet_ids().next().unwrap();
+    let sid = *engine.cell_store().sheet_ids().next().unwrap();
     assert!(!engine.can_undo());
-    let sheet = engine.mirror().get_sheet(&sid).unwrap();
+    let sheet = engine.cell_store().get_sheet(&sid).unwrap();
     let (range_id, range) = sheet.iter_ranges().next().expect("compact numeric column");
     let range_id = *range_id;
     let original_payload = Arc::as_ptr(&range.values);
     let authored_cells = sheet.cells_iter().count();
     let position = SheetPos::new(255, 0);
-    let cell_id = engine.mirror().resolve_cell_id(&sid, position).unwrap();
+    let cell_id = engine.cell_store().resolve_cell_id(&sid, position).unwrap();
     assert!(cell_id.is_virtual());
 
     engine
@@ -199,25 +199,28 @@ fn compact_range_undo_redo_preserves_payload_and_virtual_identity() {
         assert_eq!(cell_value_at(&engine, &sid, 255, 0), num(expected));
         assert_eq!(cell_value_at(&engine, &sid, 0, 1), num(sum));
         assert_eq!(
-            engine.mirror().resolve_cell_id(&sid, position),
+            engine.cell_store().resolve_cell_id(&sid, position),
             Some(cell_id)
         );
-        let sheet = engine.mirror().get_sheet(&sid).unwrap();
+        let sheet = engine.cell_store().get_sheet(&sid).unwrap();
         let range = sheet
             .iter_ranges()
             .find(|(id, _)| **id == range_id)
             .unwrap()
             .1;
         assert!(
-            original_payload == Arc::as_ptr(&range.values),
+            std::ptr::eq(original_payload, Arc::as_ptr(&range.values)),
             "history must retain the native compact payload without cloning its values"
         );
         if redo {
             assert_eq!(
-                engine.mirror().get_cell_value(&cell_id),
+                engine.cell_store().get_cell_value(&cell_id),
                 Some(&num(expected))
             );
-            assert_eq!(engine.mirror().resolve_position(&cell_id), Some(position));
+            assert_eq!(
+                engine.cell_store().resolve_position(&cell_id),
+                Some(position)
+            );
         } else {
             assert_eq!(
                 sheet.cells_iter().count(),
@@ -282,8 +285,7 @@ fn ui_changes_after_an_edit_survive_undo_and_recalculation() {
 #[test]
 fn empty_history_commands_return_empty_successful_mutations() {
     let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-    for (patches, result) in [engine.undo().unwrap(), engine.redo().unwrap()] {
-        assert_eq!(patches.len(), 2);
+    for result in [engine.undo().unwrap(), engine.redo().unwrap()] {
         assert!(result.recalc.changed_cells.is_empty());
         assert!(result.property_changes.is_empty());
         assert!(result.structure_changes.is_empty());
@@ -444,7 +446,7 @@ fn whole_workbook_replacement_clears_history_only_after_success() {
         .unwrap();
     assert!(!engine.can_undo());
     assert!(!engine.can_redo());
-    let sid = *engine.mirror().sheet_ids().next().unwrap();
+    let sid = *engine.cell_store().sheet_ids().next().unwrap();
     engine.undo().unwrap();
     assert_eq!(cell_value_at(&engine, &sid, 0, 0), num(7.0));
     assert_eq!(cell_value_at(&engine, &sid, 1, 0), num(8.0));
@@ -529,10 +531,10 @@ fn cse_creation_and_clear_history_preserve_atomic_region() {
         .set_array_formula(&sheet_id(), 0, 3, 2, 3, "=SEQUENCE(3)".into())
         .unwrap();
     let anchor = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&sheet_id(), SheetPos::new(0, 3))
         .unwrap();
-    assert!(engine.mirror().is_cse_anchor(&anchor));
+    assert!(engine.cell_store().is_cse_anchor(&anchor));
     assert_sequence_projection(&engine, 3);
     assert!(matches!(
         engine.set_cell_value_parsed(&sheet_id(), 1, 3, "99"),
@@ -540,10 +542,10 @@ fn cse_creation_and_clear_history_preserve_atomic_region() {
     ));
     assert_eq!(engine.get_undo_state().undo_depth, 1);
     engine.clear_range(&sheet_id(), 0, 3, 2, 3).unwrap();
-    assert!(!engine.mirror().is_cse_anchor(&anchor));
+    assert!(!engine.cell_store().is_cse_anchor(&anchor));
     assert_sequence_projection(&engine, 0);
     engine.undo().unwrap();
-    assert!(engine.mirror().is_cse_anchor(&anchor));
+    assert!(engine.cell_store().is_cse_anchor(&anchor));
     assert_sequence_projection(&engine, 3);
     for row in 0..3 {
         assert_eq!(
@@ -559,14 +561,14 @@ fn cse_creation_and_clear_history_preserve_atomic_region() {
     ));
     assert_eq!(engine.get_undo_state().redo_depth, 1);
     engine.redo().unwrap();
-    assert!(!engine.mirror().is_cse_anchor(&anchor));
+    assert!(!engine.cell_store().is_cse_anchor(&anchor));
     assert_sequence_projection(&engine, 0);
     engine.undo().unwrap();
     engine.undo().unwrap();
-    assert!(!engine.mirror().is_cse_anchor(&anchor));
+    assert!(!engine.cell_store().is_cse_anchor(&anchor));
     assert_sequence_projection(&engine, 0);
     engine.redo().unwrap();
-    assert!(engine.mirror().is_cse_anchor(&anchor));
+    assert!(engine.cell_store().is_cse_anchor(&anchor));
     assert_sequence_projection(&engine, 3);
 }
 
@@ -612,7 +614,7 @@ fn undo_new_value_preserves_subsequent_untracked_format_on_that_cell() {
         .set_cell_value_parsed(&sheet_id(), 0, 3, "77")
         .unwrap();
     let id = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&sheet_id(), SheetPos::new(0, 3))
         .unwrap();
     engine
@@ -631,7 +633,7 @@ fn undo_new_value_preserves_subsequent_untracked_format_on_that_cell() {
     assert_eq!(queried_value(&engine, 0, 3), CellValue::Null);
     assert_eq!(
         engine
-            .mirror()
+            .cell_store()
             .resolve_cell_id(&sheet_id(), SheetPos::new(0, 3)),
         Some(id)
     );
@@ -688,7 +690,7 @@ fn selected_sheet_import_history_restores_global_additions_and_imported_identiti
             },
         )
         .unwrap();
-    let name = source.mirror().get_sheet(&sid).unwrap().name.clone();
+    let name = source.cell_store().get_sheet(&sid).unwrap().name.clone();
     let bytes = source.export_to_xlsx_bytes().unwrap();
     let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let original_order = engine.stores.storage.metadata.sheet_order.clone();
@@ -700,12 +702,12 @@ fn selected_sheet_import_history_restores_global_additions_and_imported_identiti
         .import_sheets_from_xlsx(&bytes, vec![name], None)
         .unwrap();
     let imported = *engine
-        .mirror()
+        .cell_store()
         .sheet_ids()
-        .find(|id| engine.mirror().get_sheet(id).unwrap().name == names[0])
+        .find(|id| engine.cell_store().get_sheet(id).unwrap().name == names[0])
         .unwrap();
     let identity = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&imported, SheetPos::new(0, 0))
         .unwrap();
     let imported_palette = engine.stores.storage.metadata.style_palette.clone();
@@ -717,7 +719,7 @@ fn selected_sheet_import_history_restores_global_additions_and_imported_identiti
     assert_eq!(engine.get_undo_state().undo_depth, 1);
     for _ in 0..3 {
         engine.undo().unwrap();
-        assert!(engine.mirror().get_sheet(&imported).is_none());
+        assert!(engine.cell_store().get_sheet(&imported).is_none());
         assert_eq!(engine.stores.storage.metadata.sheet_order, original_order);
         assert_eq!(
             engine.stores.storage.metadata.style_palette,
@@ -736,7 +738,7 @@ fn selected_sheet_import_history_restores_global_additions_and_imported_identiti
         engine.redo().unwrap();
         assert_eq!(
             engine
-                .mirror()
+                .cell_store()
                 .resolve_cell_id(&imported, SheetPos::new(0, 0)),
             Some(identity)
         );
@@ -771,4 +773,102 @@ fn selected_sheet_import_history_restores_global_additions_and_imported_identiti
             .iter()
             .any(|person| person.display_name == "Imported author")
     );
+}
+
+#[test]
+fn supplied_identity_replacement_preserves_displaced_formula_and_before_values() {
+    for raw in [false, true] {
+        let mut snapshot = empty_bulk_snapshot();
+        let original = CellId::from_raw(0x8fff0);
+        snapshot.sheets[0].cells.push(crate::snapshot::CellData {
+            cell_id: original.to_uuid_string(),
+            row: 0,
+            col: 0,
+            value: num(11.0),
+            formula: Some("=5+6".into()),
+            identity_formula: None,
+            array_ref: None,
+        });
+        let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
+        let sid = sheet_id();
+        let replacement = CellId::from_raw(0x8fff1);
+        let changes = if raw {
+            engine
+                .with_history(|engine| {
+                    services::mutation_handlers::mutation_set_cells_raw(
+                        &mut engine.stores,
+                        &mut engine.cell_store,
+                        vec![(sid, replacement, 0, 0, num(99.0), None)],
+                        true,
+                    )
+                })
+                .unwrap()
+                .changed_cells
+        } else {
+            engine
+                .set_cell(&sid, replacement, 0, 0, "99".into())
+                .unwrap()
+                .recalc
+                .changed_cells
+        };
+        let change = changes
+            .iter()
+            .find(|change| change.cell_id == replacement.to_uuid_string())
+            .unwrap();
+        assert_eq!(change.old_value, Some(num(11.0)));
+        assert_eq!(change.old_formula.as_deref(), Some("=5+6"));
+        for _ in 0..2 {
+            assert_eq!(
+                engine
+                    .cell_store()
+                    .resolve_cell_id(&sid, SheetPos::new(0, 0)),
+                Some(replacement)
+            );
+            assert_eq!(engine.get_cell_value(&sid, 0, 0), num(99.0));
+            engine.undo().unwrap();
+            assert_eq!(
+                engine
+                    .cell_store()
+                    .resolve_cell_id(&sid, SheetPos::new(0, 0)),
+                Some(original)
+            );
+            assert_eq!(engine.get_cell_value(&sid, 0, 0), num(11.0));
+            assert_eq!(engine.get_formula(&original).as_deref(), Some("=5+6"));
+            assert_eq!(engine.cell_store().sheet_for_cell(&replacement), None);
+            engine.redo().unwrap();
+        }
+    }
+}
+
+#[test]
+fn supplied_identity_cross_sheet_write_restores_its_previous_owner() {
+    let mut snapshot = empty_bulk_snapshot();
+    let cell = CellId::from_raw(0x8ffe0);
+    snapshot.sheets[0].cells.push(crate::snapshot::CellData {
+        cell_id: cell.to_uuid_string(),
+        row: 0,
+        col: 0,
+        value: num(11.0),
+        formula: Some("=5+6".into()),
+        identity_formula: None,
+        array_ref: None,
+    });
+    let target = SheetId::from_raw(0x8ffe1);
+    let mut target_sheet = snapshot.sheets[0].clone();
+    target_sheet.id = target.to_uuid_string();
+    target_sheet.name = "Target".into();
+    target_sheet.cells.clear();
+    snapshot.sheets.push(target_sheet);
+    let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
+    engine.set_cell(&target, cell, 0, 0, "99".into()).unwrap();
+    for _ in 0..2 {
+        assert_eq!(engine.cell_store().sheet_for_cell(&cell), Some(target));
+        assert_eq!(engine.get_cell_value(&target, 0, 0), num(99.0));
+        engine.undo().unwrap();
+        assert_eq!(engine.cell_store().sheet_for_cell(&cell), Some(sheet_id()));
+        assert_eq!(engine.get_cell_value(&sheet_id(), 0, 0), num(11.0));
+        assert_eq!(engine.get_formula(&cell).as_deref(), Some("=5+6"));
+        assert_eq!(engine.get_cell_value(&target, 0, 0), CellValue::Null);
+        engine.redo().unwrap();
+    }
 }

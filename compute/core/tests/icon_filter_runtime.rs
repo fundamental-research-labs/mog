@@ -68,7 +68,7 @@ fn fixture(
 
 fn loaded(bytes: &[u8]) -> (ComputeEngine, SheetId, String) {
     let (engine, _) = ComputeEngine::from_xlsx_bytes(bytes).unwrap();
-    let sheet = engine.mirror().sheet_by_name("Icons").unwrap();
+    let sheet = engine.cell_store().sheet_by_name("Icons").unwrap();
     let filter = engine
         .get_filters_in_sheet(&sheet)
         .into_iter()
@@ -82,7 +82,7 @@ fn loaded(bytes: &[u8]) -> (ComputeEngine, SheetId, String) {
 }
 fn value(engine: &ComputeEngine, sheet: &SheetId, row: u32) -> CellValue {
     engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(sheet, SheetPos::new(row, 1))
         .cloned()
         .unwrap_or(CellValue::Null)
@@ -149,8 +149,8 @@ fn reapply_uses_live_values_and_missing_index_means_no_icon() {
             .unwrap();
         engine.reapply_filter(&sheet, &filter).unwrap();
         assert_eq!(value(&engine, &sheet, 11), CellValue::number(25.0));
-        assert!(!engine.mirror().is_row_hidden(&sheet, 1));
-        assert!(engine.mirror().is_row_hidden(&sheet, 2));
+        assert!(!engine.cell_store().is_row_hidden(&sheet, 1));
+        assert!(engine.cell_store().is_row_hidden(&sheet, 2));
         engine
             .set_column_filter(
                 &sheet,
@@ -170,7 +170,7 @@ fn reapply_uses_live_values_and_missing_index_means_no_icon() {
                 .visible,
             1
         );
-        assert!(!engine.mirror().is_row_hidden(&sheet, 4));
+        assert!(!engine.cell_store().is_row_hidden(&sheet, 4));
         let bytes = engine.export_to_xlsx_bytes().unwrap();
         let (mut restored, sheet, filter) = loaded(&bytes);
         restored.reapply_filter(&sheet, &filter).unwrap();
@@ -181,7 +181,7 @@ fn reapply_uses_live_values_and_missing_index_means_no_icon() {
                 .visible,
             1
         );
-        assert!(!restored.mirror().is_row_hidden(&sheet, 4));
+        assert!(!restored.cell_store().is_row_hidden(&sheet, 4));
     }
 }
 
@@ -348,7 +348,7 @@ fn empty_style_stop_filters_icons_across_import_reapply_and_live_edits() {
         for row in [11, 12] {
             assert_eq!(value(&engine, &sheet, row), CellValue::number(45.0));
         }
-        assert!(!engine.mirror().is_row_hidden(&sheet, 2));
+        assert!(!engine.cell_store().is_row_hidden(&sheet, 2));
 
         // No-icon filtering selects stopped numeric cells as well as plain text.
         engine

@@ -1,8 +1,8 @@
 //! Shared test helpers for eval tests.
 
 use super::*;
-use crate::eval_bridge::MirrorContext;
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
+use crate::eval_bridge::EvalContext;
 use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use cell_types::*;
 use formula_types::*;
@@ -20,9 +20,9 @@ pub(super) fn cell_uuid(row: u32, col: u32) -> String {
     format!("00000000-0000-0000-0000-0000{:04x}{:04x}", row, col)
 }
 
-/// Build a simple mirror with one sheet and a 5x5 grid.
+/// Build a simple cell_store with one sheet and a 5x5 grid.
 /// Values: Number(row * 10 + col) for simplicity.
-pub(super) fn test_mirror() -> (CellMirror, SheetId) {
+pub(super) fn test_store() -> (CellStore, SheetId) {
     let mut cells = Vec::new();
     for r in 0..5u32 {
         for c in 0..5u32 {
@@ -61,22 +61,22 @@ pub(super) fn test_mirror() -> (CellMirror, SheetId) {
         max_change: value_types::FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    let mirror = CellMirror::from_snapshot(snapshot).unwrap();
-    let sheet_id = mirror.sheet_by_name("Sheet1").unwrap();
-    (mirror, sheet_id)
+    let cell_store = CellStore::from_snapshot(snapshot).unwrap();
+    let sheet_id = cell_store.sheet_by_name("Sheet1").unwrap();
+    (cell_store, sheet_id)
 }
 
-pub(super) fn eval(node: &ASTNode, ctx: &MirrorContext<'_>) -> CellValue {
+pub(super) fn eval(node: &ASTNode, ctx: &EvalContext<'_>) -> CellValue {
     super::context::traits::sync_block_on(Evaluator::evaluate(node, ctx, ctx)).unwrap()
 }
 
-/// Build a MirrorContext from the test mirror.
+/// Build a EvalContext from the test cell_store.
 pub(super) fn cell_id_at(row: u32, col: u32) -> CellId {
     CellId::from_uuid_str(&cell_uuid(row, col)).unwrap()
 }
 
-pub(super) fn make_ctx<'a>(mirror: &'a CellMirror, sheet_id: SheetId) -> MirrorContext<'a> {
-    MirrorContext::new(mirror, cell_id_at(0, 0), sheet_id)
+pub(super) fn make_ctx<'a>(cell_store: &'a CellStore, sheet_id: SheetId) -> EvalContext<'a> {
+    EvalContext::new(cell_store, cell_id_at(0, 0), sheet_id)
 }
 
 pub(super) fn binop(op: BinOp, left: ASTNode, right: ASTNode) -> ASTNode {
@@ -98,10 +98,10 @@ pub(super) fn ident(name: &str) -> ASTNode {
     ASTNode::Identifier(name.to_string())
 }
 
-/// Build a mirror with one sheet, a 5x5 grid, and the given named ranges.
-pub(super) fn test_mirror_with_named_ranges(
+/// Build a cell store with one sheet, a 5x5 grid, and the given named ranges.
+pub(super) fn test_store_with_named_ranges(
     named_ranges: Vec<NamedRangeDef>,
-) -> (CellMirror, SheetId) {
+) -> (CellStore, SheetId) {
     let mut cells = Vec::new();
     for r in 0..5u32 {
         for c in 0..5u32 {
@@ -140,7 +140,7 @@ pub(super) fn test_mirror_with_named_ranges(
         max_change: value_types::FiniteF64::must(0.001),
         calculation_settings: None,
     };
-    let mirror = CellMirror::from_snapshot(snapshot).unwrap();
-    let sheet_id = mirror.sheet_by_name("Sheet1").unwrap();
-    (mirror, sheet_id)
+    let cell_store = CellStore::from_snapshot(snapshot).unwrap();
+    let sheet_id = cell_store.sheet_by_name("Sheet1").unwrap();
+    (cell_store, sheet_id)
 }

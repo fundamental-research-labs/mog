@@ -1,7 +1,7 @@
 //! Cross-type approximate match, binary search text, null lookup, formula variables.
 
 use super::*;
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 
 // -----------------------------------------------------------------------
@@ -13,7 +13,7 @@ use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 
 #[test]
 fn test_vlookup_approx_skips_cross_type() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Table first column: "A", 10, "B", 20, "C", 30
     // Lookup 25 (Number) with approximate match (TRUE).
@@ -42,7 +42,7 @@ fn test_vlookup_approx_skips_cross_type() {
 
 #[test]
 fn test_vlookup_approx_text_lookup_skips_numbers() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Table first column: 100, "Apple", 200, "Banana", 300, "Cherry"
     // Lookup "Bz" (Text) with approximate match.
@@ -71,7 +71,7 @@ fn test_vlookup_approx_text_lookup_skips_numbers() {
 
 #[test]
 fn test_hlookup_approx_skips_cross_type() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // First row: "Q25", 500, "Z", 1000, 1500, "W", 6000
     // Lookup "Q25" (Text) with approximate match.
@@ -116,7 +116,7 @@ fn test_hlookup_approx_skips_cross_type() {
 
 #[test]
 fn test_match_ascending_skips_cross_type() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Array: "x", 10, "y", 20, "z", 30
     // match_type=1 (ascending approximate), lookup=25 (Number)
@@ -140,7 +140,7 @@ fn test_match_ascending_skips_cross_type() {
 
 #[test]
 fn test_match_descending_skips_cross_type() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Array: 100, "z", 80, "y", 60, "x", 40
     // match_type=-1 (descending approximate), lookup=100 (Number)
@@ -165,7 +165,7 @@ fn test_match_descending_skips_cross_type() {
 
 #[test]
 fn test_match_descending_cross_type_inner() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Array: 100, "z", 80, "y", 60, "x", 40
     // match_type=-1 (descending), lookup=70 (Number)
@@ -190,7 +190,7 @@ fn test_match_descending_cross_type_inner() {
 
 #[test]
 fn test_vlookup_approx_all_different_type_returns_na() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Table first column: all Text. Lookup is a Number.
     // No same-type matches → #N/A.
@@ -214,7 +214,7 @@ fn test_vlookup_approx_all_different_type_returns_na() {
 
 #[test]
 fn test_match_ascending_all_cross_type_returns_na() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // All Text values, lookup is Number. No same-type match → #N/A.
     let arr = ASTNode::Array {
@@ -233,7 +233,7 @@ fn test_match_ascending_all_cross_type_returns_na() {
 
 #[test]
 fn test_hlookup_approx_all_cross_type_returns_na() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // First row all Numbers, lookup is Text. No same-type → #N/A.
     let table = ASTNode::Array {
@@ -273,7 +273,7 @@ fn test_vlookup_approx_text_sorted_by_numeric_field() {
     // "item; 11.6lb" < "item; 9.5lb" lexicographically ('1' < '9')
     // but numerically 9.5 < 11.6. An exact match exists at row 2.
     // Linear scan would break at row 0 ('1' < '9'), binary search finds row 2.
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let table = ASTNode::Array {
         rows: vec![
@@ -310,7 +310,7 @@ fn test_vlookup_approx_text_sorted_by_numeric_field() {
 #[test]
 fn test_hlookup_approx_text_sorted_by_numeric_field() {
     // Same pattern as VLOOKUP test but horizontal.
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let table = ASTNode::Array {
         rows: vec![
@@ -341,7 +341,7 @@ fn test_hlookup_approx_text_sorted_by_numeric_field() {
 #[test]
 fn test_match_ascending_text_sorted_by_numeric_field() {
     // MATCH match_type=1 on text sorted by numeric field.
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![
@@ -365,7 +365,7 @@ fn test_match_ascending_text_sorted_by_numeric_field() {
 fn test_match_descending_approx() {
     // MATCH match_type=-1 (descending): sorted descending data.
     // Lookup 5 in [9, 7, 5, 3, 1] → exact match at position 3.
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![
@@ -387,7 +387,7 @@ fn test_match_descending_approx() {
 fn test_match_descending_approx_between_values() {
     // MATCH match_type=-1 (descending): lookup 6 in [9, 7, 5, 3, 1].
     // Smallest value >= 6 is 7 at position 2.
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![
@@ -410,7 +410,7 @@ fn test_match_descending_endpoint_above_first_returns_na() {
     // MATCH type -1 requires descending data. If the first comparable value
     // is 100, a lookup above 100 cannot have a valid >= candidate under that
     // contract, even when an invalidly ordered tail contains one.
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![
@@ -433,7 +433,7 @@ fn test_match_descending_endpoint_above_first_returns_na() {
 
 #[test]
 fn test_vlookup_approx_null_lookup_returns_na() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Table with numeric first column. Lookup is Null (empty cell).
     // Approximate match should return #N/A for blank lookup values.
@@ -458,7 +458,7 @@ fn test_vlookup_approx_null_lookup_returns_na() {
 
 #[test]
 fn test_vlookup_approx_null_lookup_all_null_table_returns_na() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Table with all-Null first column. Lookup is Null.
     // Approximate match should still return #N/A (not match Null == Null).
@@ -501,7 +501,7 @@ fn test_vlookup_approx_null_lookup_all_null_table_returns_na() {
 
 #[test]
 fn test_vlookup_exact_null_lookup_finds_null() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // Exact match with Null lookup SHOULD find null cells (unlike approximate).
     let null_ref = ASTNode::CellReference(CellRefNode {
@@ -543,7 +543,7 @@ fn test_vlookup_exact_null_lookup_finds_null() {
 
 #[test]
 fn test_hlookup_approx_null_lookup_returns_na() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     // HLOOKUP approximate match with Null lookup → #N/A (same behavior as VLOOKUP).
     let null_ref = ASTNode::CellReference(CellRefNode {
@@ -585,7 +585,7 @@ fn test_formula_variable_simple_arithmetic() {
         Scope::Workbook,
         "=1+2".to_string(),
     )];
-    let (m, s) = test_mirror_with_named_ranges(nrs);
+    let (m, s) = test_store_with_named_ranges(nrs);
     let ctx = make_ctx(&m, s);
     let node = ident("MyConst");
     assert_eq!(eval(&node, &ctx), CellValue::number(3.0));
@@ -599,7 +599,7 @@ fn test_formula_variable_with_function() {
         Scope::Workbook,
         "=SUM(1,2,3)".to_string(),
     )];
-    let (m, s) = test_mirror_with_named_ranges(nrs);
+    let (m, s) = test_store_with_named_ranges(nrs);
     let ctx = make_ctx(&m, s);
     let node = ident("SumVar");
     assert_eq!(eval(&node, &ctx), CellValue::number(6.0));
@@ -645,9 +645,9 @@ fn test_formula_variable_uses_explicit_sheet_context_without_a_current_cell() {
         )],
         ..Default::default()
     };
-    let mirror = CellMirror::from_snapshot(snapshot).unwrap();
-    let sheet_id = mirror.sheet_by_name("Inputs").unwrap();
-    let ctx = MirrorContext::new(&mirror, CellId::from_raw(0), sheet_id);
+    let cell_store = CellStore::from_snapshot(snapshot).unwrap();
+    let sheet_id = cell_store.sheet_by_name("Inputs").unwrap();
+    let ctx = EvalContext::new(&cell_store, CellId::from_raw(0), sheet_id);
 
     assert_eq!(eval(&ident("InputPair"), &ctx), CellValue::number(12.0));
 }
@@ -664,7 +664,7 @@ fn test_formula_variable_transitive_resolution() {
             "=Base+5".to_string(),
         ),
     ];
-    let (m, s) = test_mirror_with_named_ranges(nrs);
+    let (m, s) = test_store_with_named_ranges(nrs);
     let ctx = make_ctx(&m, s);
     let node = ident("Derived");
     assert_eq!(eval(&node, &ctx), CellValue::number(15.0));
@@ -679,7 +679,7 @@ fn test_formula_variable_error_propagation_not_name() {
         Scope::Workbook,
         "=1/0".to_string(),
     )];
-    let (m, s) = test_mirror_with_named_ranges(nrs);
+    let (m, s) = test_store_with_named_ranges(nrs);
     let ctx = make_ctx(&m, s);
     let node = ident("BadDiv");
     assert_eq!(eval(&node, &ctx), CellValue::Error(CellError::Div0, None));
@@ -688,7 +688,7 @@ fn test_formula_variable_error_propagation_not_name() {
 #[test]
 fn test_formula_variable_unknown_name_returns_name_error() {
     // An identifier that doesn't resolve at all should return #NAME?
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = ident("NoSuchVariable");
     assert_eq!(eval(&node, &ctx), CellValue::Error(CellError::Name, None));
@@ -702,7 +702,7 @@ fn test_formula_variable_unparseable_returns_name_error() {
         Scope::Workbook,
         "=@@@INVALID".to_string(),
     )];
-    let (m, s) = test_mirror_with_named_ranges(nrs);
+    let (m, s) = test_store_with_named_ranges(nrs);
     let ctx = make_ctx(&m, s);
     let node = ident("BadFormula");
     assert_eq!(eval(&node, &ctx), CellValue::Error(CellError::Name, None));
@@ -719,7 +719,7 @@ fn test_formula_variable_circular_returns_ref_error() {
     let result = std::thread::Builder::new()
         .stack_size(64 * 1024 * 1024) // 64 MB — deep recursion needs large stack in debug
         .spawn(move || {
-            let (m, s) = test_mirror_with_named_ranges(nrs);
+            let (m, s) = test_store_with_named_ranges(nrs);
             let ctx = make_ctx(&m, s);
             let node = ident("VarA");
             eval(&node, &ctx)
@@ -742,7 +742,7 @@ fn test_formula_variable_self_referential_returns_ref_error() {
     let result = std::thread::Builder::new()
         .stack_size(64 * 1024 * 1024)
         .spawn(move || {
-            let (m, s) = test_mirror_with_named_ranges(nrs);
+            let (m, s) = test_store_with_named_ranges(nrs);
             let ctx = make_ctx(&m, s);
             let node = ident("X");
             eval(&node, &ctx)
@@ -761,7 +761,7 @@ fn test_formula_variable_string_concat() {
         Scope::Workbook,
         "=\"Hello\"&\" World\"".to_string(),
     )];
-    let (m, s) = test_mirror_with_named_ranges(nrs);
+    let (m, s) = test_store_with_named_ranges(nrs);
     let ctx = make_ctx(&m, s);
     let node = ident("Greeting");
     assert_eq!(eval(&node, &ctx), CellValue::Text("Hello World".into()));
@@ -775,7 +775,7 @@ fn test_formula_variable_nested_functions() {
         Scope::Workbook,
         "=IF(TRUE,42,0)".to_string(),
     )];
-    let (m, s) = test_mirror_with_named_ranges(nrs);
+    let (m, s) = test_store_with_named_ranges(nrs);
     let ctx = make_ctx(&m, s);
     let node = ident("Nested");
     assert_eq!(eval(&node, &ctx), CellValue::number(42.0));
@@ -789,7 +789,7 @@ fn test_formula_variable_case_insensitive() {
         Scope::Workbook,
         "=99".to_string(),
     )];
-    let (m, s) = test_mirror_with_named_ranges(nrs);
+    let (m, s) = test_store_with_named_ranges(nrs);
     let ctx = make_ctx(&m, s);
     // The identifier in the AST is "MYVAR" (uppercase)
     let node = ident("MYVAR");

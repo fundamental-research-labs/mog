@@ -108,11 +108,11 @@ fn fill_request(
 /// uses: cell_id → `compute.get_formula(cell_id)` → display string.
 fn formula_text_at(engine: &ComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> String {
     let cell_id = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(sheet_id, SheetPos::new(row, col))
         .unwrap_or_else(|| panic!("no CellId at ({},{})", row, col));
     let formula = engine
-        .mirror()
+        .cell_store()
         .get_formula(&cell_id)
         .unwrap_or_else(|| panic!("no formula stored for cell at ({},{})", row, col));
     engine.to_a1_display(sheet_id, formula)
@@ -132,7 +132,7 @@ fn stored_formula_text_at(
     col: u32,
 ) -> String {
     let cell_id = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(sheet_id, SheetPos::new(row, col))
         .unwrap_or_else(|| panic!("no CellId at ({},{})", row, col));
     engine
@@ -155,7 +155,7 @@ fn cross_sheet_set_cell_round_trips_formula_text() {
         vec![make_cell(1, 0, 0, CellValue::number(42.0))], // Sheet2!A1 = 42
     );
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet1 = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet1 = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     engine
         .set_cell_value_parsed(&sheet1, 0, 0, "=Sheet2!A1")
@@ -168,10 +168,10 @@ fn cross_sheet_set_cell_round_trips_formula_text() {
     );
 
     let cell_id = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&sheet1, SheetPos::new(0, 0))
         .unwrap();
-    let value = engine.mirror().get_cell_value(&cell_id);
+    let value = engine.cell_store().get_cell_value(&cell_id);
     assert_eq!(
         value.cloned(),
         Some(CellValue::number(42.0)),
@@ -209,7 +209,7 @@ fn cross_sheet_set_cell_quoted_sheet_name_round_trips() {
         ..Default::default()
     };
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet1 = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet1 = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     engine
         .set_cell_value_parsed(&sheet1, 0, 0, "='My Sheet'!A1")
@@ -244,7 +244,7 @@ fn cross_sheet_fill_down_preserves_sheet_prefix() {
         ],
     );
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet1 = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet1 = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Sheet1!A1 = =Sheet2!A1
     engine
@@ -278,7 +278,7 @@ fn cross_sheet_fill_right_preserves_sheet_prefix() {
         ],
     );
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet1 = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet1 = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     engine
         .set_cell_value_parsed(&sheet1, 0, 0, "=Sheet2!A1")
@@ -312,8 +312,8 @@ fn sheet_rename_rewrites_cross_sheet_formula_text() {
     let snapshot =
         make_two_sheet_snapshot(vec![], vec![make_cell(1, 0, 0, CellValue::number(99.0))]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet1 = engine.mirror().sheet_by_name("Sheet1").unwrap();
-    let sheet2 = engine.mirror().sheet_by_name("Sheet2").unwrap();
+    let sheet1 = engine.cell_store().sheet_by_name("Sheet1").unwrap();
+    let sheet2 = engine.cell_store().sheet_by_name("Sheet2").unwrap();
 
     engine
         .set_cell_value_parsed(&sheet1, 0, 0, "=Sheet2!A1+1")
@@ -335,8 +335,8 @@ fn sheet_rename_to_quoted_form_uses_quotes() {
     let snapshot =
         make_two_sheet_snapshot(vec![], vec![make_cell(1, 0, 0, CellValue::number(5.0))]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet1 = engine.mirror().sheet_by_name("Sheet1").unwrap();
-    let sheet2 = engine.mirror().sheet_by_name("Sheet2").unwrap();
+    let sheet1 = engine.cell_store().sheet_by_name("Sheet1").unwrap();
+    let sheet2 = engine.cell_store().sheet_by_name("Sheet2").unwrap();
 
     engine
         .set_cell_value_parsed(&sheet1, 0, 0, "=Sheet2!A1")
@@ -358,7 +358,7 @@ fn sheet_rename_preserves_explicit_same_sheet_formula_text() {
     let snapshot =
         make_two_sheet_snapshot(vec![], vec![make_cell(1, 0, 0, CellValue::number(42.0))]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet2 = engine.mirror().sheet_by_name("Sheet2").unwrap();
+    let sheet2 = engine.cell_store().sheet_by_name("Sheet2").unwrap();
 
     engine
         .set_cell_value_parsed(&sheet2, 0, 2, "=Sheet2!A1+1")
@@ -366,7 +366,7 @@ fn sheet_rename_preserves_explicit_same_sheet_formula_text() {
 
     engine.rename_compute_sheet(&sheet2, "Data Sheet").unwrap();
 
-    let renamed_sheet = engine.mirror().sheet_by_name("Data Sheet").unwrap();
+    let renamed_sheet = engine.cell_store().sheet_by_name("Data Sheet").unwrap();
     assert_eq!(
         formula_info_at(&engine, &renamed_sheet, 0, 2),
         "='Data Sheet'!A1+1",
@@ -384,8 +384,8 @@ fn delete_sheet_rewrites_formula_text_to_ref_with_reference_body() {
     let snapshot =
         make_two_sheet_snapshot(vec![], vec![make_cell(1, 0, 0, CellValue::number(5.0))]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet1 = engine.mirror().sheet_by_name("Sheet1").unwrap();
-    let sheet2 = engine.mirror().sheet_by_name("Sheet2").unwrap();
+    let sheet1 = engine.cell_store().sheet_by_name("Sheet1").unwrap();
+    let sheet2 = engine.cell_store().sheet_by_name("Sheet2").unwrap();
 
     engine
         .set_cell_value_parsed(&sheet1, 0, 0, "=Sheet2!A1")
@@ -433,10 +433,10 @@ fn named_range_rename_rewrites_referencing_formulas() {
     let snapshot =
         make_two_sheet_snapshot(vec![make_cell(0, 0, 0, CellValue::number(100.0))], vec![]);
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet1 = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet1 = engine.cell_store().sheet_by_name("Sheet1").unwrap();
 
     // Define MyVal → =Sheet1!A1 (workbook-scoped).
-    let (_, mr) = engine
+    let mr = engine
         .create_named_range(DefinedNameInput {
             name: "MyVal".to_string(),
             refers_to: "=Sheet1!A1".to_string(),
@@ -498,8 +498,8 @@ fn rename_then_fill_uses_new_sheet_name() {
         ],
     );
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot).unwrap();
-    let sheet1 = engine.mirror().sheet_by_name("Sheet1").unwrap();
-    let sheet2 = engine.mirror().sheet_by_name("Sheet2").unwrap();
+    let sheet1 = engine.cell_store().sheet_by_name("Sheet1").unwrap();
+    let sheet2 = engine.cell_store().sheet_by_name("Sheet2").unwrap();
 
     engine
         .set_cell_value_parsed(&sheet1, 0, 0, "=Sheet2!A1")

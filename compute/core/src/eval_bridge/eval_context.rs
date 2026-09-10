@@ -1,0 +1,685 @@
+//! EvalContext — concrete EvaluationContext backed by CellStore.
+//!
+//! Delegates all operations to the composed StoreAccess struct.
+
+use super::store_access::{PendingCellOverride, StoreAccess};
+use crate::cells::CellStore;
+use crate::eval::cache::range_store::RangeStore;
+use crate::eval::clock::RecalcClock;
+use crate::eval::context::traits::{EvalDataAccess, EvalMetadata};
+use crate::formula_text::{FormulaTextLookup, FormulaTextProvider};
+use crate::scheduler::AstEntry;
+use crate::table::structured_refs::ResolvedStructuredRef;
+use cell_types::{CellId, SheetId};
+use compute_functions::helpers::sumifs_result_cache::SumifsCacheEpoch;
+use compute_parser::ASTNode;
+use formula_types::{CellRef, RangeType, ResolvedName};
+use rustc_hash::FxHashMap;
+use snapshot_types::PivotTableDef;
+use std::sync::Arc;
+use value_types::{CellArray, CellError, CellValue};
+use value_types::{DenseBoolMask, DenseColumn};
+
+#[cfg(feature = "native")]
+use crate::eval::context::traits::IndexedLookupResult;
+#[cfg(feature = "native")]
+use crate::eval::lookup::index_cache::LookupIndexCache;
+
+/// Wraps a `&CellStore` and implements `EvaluationContext` (via split traits).
+pub struct EvalContext<'a> {
+    pub access: StoreAccess<'a>,
+    /// Optional shared lookup index cache for O(1) XLOOKUP/VLOOKUP/MATCH.
+    /// When `None`, indexed lookups return `NotAvailable` and the evaluator
+    /// falls back to the row-by-row materialization path.
+    #[cfg(feature = "native")]
+    pub lookup_cache: Option<&'a LookupIndexCache>,
+    /// Optional shared range store for pre-materialized range data.
+    /// When Some, get_range_values delegates to the store instead of
+    /// materializing fresh from the cell store.
+    pub range_store: Option<&'a RangeStore>,
+    /// Optional formula AST cache, used for metadata queries that need the
+    /// formula's root shape rather than only persisted identity flags.
+    pub ast_cache: Option<&'a FxHashMap<CellId, AstEntry>>,
+    /// Optional shared workbook cache for bitmask/frequency caching.
+    #[cfg(feature = "native")]
+    pub workbook_cache: Option<&'a crate::eval::cache::workbook_cache::WorkbookCache>,
+    /// Current scheduler-owned SUMIFS cache epoch.
+    pub sumifs_cache_epoch: Option<SumifsCacheEpoch>,
+    /// Immutable clock input for the current recalc/evaluation scope.
+    pub(crate) clock: RecalcClock,
+}
+
+impl<'a> EvalContext<'a> {
+    pub fn new(cell_store: &'a CellStore, current_cell_id: CellId, current_sheet: SheetId) -> Self {
+        Self {
+            access: StoreAccess::new(cell_store, current_cell_id, current_sheet),
+            #[cfg(feature = "native")]
+            lookup_cache: None,
+            range_store: None,
+            ast_cache: None,
+            #[cfg(feature = "native")]
+            workbook_cache: None,
+            sumifs_cache_epoch: None,
+            clock: RecalcClock::live(),
+        }
+    }
+
+    pub fn with_formula_text_provider(
+        cell_store: &'a CellStore,
+        current_cell_id: CellId,
+        current_sheet: SheetId,
+        formula_text_provider: FormulaTextProvider<'a>,
+    ) -> Self {
+        Self {
+            access: StoreAccess::with_formula_text_provider(
+                cell_store,
+                current_cell_id,
+                current_sheet,
+                formula_text_provider,
+            ),
+            #[cfg(feature = "native")]
+            lookup_cache: None,
+            range_store: None,
+            ast_cache: None,
+            #[cfg(feature = "native")]
+            workbook_cache: None,
+            sumifs_cache_epoch: None,
+            clock: RecalcClock::live(),
+        }
+    }
+
+    /// Create a context with an ordered sheet list for 3-D reference evaluation.
+    pub fn with_sheet_order(
+        cell_store: &'a CellStore,
+        current_cell_id: CellId,
+        current_sheet: SheetId,
+        ordered_sheets: Vec<SheetId>,
+    ) -> Self {
+        Self {
+            access: StoreAccess::with_sheet_order(
+                cell_store,
+                current_cell_id,
+                current_sheet,
+                ordered_sheets,
+            ),
+            #[cfg(feature = "native")]
+            lookup_cache: None,
+            range_store: None,
+            ast_cache: None,
+            #[cfg(feature = "native")]
+            workbook_cache: None,
+            sumifs_cache_epoch: None,
+            clock: RecalcClock::live(),
+        }
+    }
+
+    /// Build a context with a one-cell value override. Used by the editor-commit
+    /// data-validation path so that custom-formula constraints see the typed
+    /// value at its target position before it has been committed to the cell store.
+    pub fn with_pending_override(
+        cell_store: &'a CellStore,
+        current_cell_id: CellId,
+        current_sheet: SheetId,
+        pending_override: PendingCellOverride,
+    ) -> Self {
+        Self {
+            access: StoreAccess::with_pending_override(
+                cell_store,
+                current_cell_id,
+                current_sheet,
+                pending_override,
+            ),
+            #[cfg(feature = "native")]
+            lookup_cache: None,
+            range_store: None,
+            ast_cache: None,
+            #[cfg(feature = "native")]
+            workbook_cache: None,
+            sumifs_cache_epoch: None,
+            clock: RecalcClock::live(),
+        }
+    }
+
+    /// Create a context with a shared lookup index cache for indexed lookups.
+    #[cfg(feature = "native")]
+    pub fn with_lookup_cache(
+        cell_store: &'a CellStore,
+        current_cell_id: CellId,
+        current_sheet: SheetId,
+        cache: &'a LookupIndexCache,
+    ) -> Self {
+        Self {
+            access: StoreAccess::new(cell_store, current_cell_id, current_sheet),
+            lookup_cache: Some(cache),
+            range_store: None,
+            ast_cache: None,
+            workbook_cache: None,
+            sumifs_cache_epoch: None,
+            clock: RecalcClock::live(),
+        }
+    }
+
+    /// Create a context with a shared RangeStore for pre-materialized range data.
+    /// Also uses the RangeStore's lookup cache for indexed lookups.
+    #[cfg(feature = "native")]
+    pub fn with_range_store(
+        cell_store: &'a CellStore,
+        current_cell_id: CellId,
+        current_sheet: SheetId,
+        range_store: &'a RangeStore,
+    ) -> Self {
+        Self {
+            access: StoreAccess::new(cell_store, current_cell_id, current_sheet),
+            lookup_cache: Some(range_store.lookup_cache()),
+            range_store: Some(range_store),
+            ast_cache: None,
+            workbook_cache: None,
+            sumifs_cache_epoch: None,
+            clock: RecalcClock::live(),
+        }
+    }
+
+    pub fn with_sumifs_cache_epoch(mut self, epoch: Option<SumifsCacheEpoch>) -> Self {
+        self.sumifs_cache_epoch = epoch;
+        self
+    }
+
+    /// Attach the immutable clock captured for the enclosing recalc.
+    pub(crate) fn with_recalc_clock(mut self, clock: RecalcClock) -> Self {
+        self.clock = clock;
+        self
+    }
+}
+
+const ROOT_DYNAMIC_ARRAY_FUNCTIONS: &[&str] = &[
+    "SEQUENCE",
+    "SORT",
+    "SORTBY",
+    "FILTER",
+    "UNIQUE",
+    "RANDARRAY",
+    "MAP",
+    "MAKEARRAY",
+    "BYROW",
+    "BYCOL",
+    "SCAN",
+    "ANCHORARRAY",
+];
+
+pub(super) fn root_ast_produces_dynamic_array(ast: &ASTNode) -> bool {
+    match ast {
+        ASTNode::Range(_) | ASTNode::Array { .. } => true,
+        ASTNode::SheetRef { inner, .. }
+        | ASTNode::UnresolvedSheetRef { inner, .. }
+        | ASTNode::Paren(inner) => root_ast_produces_dynamic_array(inner),
+        ASTNode::Function { name, args } if name.eq_ignore_ascii_case("CELL") => {
+            !matches!(args.first(), Some(ASTNode::Text(info)) if !info.eq_ignore_ascii_case("width"))
+        }
+        ASTNode::Function { name, .. } => {
+            ROOT_DYNAMIC_ARRAY_FUNCTIONS.contains(&name.to_uppercase().as_str())
+        }
+        ASTNode::BinaryOp { left, right, .. } => {
+            root_ast_produces_dynamic_array(left) || root_ast_produces_dynamic_array(right)
+        }
+        ASTNode::UnaryOp { op, operand } => {
+            !matches!(op, compute_parser::UnaryOp::ImplicitIntersection)
+                && root_ast_produces_dynamic_array(operand)
+        }
+        _ => false,
+    }
+}
+
+impl<'a> EvalDataAccess for EvalContext<'a> {
+    async fn get_cell_value_by_ref(&self, cell_ref: &CellRef) -> CellValue {
+        self.access.get_cell_value_by_ref(cell_ref)
+    }
+
+    async fn get_cell_value(&self, cell_id: &CellId) -> CellValue {
+        self.access.get_cell_value(cell_id)
+    }
+
+    async fn get_source_array(&self, cell_id: &CellId) -> Option<CellValue> {
+        let cell_store = self.access.cell_store;
+
+        // Only projection sources support ANCHORARRAY (#)
+        if !cell_store.projection_registry.is_source(cell_id) {
+            return None;
+        }
+
+        // Source cells store CellValue::Array directly — read the raw value.
+        cell_store.get_cell_value_raw(cell_id).cloned()
+    }
+
+    async fn get_range_values(
+        &self,
+        start: &CellRef,
+        end: &CellRef,
+        range_type: &RangeType,
+    ) -> Result<std::sync::Arc<CellArray>, CellError> {
+        // If we have a range store, resolve refs to a RangeKey and delegate
+        if let Some(store) = self.range_store
+            && self.access.pending_override.is_none()
+        {
+            use crate::eval::cache::range_store::RangeKey;
+
+            let (s_sheet, s_row, s_col) = self
+                .access
+                .resolve_ref_to_pos(start)
+                .ok_or(CellError::Ref)?;
+            let (e_sheet, e_row, e_col) =
+                self.access.resolve_ref_to_pos(end).ok_or(CellError::Ref)?;
+            if s_sheet != e_sheet {
+                return Err(CellError::Ref);
+            }
+            let mut min_row = s_row.min(e_row);
+            let mut max_row = s_row.max(e_row);
+            let mut min_col = s_col.min(e_col);
+            let mut max_col = s_col.max(e_col);
+
+            match range_type {
+                RangeType::ColumnRange => {
+                    min_row = 0;
+                    max_row = u32::MAX;
+                }
+                RangeType::RowRange => {
+                    min_col = 0;
+                    max_col = u32::MAX;
+                }
+                _ => {}
+            }
+
+            // Clamp to the formula grid, not the materialized content extent.
+            if let Some(sheet) = self.access.cell_store.get_sheet(&s_sheet) {
+                let formula_rows = sheet.formula_rows();
+                let formula_cols = sheet.formula_cols();
+                if max_row >= formula_rows {
+                    if formula_rows > 0 {
+                        max_row = formula_rows - 1;
+                    } else {
+                        return Ok(std::sync::Arc::new(CellArray::empty()));
+                    }
+                }
+                if max_col >= formula_cols {
+                    if formula_cols > 0 {
+                        max_col = formula_cols - 1;
+                    } else {
+                        return Ok(std::sync::Arc::new(CellArray::empty()));
+                    }
+                }
+            } else if max_row > 1000 || max_col > 1000 {
+                return Ok(std::sync::Arc::new(CellArray::empty()));
+            }
+
+            let key = RangeKey::new(s_sheet, min_row, min_col, max_row, max_col);
+            return Ok(store.get_or_materialize(key, self.access.cell_store));
+        }
+
+        // Fallback: delegate directly to cell_store access (original behavior)
+        self.access.get_range_values(start, end, range_type)
+    }
+}
+
+impl<'a> EvalMetadata for EvalContext<'a> {
+    fn cell_reference_metadata(
+        &self,
+        sheet: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> Option<crate::cells::cell_metadata::CellReferenceMetadata> {
+        self.access
+            .cell_store
+            .cell_metadata_provider
+            .as_ref()?
+            .query(self.access.cell_store, sheet, row, col)
+    }
+    fn date1904(&self) -> bool {
+        self.access.cell_store.date1904
+    }
+
+    fn phonetic_shared_string(
+        &self,
+        sheet: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> Option<domain_types::RichSharedString> {
+        self.access
+            .cell_store
+            .phonetic_shared_string(sheet, row, col)
+    }
+
+    fn char_code_page(&self) -> compute_functions::CharCodePage {
+        self.access.cell_store.char_code_page
+    }
+
+    fn current_timestamp(&self) -> f64 {
+        self.clock.current_timestamp_for_workbook(self.date1904())
+    }
+
+    fn legacy_reference_result(&self) -> bool {
+        self.access
+            .cell_store
+            .formula_result_mode(&self.access.current_cell())
+            == Some(crate::cells::cell_metadata::FormulaResultMode::LegacyScalar)
+    }
+    fn current_cell(&self) -> CellId {
+        self.access.current_cell()
+    }
+
+    fn current_sheet(&self) -> SheetId {
+        self.access.current_sheet
+    }
+
+    fn resolve_position(&self, cell_id: &CellId) -> Option<(SheetId, u32, u32)> {
+        self.access.resolve_position(cell_id)
+    }
+
+    fn resolve_cell_id(&self, sheet: &SheetId, row: u32, col: u32) -> Option<CellId> {
+        self.access.resolve_cell_id(sheet, row, col)
+    }
+
+    fn resolve_defined_name(&self, name: &str) -> Option<ResolvedName> {
+        self.access.resolve_defined_name(name)
+    }
+
+    fn resolve_workbook_name(&self, name: &str) -> Option<ResolvedName> {
+        self.access.resolve_workbook_name(name)
+    }
+
+    fn resolve_defined_name_for_sheet(&self, name: &str, sheet: SheetId) -> Option<ResolvedName> {
+        self.access.resolve_defined_name_for_sheet(name, sheet)
+    }
+
+    fn resolve_structured_ref(
+        &self,
+        ref_: &crate::table::types::StructuredRef,
+    ) -> Result<ResolvedStructuredRef, CellError> {
+        self.access.resolve_structured_ref(ref_)
+    }
+
+    fn sheet_by_name(&self, name: &str) -> Option<SheetId> {
+        self.access.sheet_by_name(name)
+    }
+
+    fn sheet_count(&self) -> usize {
+        self.access.sheet_count()
+    }
+
+    fn sheets_in_range(&self, start: &SheetId, end: &SheetId) -> Vec<SheetId> {
+        self.access.sheets_in_range(start, end)
+    }
+
+    fn get_dense_column(&self, sheet: &SheetId, col: u32) -> Option<&DenseColumn> {
+        self.access.get_dense_column(sheet, col)
+    }
+
+    fn get_dense_column_for_range(
+        &self,
+        sheet: &SheetId,
+        col: u32,
+        start_row: u32,
+        end_row: u32,
+    ) -> Option<&DenseColumn> {
+        self.access
+            .get_dense_column_for_range(sheet, col, start_row, end_row)
+    }
+
+    fn get_column_values(&self, sheet: &SheetId, col: u32) -> Option<value_types::ColumnView<'_>> {
+        self.access.get_column_values(sheet, col)
+    }
+
+    fn get_dense_bool_mask(&self, sheet: &SheetId, col: u32) -> Option<&DenseBoolMask> {
+        self.access.get_dense_bool_mask(sheet, col)
+    }
+
+    fn col_version(&self, sheet: &SheetId, col: u32) -> u64 {
+        self.access.col_version(sheet, col)
+    }
+
+    fn sumifs_cache_epoch(&self) -> Option<SumifsCacheEpoch> {
+        self.sumifs_cache_epoch
+    }
+
+    fn cell_has_formula(&self, sheet: &SheetId, row: u32, col: u32) -> bool {
+        self.access.cell_has_formula(sheet, row, col)
+    }
+
+    fn formula_text_at(&self, sheet: &SheetId, row: u32, col: u32) -> FormulaTextLookup {
+        self.access.formula_text_at(sheet, row, col)
+    }
+
+    fn cell_has_dynamic_array_formula(&self, sheet: &SheetId, row: u32, col: u32) -> bool {
+        if let Some(id) = self
+            .access
+            .cell_store
+            .resolve_cell_id(sheet, cell_types::SheetPos::new(row, col))
+            && let Some(mode) = self.access.cell_store.formula_result_mode(&id)
+        {
+            return mode == crate::cells::cell_metadata::FormulaResultMode::Dynamic;
+        }
+        if let Some(ast_cache) = self.ast_cache
+            && let Some(cell_id) = self
+                .access
+                .cell_store
+                .resolve_cell_id(sheet, cell_types::SheetPos::new(row, col))
+            && let Some(entry) = ast_cache.get(&cell_id)
+        {
+            return root_ast_produces_dynamic_array(&entry.ast);
+        }
+        self.access.cell_has_dynamic_array_formula(sheet, row, col)
+    }
+
+    fn cell_has_subtotal_formula(&self, sheet: &SheetId, row: u32, col: u32) -> bool {
+        self.access.cell_has_subtotal_formula(sheet, row, col)
+    }
+
+    fn is_row_hidden(&self, sheet: &SheetId, row: u32) -> bool {
+        self.access.is_row_hidden(sheet, row)
+    }
+
+    fn is_row_filtered(&self, sheet: &SheetId, row: u32) -> bool {
+        self.access
+            .cell_store
+            .cell_metadata_provider
+            .as_ref()
+            .is_some_and(|provider| provider.is_row_filtered(self.access.cell_store, sheet, row))
+    }
+
+    fn get_table(&self, name: &str) -> Option<&formula_types::TableDef> {
+        self.access.get_table(name)
+    }
+
+    fn find_pivot_table_at(&self, sheet: &SheetId, row: u32, col: u32) -> Option<&PivotTableDef> {
+        self.access.find_pivot_table_at(sheet, row, col)
+    }
+
+    #[cfg(feature = "native")]
+    fn indexed_column_search_range(
+        &self,
+        sheet: &SheetId,
+        col: u32,
+        target: &CellValue,
+        query: crate::eval::context::traits::ColumnLookupQuery,
+    ) -> IndexedLookupResult {
+        if !matches!(target, CellValue::Number(_) | CellValue::Text(_)) {
+            return IndexedLookupResult::NotAvailable;
+        }
+        let Some(cache) = self.lookup_cache else {
+            return IndexedLookupResult::NotAvailable;
+        };
+        let Some(values) = self.access.get_column_values(sheet, col) else {
+            return IndexedLookupResult::NotAvailable;
+        };
+        let index = cache.get_or_build_from_col_data(*sheet, col, values);
+        match index.search_range(
+            target,
+            query.match_mode,
+            query.start_row,
+            query.end_row,
+            query.reverse,
+        ) {
+            Some(row) => IndexedLookupResult::Found(row),
+            None => IndexedLookupResult::NotFound,
+        }
+    }
+
+    #[cfg(feature = "native")]
+    fn indexed_column_search(
+        &self,
+        sheet: &SheetId,
+        col: u32,
+        target: &CellValue,
+        match_mode: i32,
+    ) -> IndexedLookupResult {
+        let cache = match self.lookup_cache {
+            Some(c) => c,
+            None => return IndexedLookupResult::NotAvailable,
+        };
+
+        let col_values = match self.access.get_column_values(sheet, col) {
+            Some(v) => v,
+            None => return IndexedLookupResult::NotAvailable,
+        };
+
+        let index_ref = cache.get_or_build_from_col_data(*sheet, col, col_values);
+
+        let result = match (match_mode, target) {
+            (0, CellValue::Number(n)) => index_ref.search_exact_numeric(n.get()),
+            (0, CellValue::Text(s)) => index_ref.search_exact_text(s),
+            (1, CellValue::Number(n)) => index_ref.search_leq_numeric(n.get()),
+            (1, CellValue::Text(s)) => index_ref.search_leq_text(s),
+            (-1, CellValue::Number(n)) => index_ref.search_geq_numeric(n.get()),
+            (-1, CellValue::Text(s)) => index_ref.search_geq_text(s),
+            _ => return IndexedLookupResult::NotAvailable,
+        };
+
+        #[cfg(feature = "journal")]
+        {
+            let hit = result.is_some();
+            let target_str = crate::journal::journal_fmt_value(target);
+            crate::journal::record(crate::journal::JournalEvent::CacheAccess {
+                cell: Some(self.access.current_cell()),
+                tier: "lookup_index",
+                key_summary: format!("col={} target={} mode={}", col, target_str, match_mode),
+                hit,
+            });
+        }
+
+        match result {
+            Some(row) => IndexedLookupResult::Found(row),
+            None => IndexedLookupResult::NotFound,
+        }
+    }
+
+    #[cfg(feature = "native")]
+    fn indexed_column_wildcard_search(
+        &self,
+        sheet: &SheetId,
+        col: u32,
+        pattern: &str,
+    ) -> IndexedLookupResult {
+        let cache = match self.lookup_cache {
+            Some(c) => c,
+            None => return IndexedLookupResult::NotAvailable,
+        };
+
+        let col_values = match self.access.get_column_values(sheet, col) {
+            Some(v) => v,
+            None => return IndexedLookupResult::NotAvailable,
+        };
+
+        let index_ref = cache.get_or_build_from_col_data(*sheet, col, col_values);
+
+        let search_result = index_ref.search_wildcard(pattern);
+
+        #[cfg(feature = "journal")]
+        {
+            crate::journal::record(crate::journal::JournalEvent::CacheAccess {
+                cell: Some(self.access.current_cell()),
+                tier: "lookup_index_wildcard",
+                key_summary: format!("col={} pattern={}", col, pattern),
+                hit: search_result.is_some(),
+            });
+        }
+
+        match search_result {
+            Some(row) => IndexedLookupResult::Found(row),
+            None => IndexedLookupResult::NotFound,
+        }
+    }
+
+    fn get_or_build_sorted_for_range(
+        &self,
+        sheet: &SheetId,
+        col: u32,
+        row_start: u32,
+        row_end: u32,
+        values: &[CellValue],
+    ) -> Option<Arc<Vec<f64>>> {
+        #[cfg(feature = "native")]
+        {
+            let cache = self.workbook_cache?;
+            let key = (*sheet, col, row_start, row_end);
+            cache.get_or_build_sorted(key, self.access.cell_store, sheet, col, values)
+        }
+        #[cfg(not(feature = "native"))]
+        {
+            let _ = (sheet, col, row_start, row_end, values);
+            None
+        }
+    }
+
+    fn get_criteria_bitmask(
+        &self,
+        sheet: &SheetId,
+        col: u32,
+        row_start: u32,
+        row_end: u32,
+        criteria: &CellValue,
+        _col_values: value_types::ColumnView<'_>,
+    ) -> Option<compute_functions::helpers::column_bitset::ColumnBitset> {
+        #[cfg(feature = "native")]
+        {
+            if self.access.pending_override.is_some() {
+                return None;
+            }
+            let cache = self.workbook_cache?;
+            let criteria_hash =
+                compute_functions::helpers::bitmask_cache::hash_criteria_value(criteria);
+            let key = (*sheet, col, row_start, row_end, criteria_hash);
+            cache.try_get_bitmask(&key, self.access.cell_store, criteria)
+        }
+        #[cfg(not(feature = "native"))]
+        {
+            let _ = (sheet, col, row_start, row_end, criteria, _col_values);
+            None
+        }
+    }
+
+    fn get_or_build_criteria_bitmask(
+        &self,
+        sheet: &SheetId,
+        col: u32,
+        row_start: u32,
+        row_end: u32,
+        criteria: &CellValue,
+        col_values: value_types::ColumnView<'_>,
+    ) -> Option<compute_functions::helpers::column_bitset::ColumnBitset> {
+        #[cfg(feature = "native")]
+        {
+            if self.access.pending_override.is_some() {
+                return None;
+            }
+            let cache = self.workbook_cache?;
+            let criteria_hash =
+                compute_functions::helpers::bitmask_cache::hash_criteria_value(criteria);
+            let key = (*sheet, col, row_start, row_end, criteria_hash);
+            // The evaluator already clipped this view to the requested range.
+            cache.get_or_build_bitmask(key, self.access.cell_store, criteria, &col_values)
+        }
+        #[cfg(not(feature = "native"))]
+        {
+            let _ = (sheet, col, row_start, row_end, criteria, col_values);
+            None
+        }
+    }
+}

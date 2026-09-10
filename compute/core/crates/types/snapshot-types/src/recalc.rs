@@ -1,7 +1,7 @@
 //! Recalculation types for incremental cell updates.
 //!
-//! [`CellEdit`] carries a single cell change from TS to Rust.
-//! [`RecalcResult`] carries the computed changes back from Rust to TS.
+//! [`CellEdit`] carries a single cell change into the engine.
+//! [`RecalcResult`] carries the computed changes back to the caller.
 
 use std::collections::HashMap;
 
@@ -13,7 +13,7 @@ use domain_types::domain::validation::{SchemaType, ValidationErrorCode, Validati
 use value_types::{CellValue, FiniteF64};
 
 /// Aggregate counters for a full recalc pass. Always-on, near-zero overhead.
-/// Returned as part of RecalcResult so formula-eval can display them.
+/// Returned as part of RecalcResult.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecalcMetrics {
@@ -179,10 +179,10 @@ pub struct RecalcResult {
     /// Aggregate counters for the recalc pass (always-on, near-zero overhead).
     #[serde(default)]
     pub metrics: RecalcMetrics,
-    /// Old cell values captured from CellMirror before writes (read-before-write pattern).
+    /// Old cell values captured from CellStore before writes (read-before-write pattern).
     /// Keyed by `"sheetId:cellId"` (UUID strings). Populated for both direct edits
-    /// (snapshotted before `mirror.apply_edit()`) and cascade recalc changes
-    /// (snapshotted before `mirror.set_value_mut()`).
+    /// (snapshotted before `cell_store.apply_edit()`) and cascade recalc changes
+    /// (snapshotted before `cell_store.set_value_mut()`).
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub old_values: HashMap<String, CellValue>,
     /// Local-only parse metadata promoted to top-level MutationResult.
@@ -252,7 +252,7 @@ pub struct CellChange {
     /// Populated by `enrich_metadata_flags()` before viewport patch serialization.
     #[serde(default)]
     pub extra_flags: u16,
-    /// Old cell value before this change (read-before-write from CellMirror).
+    /// Old cell value before this change (read-before-write from CellStore).
     /// Populated for cascade recalc changes. `None` for structural changes or
     /// when old value capture is not applicable.
     #[serde(default, skip_serializing_if = "Option::is_none")]

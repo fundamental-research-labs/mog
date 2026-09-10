@@ -1,4 +1,4 @@
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::{ChangeKind, FilterChange, MutationResult};
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::{dimensions, filters};
@@ -44,7 +44,7 @@ fn range_to_a1(start_row: u32, start_col: u32, end_row: u32, end_col: u32) -> St
 }
 
 fn parse_same_sheet_range(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     active_sheet_id: &SheetId,
     raw: &str,
     label: &str,
@@ -57,7 +57,7 @@ fn parse_same_sheet_range(
     })?;
     let resolved_sheet_id = match parsed.sheet_name.as_deref() {
         Some(sheet_name) => {
-            mirror
+            cell_store
                 .sheet_by_name(sheet_name)
                 .ok_or_else(|| ComputeError::InvalidInput {
                     message: format!("Invalid {label} range: sheet '{sheet_name}' not found"),
@@ -83,36 +83,36 @@ fn parse_same_sheet_range(
 
 fn ensure_cell_id_hex(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
 ) -> Result<String, ComputeError> {
-    let cell_id = super::cell_editing::ensure_cell_id_mirrored(stores, mirror, sheet_id, row, col)
+    let cell_id = super::cell_editing::ensure_cell_id(stores, cell_store, sheet_id, row, col)
         .ok_or_else(|| ComputeError::SheetNotFound {
             sheet_id: sheet_id.to_uuid_string(),
         })?;
     Ok(id_to_hex(cell_id.as_u128()).to_string())
 }
 
-fn cell_value_at(mirror: &CellMirror, sheet_id: &SheetId, row: u32, col: u32) -> CellValue {
-    mirror
+fn cell_value_at(cell_store: &CellStore, sheet_id: &SheetId, row: u32, col: u32) -> CellValue {
+    cell_store
         .get_cell_value_at(sheet_id, SheetPos::new(row, col))
         .cloned()
         .unwrap_or(CellValue::Null)
 }
 
-fn header_value_at(mirror: &CellMirror, sheet_id: &SheetId, row: u32, col: u32) -> String {
-    match cell_value_at(mirror, sheet_id, row, col) {
+fn header_value_at(cell_store: &CellStore, sheet_id: &SheetId, row: u32, col: u32) -> String {
+    match cell_value_at(cell_store, sheet_id, row, col) {
         CellValue::Text(text) => text.to_string(),
         CellValue::Null => String::new(),
         other => format!("{other}"),
     }
 }
 
-fn build_advanced_table(mirror: &CellMirror, list: &ResolvedUserRange) -> AdvancedFilterTable {
+fn build_advanced_table(cell_store: &CellStore, list: &ResolvedUserRange) -> AdvancedFilterTable {
     let headers = (list.start_col..=list.end_col)
-        .map(|col| header_value_at(mirror, &list.sheet_id, list.start_row, col))
+        .map(|col| header_value_at(cell_store, &list.sheet_id, list.start_row, col))
         .collect();
     let rows = if list.start_row >= list.end_row {
         Vec::new()
@@ -120,7 +120,7 @@ fn build_advanced_table(mirror: &CellMirror, list: &ResolvedUserRange) -> Advanc
         ((list.start_row + 1)..=list.end_row)
             .map(|row| {
                 (list.start_col..=list.end_col)
-                    .map(|col| cell_value_at(mirror, &list.sheet_id, row, col))
+                    .map(|col| cell_value_at(cell_store, &list.sheet_id, row, col))
                     .collect()
             })
             .collect()
@@ -130,28 +130,25 @@ fn build_advanced_table(mirror: &CellMirror, list: &ResolvedUserRange) -> Advanc
 
 fn is_formula_cell(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
 ) -> bool {
-    let Some(cell_id) = stores
-        .grid_indexes
-        .get(sheet_id)
-        .and_then(|grid| grid.cell_id_at(row, col))
+    let Some(cell_id) = cell_store.resolve_cell_id(sheet_id, cell_types::SheetPos::new(row, col))
     else {
         return false;
     };
-    stores.compute.get_formula(&cell_id).is_some() || mirror.get_formula(&cell_id).is_some()
+    stores.compute.get_formula(&cell_id).is_some() || cell_store.get_formula(&cell_id).is_some()
 }
 
 fn build_advanced_criteria(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     criteria: &ResolvedUserRange,
 ) -> AdvancedFilterCriteria {
     let headers = (criteria.start_col..=criteria.end_col)
-        .map(|col| header_value_at(mirror, &criteria.sheet_id, criteria.start_row, col))
+        .map(|col| header_value_at(cell_store, &criteria.sheet_id, criteria.start_row, col))
         .collect();
     let rows = if criteria.start_row >= criteria.end_row {
         Vec::new()
@@ -160,8 +157,14 @@ fn build_advanced_criteria(
             .map(|row| {
                 (criteria.start_col..=criteria.end_col)
                     .map(|col| AdvancedFilterCriteriaCell {
-                        value: cell_value_at(mirror, &criteria.sheet_id, row, col),
-                        is_formula: is_formula_cell(stores, mirror, &criteria.sheet_id, row, col),
+                        value: cell_value_at(cell_store, &criteria.sheet_id, row, col),
+                        is_formula: is_formula_cell(
+                            stores,
+                            cell_store,
+                            &criteria.sheet_id,
+                            row,
+                            col,
+                        ),
                     })
                     .collect()
             })
@@ -175,13 +178,13 @@ fn ranges_intersect(a: &ResolvedUserRange, b: (u32, u32, u32, u32)) -> bool {
 }
 
 fn resolve_filter_bounds(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     filter: &filters::FilterState,
 ) -> Option<(u32, u32, u32, u32)> {
     let start_id = CellId::from_raw(hex_to_id(&filter.header_start_cell_id)?);
     let end_id = CellId::from_raw(hex_to_id(&filter.data_end_cell_id)?);
-    let start = mirror.resolve_position(&start_id)?;
-    let end = mirror.resolve_position(&end_id)?;
+    let start = cell_store.resolve_position(&start_id)?;
+    let end = cell_store.resolve_position(&end_id)?;
     Some((
         start.row().min(end.row()),
         start.col().min(end.col()),
@@ -192,7 +195,7 @@ fn resolve_filter_bounds(
 
 fn resolve_advanced_filter_target(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     request_filter_id: Option<&str>,
     list: &ResolvedUserRange,
@@ -219,7 +222,7 @@ fn resolve_advanced_filter_target(
         .into_iter()
         .filter(|filter| filter.filter_kind == filters::FilterKind::AdvancedFilter)
     {
-        let Some(bounds) = resolve_filter_bounds(mirror, &filter) else {
+        let Some(bounds) = resolve_filter_bounds(cell_store, &filter) else {
             continue;
         };
         if bounds == requested_bounds {
@@ -238,7 +241,7 @@ fn resolve_advanced_filter_target(
 }
 
 fn copy_projection_columns(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     list: &ResolvedUserRange,
     destination: &ResolvedUserRange,
 ) -> Result<Vec<u32>, ComputeError> {
@@ -254,13 +257,13 @@ fn copy_projection_columns(
     let mut cols = Vec::new();
     for dest_col in destination.start_col..=destination.end_col {
         let requested_header = header_value_at(
-            mirror,
+            cell_store,
             &destination.sheet_id,
             destination.start_row,
             dest_col,
         );
         let Some(source_col) = (list.start_col..=list.end_col).find(|source_col| {
-            header_value_at(mirror, &list.sheet_id, list.start_row, *source_col)
+            header_value_at(cell_store, &list.sheet_id, list.start_row, *source_col)
                 .eq_ignore_ascii_case(&requested_header)
         }) else {
             return Err(ComputeError::InvalidInput {
@@ -277,11 +280,11 @@ fn copy_projection_columns(
 
 pub(in crate::storage::engine) fn apply_advanced_filter(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     request: filters::AdvancedFilterRequest,
 ) -> Result<MutationResult, ComputeError> {
-    let list = parse_same_sheet_range(mirror, sheet_id, &request.list_range, "list")?;
+    let list = parse_same_sheet_range(cell_store, sheet_id, &request.list_range, "list")?;
     if list.start_row >= list.end_row {
         return Err(ComputeError::InvalidInput {
             message:
@@ -291,12 +294,14 @@ pub(in crate::storage::engine) fn apply_advanced_filter(
     }
     let criteria = match request.criteria_range.as_deref().map(str::trim) {
         Some("") | None => None,
-        Some(raw) => Some(parse_same_sheet_range(mirror, sheet_id, raw, "criteria")?),
+        Some(raw) => Some(parse_same_sheet_range(
+            cell_store, sheet_id, raw, "criteria",
+        )?),
     };
     let criteria_model = criteria
         .as_ref()
-        .map(|criteria| build_advanced_criteria(stores, mirror, criteria));
-    let table = build_advanced_table(mirror, &list);
+        .map(|criteria| build_advanced_criteria(stores, cell_store, criteria));
+    let table = build_advanced_table(cell_store, &list);
     let evaluation = evaluate_advanced_filter(
         &table,
         criteria_model.as_ref(),
@@ -318,7 +323,7 @@ pub(in crate::storage::engine) fn apply_advanced_filter(
             }
             let existing = resolve_advanced_filter_target(
                 stores,
-                mirror,
+                cell_store,
                 sheet_id,
                 request.filter_id.as_deref(),
                 &list,
@@ -328,25 +333,25 @@ pub(in crate::storage::engine) fn apply_advanced_filter(
                 .map(|filter| filter.id.clone())
                 .unwrap_or_else(|| format!("{:032x}", stores.id_alloc.next_u128()));
             let header_start_cell_id =
-                ensure_cell_id_hex(stores, mirror, sheet_id, list.start_row, list.start_col)?;
+                ensure_cell_id_hex(stores, cell_store, sheet_id, list.start_row, list.start_col)?;
             let header_end_cell_id =
-                ensure_cell_id_hex(stores, mirror, sheet_id, list.start_row, list.end_col)?;
+                ensure_cell_id_hex(stores, cell_store, sheet_id, list.start_row, list.end_col)?;
             let data_end_cell_id =
-                ensure_cell_id_hex(stores, mirror, sheet_id, list.end_row, list.end_col)?;
+                ensure_cell_id_hex(stores, cell_store, sheet_id, list.end_row, list.end_col)?;
             let advanced_filter = filters::AdvancedFilterState {
                 criteria_range: match &criteria {
                     Some(criteria) => Some(filters::AdvancedFilterCriteriaRange {
                         sheet_id: criteria.sheet_id.to_uuid_string(),
                         start_cell_id: ensure_cell_id_hex(
                             stores,
-                            mirror,
+                            cell_store,
                             &criteria.sheet_id,
                             criteria.start_row,
                             criteria.start_col,
                         )?,
                         end_cell_id: ensure_cell_id_hex(
                             stores,
-                            mirror,
+                            cell_store,
                             &criteria.sheet_id,
                             criteria.end_row,
                             criteria.end_col,
@@ -404,18 +409,10 @@ pub(in crate::storage::engine) fn apply_advanced_filter(
                 &rows_to_release,
                 stores.grid_indexes.get(sheet_id),
             );
-            if let Some(layout) = stores.layout_indexes.get_mut(sheet_id) {
+            stores.invalidate_pixel_layout(sheet_id);
+            {
                 for &(row, hidden) in prior_transitions.iter().chain(transitions.iter()) {
-                    if hidden {
-                        layout.hide_row(row as usize);
-                    } else {
-                        layout.unhide_row(row as usize);
-                    }
-                    mirror.set_row_hidden(sheet_id, row, hidden);
-                }
-            } else {
-                for &(row, hidden) in prior_transitions.iter().chain(transitions.iter()) {
-                    mirror.set_row_hidden(sheet_id, row, hidden);
+                    cell_store.set_row_hidden(sheet_id, row, hidden);
                 }
             }
 
@@ -461,15 +458,15 @@ pub(in crate::storage::engine) fn apply_advanced_filter(
                     .ok_or_else(|| ComputeError::InvalidInput {
                         message: "copyToRange is required for copy-to Advanced Filter".to_string(),
                     })?;
-            let destination = parse_same_sheet_range(mirror, sheet_id, copy_to_raw, "copy-to")?;
-            let projection = copy_projection_columns(mirror, &list, &destination)?;
+            let destination = parse_same_sheet_range(cell_store, sheet_id, copy_to_raw, "copy-to")?;
+            let projection = copy_projection_columns(cell_store, &list, &destination)?;
             let mut edits = Vec::new();
             for (offset, source_col) in projection.iter().enumerate() {
                 edits.push((
                     *sheet_id,
                     destination.start_row,
                     destination.start_col + offset as u32,
-                    cell_value_at(mirror, sheet_id, list.start_row, *source_col),
+                    cell_value_at(cell_store, sheet_id, list.start_row, *source_col),
                     None,
                 ));
             }
@@ -481,14 +478,14 @@ pub(in crate::storage::engine) fn apply_advanced_filter(
                         *sheet_id,
                         dest_row,
                         destination.start_col + offset as u32,
-                        cell_value_at(mirror, sheet_id, source_row, *source_col),
+                        cell_value_at(cell_store, sheet_id, source_row, *source_col),
                         None,
                     ));
                 }
                 dest_row += 1;
             }
             let recalc = super::mutation_handlers::mutation_set_cells_by_position_raw(
-                stores, mirror, edits, true,
+                stores, cell_store, edits, true,
             )?;
             let copied_rows = rows_matched + 1;
             let destination_range = range_to_a1(

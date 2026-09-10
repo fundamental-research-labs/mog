@@ -97,9 +97,9 @@ impl Default for LookupIndexCache {
     }
 }
 
-// === WASM LookupIndexCache using RefCell<HashMap> ===
+// === Single-threaded LookupIndexCache using RefCell<HashMap> ===
 
-/// Single-threaded cache of lookup indexes for WASM targets.
+/// Single-threaded cache of lookup indexes (builds without `native`).
 #[cfg(not(feature = "native"))]
 pub struct LookupIndexCache {
     indexes: std::cell::RefCell<FxHashMap<(cell_types::SheetId, u32), LookupIndex>>,

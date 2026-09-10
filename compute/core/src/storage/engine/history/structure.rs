@@ -9,7 +9,7 @@ use formula_types::StructureChange;
 use rustc_hash::{FxHashMap, FxHashSet};
 use value_types::CellValue;
 
-use crate::mirror::{CellEntry, CellMirror, SheetMirror, range_view::RangeView};
+use crate::cells::{CellEntry, CellStore, SheetStore, range_view::RangeView};
 use crate::storage::{CellMetadataMap, sheet::SheetMetadata};
 
 use super::super::stores::EngineStores;
@@ -24,8 +24,10 @@ pub(crate) struct SheetExtentPatch {
 }
 
 impl SheetExtentPatch {
-    pub(super) fn capture(mirror: &CellMirror, sheet_id: SheetId) -> Self {
-        let sheet = mirror.get_sheet(&sheet_id).expect("history sheet exists");
+    pub(super) fn capture(cell_store: &CellStore, sheet_id: SheetId) -> Self {
+        let sheet = cell_store
+            .get_sheet(&sheet_id)
+            .expect("history sheet exists");
         Self {
             sheet_id,
             rows: sheet.row_axis.clone(),
@@ -34,15 +36,15 @@ impl SheetExtentPatch {
         }
     }
 
-    pub(crate) fn is_changed(&self, _: &EngineStores, mirror: &CellMirror) -> bool {
-        mirror.get_sheet(&self.sheet_id).is_none_or(|sheet| {
+    pub(crate) fn is_changed(&self, _: &EngineStores, cell_store: &CellStore) -> bool {
+        cell_store.get_sheet(&self.sheet_id).is_none_or(|sheet| {
             self.extents != extents(sheet)
                 || self.rows.store() != sheet.row_axis.store()
                 || self.cols.store() != sheet.col_axis.store()
         })
     }
 
-    fn swap_axes(&mut self, sheet: &mut SheetMirror) {
+    fn swap_axes(&mut self, sheet: &mut SheetStore) {
         std::mem::swap(&mut self.rows, &mut sheet.row_axis);
         std::mem::swap(&mut self.cols, &mut sheet.col_axis);
         let previous = std::mem::replace(&mut self.extents, extents(sheet));
@@ -59,17 +61,17 @@ impl SheetExtentPatch {
     pub(crate) fn swap(
         &mut self,
         stores: &mut EngineStores,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         effects: &mut HistoryEffects,
     ) {
         let needed = required_metadata_extent(
             stores,
-            mirror,
+            cell_store,
             self.sheet_id,
             self.rows.len(),
             self.cols.len(),
         );
-        let Some(sheet) = mirror.get_sheet_mut(&self.sheet_id) else {
+        let Some(sheet) = cell_store.get_sheet_mut(&self.sheet_id) else {
             return;
         };
         self.swap_axes(sheet);
@@ -89,7 +91,7 @@ impl SheetExtentPatch {
         if let Some(grid) = stores.grid_indexes.get_mut(&self.sheet_id) {
             grid.restore_shared_axes(sheet.row_axis.clone(), sheet.col_axis.clone());
         }
-        mirror.history_refresh_axis_ownership(self.sheet_id);
+        cell_store.history_refresh_axis_ownership(self.sheet_id);
         effects.sheets.insert(self.sheet_id);
     }
 }
@@ -110,12 +112,12 @@ fn retained_axis_tail<Id: cell_types::AxisIdentityId + std::hash::Hash>(
 /// whether implicit growth can shrink. Ordinary value-only history stays O(1).
 fn required_metadata_extent(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sid: SheetId,
     target_rows: u32,
     target_cols: u32,
 ) -> (u32, u32) {
-    let Some(sheet) = mirror.get_sheet(&sid) else {
+    let Some(sheet) = cell_store.get_sheet(&sid) else {
         return (0, 0);
     };
     if target_rows >= sheet.row_axis.len() && target_cols >= sheet.col_axis.len() {
@@ -124,13 +126,7 @@ fn required_metadata_extent(
     let mut rows = 0;
     let mut cols = 0;
     let mut observe_cell = |id: &CellId| {
-        if let Some(pos) = sheet.position_of(id).or_else(|| {
-            stores
-                .grid_indexes
-                .get(&sid)
-                .and_then(|grid| grid.cell_position(id))
-                .map(|(r, c)| SheetPos::new(r, c))
-        }) {
+        if let Some(pos) = sheet.position_of(id) {
             rows = rows.max(pos.row().saturating_add(1));
             cols = cols.max(pos.col().saturating_add(1));
         }
@@ -206,7 +202,7 @@ fn required_metadata_extent(
     (rows, cols)
 }
 
-fn extents(sheet: &SheetMirror) -> [u32; 6] {
+fn extents(sheet: &SheetStore) -> [u32; 6] {
     [
         sheet.rows,
         sheet.cols,
@@ -217,14 +213,20 @@ fn extents(sheet: &SheetMirror) -> [u32; 6] {
     ]
 }
 
-pub(crate) fn capture_sheet_extent(stores: &EngineStores, mirror: &CellMirror, sheet_id: SheetId) {
+pub(crate) fn capture_sheet_extent(
+    stores: &EngineStores,
+    cell_store: &CellStore,
+    sheet_id: SheetId,
+) {
     let capture = &stores.storage.history;
-    if !capture.is_active() || capture.owns_sheet(sheet_id) || mirror.get_sheet(&sheet_id).is_none()
+    if !capture.is_active()
+        || capture.owns_sheet(sheet_id)
+        || cell_store.get_sheet(&sheet_id).is_none()
     {
         return;
     }
     capture.record_once(HistoryKey::SheetExtent(sheet_id), || {
-        HistoryPatch::SheetExtent(SheetExtentPatch::capture(mirror, sheet_id))
+        HistoryPatch::SheetExtent(SheetExtentPatch::capture(cell_store, sheet_id))
     });
 }
 
@@ -233,9 +235,7 @@ struct RemovedCell {
     id: CellId,
     pos: SheetPos,
     entry: Option<CellEntry>,
-    mirror_identity: bool,
-    positional_owner: bool,
-    grid_identity: bool,
+    identity_formula: Option<formula_types::IdentityFormula>,
     cse: bool,
     cse_single: bool,
     formula_text: Option<String>,
@@ -267,17 +267,23 @@ impl RangePatch {
         deleted_rows: &FxHashSet<RowId>,
         deleted_cols: &FxHashSet<ColId>,
     ) -> Option<Self> {
-        let rows: Vec<_> = range
-            .row_offset_by_id
+        let rows: Vec<_> = deleted_rows
             .iter()
-            .filter(|(id, _)| deleted_rows.contains(id))
-            .map(|(&id, &offset)| (id, Some(offset)))
+            .filter_map(|id| {
+                range
+                    .row_offset_by_id
+                    .get(id)
+                    .map(|offset| (*id, Some(offset)))
+            })
             .collect();
-        let cols: Vec<_> = range
-            .col_offset_by_id
+        let cols: Vec<_> = deleted_cols
             .iter()
-            .filter(|(id, _)| deleted_cols.contains(id))
-            .map(|(&id, &offset)| (id, Some(offset)))
+            .filter_map(|id| {
+                range
+                    .col_offset_by_id
+                    .get(id)
+                    .map(|offset| (*id, Some(offset)))
+            })
             .collect();
         if rows.is_empty() && cols.is_empty() {
             return None;
@@ -314,7 +320,7 @@ impl RangePatch {
         })
     }
 
-    fn swap(&mut self, sheet: &mut SheetMirror) {
+    fn swap(&mut self, sheet: &mut SheetStore) {
         match self {
             Self::Anchor { id, previous } => {
                 if let Some(range) = sheet.range_views.get_mut(id) {
@@ -370,8 +376,7 @@ impl RangePatch {
 #[derive(Debug)]
 struct PositionPatch {
     id: CellId,
-    mirror: Option<SheetPos>,
-    grid: Option<(u32, u32)>,
+    axes: Option<(RowId, ColId)>,
 }
 
 #[derive(Debug)]
@@ -386,12 +391,12 @@ pub(crate) struct StructurePatch {
 impl StructurePatch {
     fn capture(
         stores: &EngineStores,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         sheet_id: SheetId,
         deletion: Option<(u32, u32, bool)>,
         positions: impl IntoIterator<Item = CellId>,
     ) -> Self {
-        let sheet = mirror
+        let sheet = cell_store
             .get_sheet(&sheet_id)
             .expect("structural history sheet exists");
         let in_band = |pos: SheetPos| {
@@ -400,7 +405,7 @@ impl StructurePatch {
                 offset >= at && offset < at.saturating_add(count)
             })
         };
-        let removed = capture_removed(stores, mirror, sheet_id, in_band);
+        let removed = capture_removed(stores, cell_store, sheet_id, in_band);
         let mut deleted_rows = FxHashSet::default();
         let mut deleted_cols = FxHashSet::default();
         if let Some((at, count, rows)) = deletion {
@@ -419,15 +424,11 @@ impl StructurePatch {
             .into_iter()
             .map(|id| PositionPatch {
                 id,
-                mirror: sheet.id_to_pos.get(&id).copied(),
-                grid: stores
-                    .grid_indexes
-                    .get(&sheet_id)
-                    .and_then(|grid| grid.cell_position(&id)),
+                axes: sheet.axes_by_cell.get(&id).copied(),
             })
             .collect();
         Self {
-            extent: SheetExtentPatch::capture(mirror, sheet_id),
+            extent: SheetExtentPatch::capture(cell_store, sheet_id),
             removed,
             ranges,
             positions,
@@ -435,30 +436,25 @@ impl StructurePatch {
         }
     }
 
-    pub(crate) fn is_changed(&self, stores: &EngineStores, mirror: &CellMirror) -> bool {
-        self.extent.is_changed(stores, mirror)
+    pub(crate) fn is_changed(&self, stores: &EngineStores, cell_store: &CellStore) -> bool {
+        self.extent.is_changed(stores, cell_store)
             || self.positions.iter().any(|position| {
-                mirror
+                cell_store
                     .get_sheet(&self.extent.sheet_id)
-                    .and_then(|sheet| sheet.id_to_pos.get(&position.id))
+                    .and_then(|sheet| sheet.axes_by_cell.get(&position.id))
                     .copied()
-                    != position.mirror
-                    || stores
-                        .grid_indexes
-                        .get(&self.extent.sheet_id)
-                        .and_then(|grid| grid.cell_position(&position.id))
-                        != position.grid
+                    != position.axes
             })
     }
 
     pub(crate) fn swap(
         &mut self,
         stores: &mut EngineStores,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         effects: &mut HistoryEffects,
     ) {
         let sid = self.extent.sheet_id;
-        let Some(sheet) = mirror.get_sheet(&sid) else {
+        let Some(sheet) = cell_store.get_sheet(&sid) else {
             return;
         };
         let current_rows = sheet.row_axis.clone();
@@ -471,80 +467,54 @@ impl StructurePatch {
                 self.extent.cols.position_of(sid, col)?,
             ))
         };
-        let mut current_removed = capture_removed(stores, mirror, sid, |pos| remap(pos).is_none());
+        let mut current_removed =
+            capture_removed(stores, cell_store, sid, |pos| remap(pos).is_none());
         for cell in &mut current_removed {
             if let Some(text) = effects.formula_texts.get(&cell.id) {
                 cell.formula_text = text.clone();
             }
         }
-        let mut grid_positions: FxHashMap<_, _> = stores
-            .grid_indexes
-            .get(&sid)
-            .into_iter()
-            .flat_map(|grid| grid.cells())
-            .filter_map(|(id, row, col)| {
-                remap(SheetPos::new(row, col)).map(|pos| (id, (pos.row(), pos.col())))
-            })
-            .collect();
         {
-            let sheet = mirror.get_sheet_mut(&sid).unwrap();
-            sheet.id_to_pos.retain(|id, pos| {
-                if let Some(new) = remap(*pos) {
-                    *pos = new;
-                    true
-                } else {
-                    sheet.cells.remove(id);
-                    false
-                }
-            });
-            sheet.pos_to_id = sheet
-                .pos_to_id
-                .iter()
-                .filter_map(|(pos, id)| remap(*pos).map(|pos| (pos, *id)))
-                .collect();
-            for patch in &mut self.positions {
-                let current = sheet.id_to_pos.remove(&patch.id);
-                if let Some(pos) = current {
-                    sheet.pos_to_id.remove(&pos);
-                }
-                let target = std::mem::replace(&mut patch.mirror, current);
-                if let Some(pos) = target {
-                    sheet.id_to_pos.insert(patch.id, pos);
-                    effects.cells.insert(patch.id, (sid, pos.row(), pos.col()));
-                }
-                let current = grid_positions.remove(&patch.id);
-                if let Some(pos) = std::mem::replace(&mut patch.grid, current) {
-                    grid_positions.insert(patch.id, pos);
-                }
+            let sheet = cell_store.get_sheet_mut(&sid).unwrap();
+            for cell in &current_removed {
+                sheet.remove_cell_identity(&cell.id);
+                sheet.cells.remove(&cell.id);
+                sheet.formulas.remove(&cell.id);
             }
-            // Install positional owners together after clearing every old slot.
+            let current_positions: Vec<_> = self
+                .positions
+                .iter()
+                .map(|patch| sheet.axes_by_cell.get(&patch.id).copied())
+                .collect();
             for patch in &self.positions {
-                if let Some(pos) = sheet.id_to_pos.get(&patch.id) {
-                    sheet.pos_to_id.insert(*pos, patch.id);
+                sheet.remove_cell_identity(&patch.id);
+            }
+            self.extent.swap_axes(sheet);
+            for (patch, current) in self.positions.iter_mut().zip(current_positions) {
+                if let Some((row, col)) = std::mem::replace(&mut patch.axes, current)
+                    && let (Some(row), Some(col)) =
+                        (sheet.row_index_of(&row), sheet.col_index_of(&col))
+                {
+                    sheet.register_cell(patch.id, row, col);
+                    effects.cells.insert(patch.id, (sid, row, col));
                 }
             }
             for cell in &self.removed {
                 if let Some(entry) = &cell.entry {
                     sheet.cells.insert(cell.id, entry.clone());
                 }
-                if cell.mirror_identity {
-                    sheet.id_to_pos.insert(cell.id, cell.pos);
+                if let Some(formula) = &cell.identity_formula {
+                    sheet.formulas.insert(cell.id, formula.clone());
                 }
-                if cell.positional_owner {
-                    sheet.pos_to_id.insert(cell.pos, cell.id);
-                }
-                if cell.grid_identity {
-                    grid_positions.insert(cell.id, (cell.pos.row(), cell.pos.col()));
-                }
+                sheet.register_cell(cell.id, cell.pos.row(), cell.pos.col());
             }
             for range in &mut self.ranges {
                 range.swap(sheet);
             }
-            self.extent.swap_axes(sheet);
         }
         for cell in &current_removed {
-            mirror.cse_anchors.remove(&cell.id);
-            mirror.cse_single_cell.remove(&cell.id);
+            cell_store.cse_anchors.remove(&cell.id);
+            cell_store.cse_single_cell.remove(&cell.id);
             effects.formula_texts.insert(cell.id, None);
         }
         for cell in &self.removed {
@@ -552,18 +522,18 @@ impl StructurePatch {
                 .cells
                 .insert(cell.id, (sid, cell.pos.row(), cell.pos.col()));
             if cell.cse {
-                mirror.cse_anchors.insert(cell.id);
+                cell_store.cse_anchors.insert(cell.id);
             }
             if cell.cse_single {
-                mirror.cse_single_cell.insert(cell.id);
+                cell_store.cse_single_cell.insert(cell.id);
             }
             effects
                 .formula_texts
                 .insert(cell.id, cell.formula_text.clone());
         }
         self.removed = current_removed;
-        rebuild_grid(stores, mirror, sid, Some(grid_positions));
-        mirror.history_rebuild_sheet(sid);
+        rebuild_grid(stores, cell_store, sid);
+        cell_store.history_rebuild_sheet(sid);
         effects.sheets.insert(sid);
         effects.recalc = true;
         effects.topology = true;
@@ -582,86 +552,53 @@ impl StructurePatch {
 
 fn capture_removed(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sid: SheetId,
     predicate: impl Fn(SheetPos) -> bool,
 ) -> Vec<RemovedCell> {
-    let sheet = mirror.get_sheet(&sid).expect("history sheet exists");
-    let mut ids: FxHashMap<CellId, SheetPos> = sheet
-        .id_to_pos
-        .iter()
-        .filter(|(_, pos)| predicate(**pos))
-        .map(|(id, pos)| (*id, *pos))
-        .collect();
-    if let Some(grid) = stores.grid_indexes.get(&sid) {
-        ids.extend(grid.cells().filter_map(|(id, row, col)| {
-            let pos = SheetPos::new(row, col);
-            predicate(pos).then_some((id, pos))
-        }));
-    }
+    let sheet = cell_store.get_sheet(&sid).expect("history sheet exists");
+    let ids = sheet.cells().filter_map(|(id, row, col)| {
+        let pos = SheetPos::new(row, col);
+        predicate(pos).then_some((id, pos))
+    });
     ids.into_iter()
         .map(|(id, pos)| RemovedCell {
             id,
             pos,
             entry: sheet.cells.get(&id).cloned(),
-            mirror_identity: sheet.id_to_pos.contains_key(&id),
-            positional_owner: sheet.pos_to_id.get(&pos) == Some(&id),
-            grid_identity: stores
-                .grid_indexes
-                .get(&sid)
-                .is_some_and(|grid| grid.cell_position(&id).is_some()),
-            cse: mirror.cse_anchors.contains(&id),
-            cse_single: mirror.cse_single_cell.contains(&id),
+            identity_formula: sheet.formula(&id).cloned(),
+            cse: cell_store.cse_anchors.contains(&id),
+            cse_single: cell_store.cse_single_cell.contains(&id),
             formula_text: stores.compute.get_formula(&id).map(str::to_owned),
         })
         .collect()
 }
 
-fn rebuild_grid(
-    stores: &mut EngineStores,
-    mirror: &CellMirror,
-    sid: SheetId,
-    positions: Option<FxHashMap<CellId, (u32, u32)>>,
-) {
-    let Some(sheet) = mirror.get_sheet(&sid) else {
+fn rebuild_grid(stores: &mut EngineStores, cell_store: &CellStore, sid: SheetId) {
+    let Some(sheet) = cell_store.get_sheet(&sid) else {
         stores.grid_indexes.remove(&sid);
         return;
     };
-    let positions = positions.unwrap_or_else(|| {
-        stores
-            .grid_indexes
-            .get(&sid)
-            .into_iter()
-            .flat_map(|grid| grid.cells())
-            .map(|(id, row, col)| (id, (row, col)))
-            .collect()
-    });
-    let mut grid = GridIndex::from_shared_axes(
+    stores.grid_indexes.insert(
         sid,
-        sheet.row_axis.clone(),
-        sheet.col_axis.clone(),
-        stores.grid_id_alloc.clone(),
+        GridIndex::from_shared_axes(
+            sid,
+            sheet.row_axis.clone(),
+            sheet.col_axis.clone(),
+            stores.grid_id_alloc.clone(),
+        ),
     );
-    for (id, (row, col)) in positions {
-        if row < sheet.row_axis.len() && col < sheet.col_axis.len() {
-            grid.register_cell(id, row, col);
-        }
-    }
-    for (id, pos) in &sheet.id_to_pos {
-        grid.register_cell(*id, pos.row(), pos.col());
-    }
-    stores.grid_indexes.insert(sid, grid);
 }
 
 pub(crate) fn capture_structure(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sid: SheetId,
     change: &StructureChange,
 ) {
     stores.storage.invalidate_cell_metadata_projection();
     let capture = &stores.storage.history;
-    if !capture.is_active() || capture.owns_sheet(sid) || mirror.get_sheet(&sid).is_none() {
+    if !capture.is_active() || capture.owns_sheet(sid) || cell_store.get_sheet(&sid).is_none() {
         return;
     }
     let deletion = match change {
@@ -676,7 +613,7 @@ pub(crate) fn capture_structure(
         _ => Vec::new(),
     };
     capture.record(|| {
-        let mut patch = StructurePatch::capture(stores, mirror, sid, deletion, positions);
+        let mut patch = StructurePatch::capture(stores, cell_store, sid, deletion, positions);
         patch.event =
             super::super::services::structural::build_structure_change_result(&sid, change);
         HistoryPatch::Structure(patch)
@@ -685,7 +622,7 @@ pub(crate) fn capture_structure(
 
 pub(crate) fn capture_sort(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sid: SheetId,
     permutation: &[(u32, u32)],
     reorders_axes: bool,
@@ -699,28 +636,17 @@ pub(crate) fn capture_sort(
     let positions: FxHashSet<_> = if reorders_axes {
         FxHashSet::default()
     } else {
-        mirror
-            .get_sheet(&sid)
-            .into_iter()
-            .flat_map(|sheet| sheet.id_to_pos.iter())
-            .filter(|(_, pos)| rows.contains(&pos.row()))
-            .map(|(id, _)| *id)
-            .chain(
-                stores
-                    .grid_indexes
-                    .get(&sid)
-                    .into_iter()
-                    .flat_map(|grid| grid.cells())
-                    .filter(|(_, row, _)| rows.contains(row))
-                    .map(|(id, _, _)| id),
-            )
+        cell_store
+            .cells(&sid)
+            .filter(|(_, row, _)| rows.contains(row))
+            .map(|(id, _, _)| id)
             .collect()
     };
     capture.record(|| {
-        let mut patch = StructurePatch::capture(stores, mirror, sid, None, positions);
+        let mut patch = StructurePatch::capture(stores, cell_store, sid, None, positions);
         if reorders_axes {
             patch.ranges.extend(
-                mirror
+                cell_store
                     .get_sheet(&sid)
                     .into_iter()
                     .flat_map(|sheet| sheet.range_views.values())
@@ -738,19 +664,18 @@ pub(crate) fn capture_sort(
 #[derive(Debug)]
 pub(crate) struct SheetPatch {
     sheet_id: SheetId,
-    sheet: Option<SheetMirror>,
+    sheet: Option<SheetStore>,
     metadata: Option<SheetMetadata>,
     cell_metadata: CellMetadataMap,
     cse: FxHashSet<CellId>,
     cse_single: FxHashSet<CellId>,
     formula_texts: FxHashMap<CellId, Option<String>>,
-    grid_only: FxHashMap<CellId, (u32, u32)>,
 }
 
 impl SheetPatch {
     fn capture(
         stores: &EngineStores,
-        mirror: &CellMirror,
+        cell_store: &CellStore,
         sid: SheetId,
         absent: bool,
         clone_sheet: bool,
@@ -764,20 +689,13 @@ impl SheetPatch {
                 cse: Default::default(),
                 cse_single: Default::default(),
                 formula_texts: Default::default(),
-                grid_only: Default::default(),
             };
         }
-        let belongs = |id: &CellId| {
-            mirror.sheet_for_cell(id) == Some(sid)
-                || stores
-                    .grid_indexes
-                    .get(&sid)
-                    .is_some_and(|grid| grid.cell_position(id).is_some())
-        };
+        let belongs = |id: &CellId| cell_store.sheet_for_cell(id) == Some(sid);
         Self {
             sheet_id: sid,
             sheet: if clone_sheet {
-                mirror.get_sheet(&sid).cloned()
+                cell_store.get_sheet(&sid).cloned()
             } else {
                 None
             },
@@ -789,53 +707,46 @@ impl SheetPatch {
                 .filter(|(id, _)| belongs(id))
                 .map(|(id, metadata)| (*id, metadata.clone()))
                 .collect(),
-            cse: mirror
+            cse: cell_store
                 .cse_anchors
                 .iter()
                 .filter(|id| belongs(id))
                 .copied()
                 .collect(),
-            cse_single: mirror
+            cse_single: cell_store
                 .cse_single_cell
                 .iter()
                 .filter(|id| belongs(id))
                 .copied()
                 .collect(),
-            formula_texts: mirror
+            formula_texts: cell_store
                 .get_sheet(&sid)
                 .into_iter()
                 .flat_map(|sheet| sheet.cells.keys())
                 .map(|id| (*id, stores.compute.get_formula(id).map(str::to_owned)))
                 .collect(),
-            grid_only: stores
-                .grid_indexes
-                .get(&sid)
-                .into_iter()
-                .flat_map(|grid| grid.cells())
-                .map(|(id, row, col)| (id, (row, col)))
-                .collect(),
         }
     }
 
-    pub(crate) fn is_changed(&self, _: &EngineStores, mirror: &CellMirror) -> bool {
-        self.sheet.is_some() != mirror.get_sheet(&self.sheet_id).is_some()
+    pub(crate) fn is_changed(&self, _: &EngineStores, cell_store: &CellStore) -> bool {
+        self.sheet.is_some() != cell_store.get_sheet(&self.sheet_id).is_some()
     }
 
     pub(crate) fn swap(
         &mut self,
         stores: &mut EngineStores,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         effects: &mut HistoryEffects,
     ) {
         let sid = self.sheet_id;
         effects
             .lifecycle
             .entry(sid)
-            .or_insert_with(|| mirror.get_sheet(&sid).map(|sheet| sheet.name.clone()));
-        let current = Self::capture(stores, mirror, sid, false, false);
+            .or_insert_with(|| cell_store.get_sheet(&sid).map(|sheet| sheet.name.clone()));
+        let current = Self::capture(stores, cell_store, sid, false, false);
         // Move the live sheet into history instead of retaining two value owners.
         let mut previous = self.sheet.take();
-        mirror.history_swap_sheet(sid, &mut previous);
+        cell_store.history_swap_sheet(sid, &mut previous);
         let mut current = current;
         for (cell, text) in &mut current.formula_texts {
             if let Some(source) = effects.formula_texts.get(cell) {
@@ -855,13 +766,13 @@ impl SheetPatch {
             .cell_metadata
             .extend(std::mem::take(&mut self.cell_metadata));
         for id in &current.cse {
-            mirror.cse_anchors.remove(id);
+            cell_store.cse_anchors.remove(id);
         }
         for id in &current.cse_single {
-            mirror.cse_single_cell.remove(id);
+            cell_store.cse_single_cell.remove(id);
         }
-        mirror.cse_anchors.extend(self.cse.iter().copied());
-        mirror
+        cell_store.cse_anchors.extend(self.cse.iter().copied());
+        cell_store
             .cse_single_cell
             .extend(self.cse_single.iter().copied());
         effects
@@ -872,12 +783,7 @@ impl SheetPatch {
                 .iter()
                 .map(|(id, text)| (*id, text.clone())),
         );
-        rebuild_grid(
-            stores,
-            mirror,
-            sid,
-            Some(std::mem::take(&mut self.grid_only)),
-        );
+        rebuild_grid(stores, cell_store, sid);
         effects.sheets.insert(sid);
         effects.recalc = true;
         effects.topology = true;
@@ -887,7 +793,7 @@ impl SheetPatch {
 
 pub(crate) fn capture_sheet(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sid: SheetId,
     absent: bool,
 ) {
@@ -896,7 +802,8 @@ pub(crate) fn capture_sheet(
     if !capture.is_active() || capture.owns_sheet(sid) {
         return;
     }
-    capture.record(|| HistoryPatch::Sheet(SheetPatch::capture(stores, mirror, sid, absent, true)));
+    capture
+        .record(|| HistoryPatch::Sheet(SheetPatch::capture(stores, cell_store, sid, absent, true)));
     capture.mark_sheet_owned(sid);
 }
 
@@ -916,7 +823,6 @@ pub(crate) fn capture_new_sheet(storage: &crate::storage::WorkbookStorage, sid: 
             cse: Default::default(),
             cse_single: Default::default(),
             formula_texts: Default::default(),
-            grid_only: Default::default(),
         })
     });
     capture.mark_sheet_owned(sid);
@@ -926,18 +832,18 @@ pub(crate) fn capture_new_sheet(storage: &crate::storage::WorkbookStorage, sid: 
 /// patch in a grouped action has run and layout/merge indexes have been rebuilt.
 pub(crate) fn emit_lifecycle(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     effects: &mut HistoryEffects,
 ) {
     use crate::snapshot::{ChangeKind, SheetChange, SheetChangeField, SheetLifecycleRuntimeHint};
     let mut changes: Vec<_> = std::mem::take(&mut effects.lifecycle).into_iter().collect();
     changes.sort_unstable_by_key(|(sid, _)| sid.as_u128());
     for (sid, previous_name) in changes {
-        match (previous_name, mirror.get_sheet(&sid)) {
+        match (previous_name, cell_store.get_sheet(&sid)) {
             (None, Some(_)) => {
                 super::super::services::mutation_handlers::build_sheet_hydration_changes(
                     stores,
-                    mirror,
+                    cell_store,
                     &sid,
                     None,
                     &mut effects.result,

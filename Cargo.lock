@@ -655,7 +655,6 @@ dependencies = [
  "compute-wire",
  "criterion",
  "domain-types",
- "formula-types",
  "ooxml-types",
  "proptest",
  "serde",

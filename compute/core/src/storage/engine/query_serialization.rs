@@ -1,6 +1,6 @@
 //! JSON serialization helpers for query bridge payloads.
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use cell_types::SheetId;
 use value_types::CellValue;
 
@@ -26,7 +26,7 @@ pub(in crate::storage::engine) fn cell_value_to_json(value: &CellValue) -> serde
 }
 
 /// Build the `region` JSON value for a cell at `(sheet, row, col)` by
-/// composing `mirror.cell_render_at(...)`. Returns `null` when the cell is
+/// composing `cell_store.cell_render_at(...)`. Returns `null` when the cell is
 /// not part of any region (CSE, dynamic-array spill, Data Table; future
 /// pivot / table column / etc.).
 ///
@@ -36,20 +36,20 @@ pub(in crate::storage::engine) fn cell_value_to_json(value: &CellValue) -> serde
 /// `viewport::functions::get_active_cell` so the wire shape is identical
 /// regardless of which read entry consumers use.
 pub(in crate::storage::engine) fn region_json(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
 ) -> serde_json::Value {
     let region_meta: Option<crate::storage::properties::RegionMeta> =
-        match mirror.cell_render_at(sheet_id, row, col) {
+        match cell_store.cell_render_at(sheet_id, row, col) {
             crate::projection::CellRender::Projection(view) => {
                 let kind = if view.is_cse {
                     crate::storage::properties::RegionKind::CseArray
                 } else {
                     crate::storage::properties::RegionKind::ArraySpill
                 };
-                let bounds = mirror
+                let bounds = cell_store
                     .projection_registry
                     .get(&view.anchor_id)
                     .map(|p| crate::storage::properties::RegionBounds {

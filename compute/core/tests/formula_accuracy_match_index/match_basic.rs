@@ -29,10 +29,10 @@ fn test_match_exact_basic() {
         formula_cell(1, 2, 2, "MATCH(\"Missing\",A1:A4,0)"),
     ];
     let snapshot = workbook_snapshot(vec![sheet_snapshot(SHEET1_UUID, "Sheet1", 4, 3, cells)]);
-    let (mirror, _core, result) = init_core(snapshot);
+    let (cell_store, _core, result) = init_core(snapshot);
 
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -41,7 +41,7 @@ fn test_match_exact_basic() {
         "MATCH('Beta') should return 2",
     );
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         1,
@@ -50,7 +50,7 @@ fn test_match_exact_basic() {
         "MATCH('Gamma') should return 3",
     );
     assert_error_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         2,
@@ -74,10 +74,10 @@ fn test_match_error_in_lookup_value() {
         formula_cell(1, 0, 2, "MATCH(A1,B1:B3,0)"),
     ];
     let snapshot = workbook_snapshot(vec![sheet_snapshot(SHEET1_UUID, "Sheet1", 3, 3, cells)]);
-    let (mirror, _core, result) = init_core(snapshot);
+    let (cell_store, _core, result) = init_core(snapshot);
 
     assert_error_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -86,7 +86,7 @@ fn test_match_error_in_lookup_value() {
         "A0 should be #DIV/0!",
     );
     assert_error_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -106,10 +106,10 @@ fn test_match_not_found_returns_na() {
         formula_cell(1, 0, 1, "MATCH(99,A1:A3,0)"),
     ];
     let snapshot = workbook_snapshot(vec![sheet_snapshot(SHEET1_UUID, "Sheet1", 3, 2, cells)]);
-    let (mirror, _core, result) = init_core(snapshot);
+    let (cell_store, _core, result) = init_core(snapshot);
 
     assert_error_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -136,10 +136,10 @@ fn test_match_with_mixed_type_array() {
         formula_cell(1, 0, 1, "MATCH(300,A1:A4,0)"),
     ];
     let snapshot = workbook_snapshot(vec![sheet_snapshot(SHEET1_UUID, "Sheet1", 4, 2, cells)]);
-    let (mirror, _core, result) = init_core(snapshot);
+    let (cell_store, _core, result) = init_core(snapshot);
 
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -172,11 +172,11 @@ fn test_match_with_large_range() {
     cells.push(formula_cell(1, 0, 1, "MATCH(500,A1:A100,0)"));
 
     let snapshot = workbook_snapshot(vec![sheet_snapshot(SHEET1_UUID, "Sheet1", 100, 2, cells)]);
-    let (mirror, _core, result) = init_core(snapshot);
+    let (cell_store, _core, result) = init_core(snapshot);
 
     // 500 is at row 40 (0-indexed), which is position 41 in the range A1:A100.
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -207,10 +207,10 @@ fn test_match_approx_endpoint_bounds() {
         formula_cell(1, 2, 4, "MATCH(250,C1:C3,-1)"),
     ];
     let snapshot = workbook_snapshot(vec![sheet_snapshot(SHEET1_UUID, "Sheet1", 4, 5, cells)]);
-    let (mirror, _core, result) = init_core(snapshot);
+    let (cell_store, _core, result) = init_core(snapshot);
 
     assert_error_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -219,7 +219,7 @@ fn test_match_approx_endpoint_bounds() {
         "MATCH type -1 above the first value should return #N/A",
     );
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         1,
@@ -228,7 +228,7 @@ fn test_match_approx_endpoint_bounds() {
         "MATCH type 1 interior match should return position 2",
     );
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         2,
@@ -239,7 +239,7 @@ fn test_match_approx_endpoint_bounds() {
 }
 
 /// The endpoint must be read after the indexed lookup has observed the
-/// refreshed dependency state. A pre-index raw mirror read can see A1=100 even
+/// refreshed dependency state. A pre-index raw cell-store read can see A1=100 even
 /// after its formula has recalculated to 500.
 #[test]
 fn test_match_endpoint_uses_refreshed_formula_first_value() {
@@ -253,10 +253,10 @@ fn test_match_endpoint_uses_refreshed_formula_first_value() {
         formula_cell(1, 0, 3, "MATCH(300,A1:A3,-1)"),
     ];
     let snapshot = workbook_snapshot(vec![sheet_snapshot(SHEET1_UUID, "Sheet1", 3, 4, cells)]);
-    let (mut mirror, mut core, initial) = init_core(snapshot);
+    let (mut cell_store, mut core, initial) = init_core(snapshot);
 
     assert_error_value(
-        &mirror,
+        &cell_store,
         &initial,
         SHEET1_UUID,
         0,
@@ -268,11 +268,11 @@ fn test_match_endpoint_uses_refreshed_formula_first_value() {
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET1_UUID).unwrap();
     let first_value_id = cell_types::CellId::from_uuid_str(&cell_uuid(1, 0, 1)).unwrap();
     let refreshed = core
-        .set_cell(&mut mirror, &sheet_id, first_value_id, 0, 1, "500")
+        .set_cell(&mut cell_store, &sheet_id, first_value_id, 0, 1, "500")
         .expect("set_cell failed");
 
     assert_number_value(
-        &mirror,
+        &cell_store,
         &refreshed,
         SHEET1_UUID,
         0,
@@ -281,7 +281,7 @@ fn test_match_endpoint_uses_refreshed_formula_first_value() {
         "formula-backed first MATCH candidate should refresh",
     );
     assert_number_value(
-        &mirror,
+        &cell_store,
         &refreshed,
         SHEET1_UUID,
         0,

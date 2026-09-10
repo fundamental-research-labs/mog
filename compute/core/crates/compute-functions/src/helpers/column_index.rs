@@ -137,7 +137,7 @@ pub fn clear() {
 /// Get or build a ColumnIndex from a borrowed column slice, keyed by logical identity.
 ///
 /// Used by the borrowed multi-criteria path which has (SheetId, col, row bounds).
-/// Since the mirror data is stable within a recalc, the logical key is always valid.
+/// Since the cell store data is stable within a recalc, the logical key is always valid.
 pub fn get_or_build_for_slice(
     sheet: &SheetId,
     col: u32,

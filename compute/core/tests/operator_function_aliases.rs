@@ -4,7 +4,7 @@
 mod stress_common;
 use stress_common::*;
 
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use value_types::{CellError, CellValue};
 
@@ -12,8 +12,8 @@ fn text(s: &str) -> CellValue {
     CellValue::Text(s.into())
 }
 
-fn value_at(mirror: &CellMirror, row: u32, col: u32) -> CellValue {
-    mirror
+fn value_at(cell_store: &CellStore, row: u32, col: u32) -> CellValue {
+    cell_store
         .get_cell_value_at(&sid(0), cell_types::SheetPos::new(row, col))
         .cloned()
         .unwrap_or(CellValue::Null)
@@ -65,14 +65,17 @@ fn value_aliases_match_operator_formulas() {
     }
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
-    core.init_from_snapshot(&mut mirror, build_snapshot(vec![("Sheet1", 40, 8, cells)]))
-        .unwrap();
+    let mut cell_store = CellStore::default();
+    core.init_from_snapshot(
+        &mut cell_store,
+        build_snapshot(vec![("Sheet1", 40, 8, cells)]),
+    )
+    .unwrap();
 
     for (idx, (_, _, expected)) in formulas.iter().enumerate() {
         let row = idx as u32;
-        let alias_value = value_at(&mirror, row, 2);
-        let operator_value = value_at(&mirror, row, 3);
+        let alias_value = value_at(&cell_store, row, 2);
+        let operator_value = value_at(&cell_store, row, 3);
         assert_value_eq(&alias_value, &operator_value);
         assert_value_eq(&alias_value, expected);
     }
@@ -81,7 +84,7 @@ fn value_aliases_match_operator_formulas() {
 #[test]
 fn aliases_inherit_coercion_errors_and_case_insensitive_dispatch() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         20,
@@ -101,15 +104,18 @@ fn aliases_inherit_coercion_errors_and_case_insensitive_dispatch() {
             (4, 1, CellValue::Null, Some("A1>B1")),
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     for row in 1..=4 {
-        assert_value_eq(&value_at(&mirror, row, 0), &value_at(&mirror, row, 1));
+        assert_value_eq(
+            &value_at(&cell_store, row, 0),
+            &value_at(&cell_store, row, 1),
+        );
     }
-    assert_value_eq(&value_at(&mirror, 1, 0), &CellValue::number(6.0));
-    assert_value_eq(&value_at(&mirror, 2, 0), &text("x"));
-    assert_value_eq(&value_at(&mirror, 3, 0), &CellValue::number(0.0));
-    assert_value_eq(&value_at(&mirror, 4, 0), &CellValue::Boolean(false));
+    assert_value_eq(&value_at(&cell_store, 1, 0), &CellValue::number(6.0));
+    assert_value_eq(&value_at(&cell_store, 2, 0), &text("x"));
+    assert_value_eq(&value_at(&cell_store, 3, 0), &CellValue::number(0.0));
+    assert_value_eq(&value_at(&cell_store, 4, 0), &CellValue::Boolean(false));
 }
 
 #[test]
@@ -132,19 +138,22 @@ fn wrong_arity_is_value_error_before_argument_evaluation() {
         .collect();
 
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
-    core.init_from_snapshot(&mut mirror, build_snapshot(vec![("Sheet1", 20, 4, cells)]))
-        .unwrap();
+    let mut cell_store = CellStore::default();
+    core.init_from_snapshot(
+        &mut cell_store,
+        build_snapshot(vec![("Sheet1", 20, 4, cells)]),
+    )
+    .unwrap();
 
     for idx in 0..cases.len() as u32 {
-        assert_mirror_error(&mirror, 0, idx, 0, CellError::Value);
+        assert_store_error(&cell_store, 0, idx, 0, CellError::Value);
     }
 }
 
 #[test]
 fn array_returning_aliases_spill_like_operator_formulas() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         20,
@@ -165,25 +174,34 @@ fn array_returning_aliases_spill_like_operator_formulas() {
             (0, 8, CellValue::Null, Some("UMINUS(A1:A3)")),
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     for row in 0..3 {
-        assert_value_eq(&value_at(&mirror, row, 2), &value_at(&mirror, row, 3));
-        assert_value_eq(&value_at(&mirror, row, 4), &value_at(&mirror, row, 5));
-        assert_value_eq(&value_at(&mirror, row, 6), &value_at(&mirror, row, 7));
+        assert_value_eq(
+            &value_at(&cell_store, row, 2),
+            &value_at(&cell_store, row, 3),
+        );
+        assert_value_eq(
+            &value_at(&cell_store, row, 4),
+            &value_at(&cell_store, row, 5),
+        );
+        assert_value_eq(
+            &value_at(&cell_store, row, 6),
+            &value_at(&cell_store, row, 7),
+        );
     }
-    assert_pos_number(&mirror, 0, 0, 2, 2.0);
-    assert_pos_number(&mirror, 0, 1, 2, 3.0);
-    assert_pos_number(&mirror, 0, 2, 2, 4.0);
-    assert_pos_number(&mirror, 0, 0, 8, -1.0);
-    assert_pos_number(&mirror, 0, 1, 8, -2.0);
-    assert_pos_number(&mirror, 0, 2, 8, -3.0);
+    assert_pos_number(&cell_store, 0, 0, 2, 2.0);
+    assert_pos_number(&cell_store, 0, 1, 2, 3.0);
+    assert_pos_number(&cell_store, 0, 2, 2, 4.0);
+    assert_pos_number(&cell_store, 0, 0, 8, -1.0);
+    assert_pos_number(&cell_store, 0, 1, 8, -2.0);
+    assert_pos_number(&cell_store, 0, 2, 8, -3.0);
 }
 
 #[test]
 fn pow_alias_uses_caret_operator_semantics() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         20,
@@ -199,21 +217,24 @@ fn pow_alias_uses_caret_operator_semantics() {
             (3, 1, CellValue::Null, Some("0^-1")),
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
     for row in 0..=3 {
-        assert_value_eq(&value_at(&mirror, row, 0), &value_at(&mirror, row, 1));
+        assert_value_eq(
+            &value_at(&cell_store, row, 0),
+            &value_at(&cell_store, row, 1),
+        );
     }
-    assert_pos_number(&mirror, 0, 0, 0, -2.0);
-    assert_mirror_error(&mirror, 0, 1, 0, CellError::Num);
-    assert_mirror_error(&mirror, 0, 2, 0, CellError::Num);
-    assert_mirror_error(&mirror, 0, 3, 0, CellError::Div0);
+    assert_pos_number(&cell_store, 0, 0, 0, -2.0);
+    assert_store_error(&cell_store, 0, 1, 0, CellError::Num);
+    assert_store_error(&cell_store, 0, 2, 0, CellError::Num);
+    assert_store_error(&cell_store, 0, 3, 0, CellError::Div0);
 }
 
 #[test]
 fn concat_keeps_existing_variadic_text_function_contract() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::default();
+    let mut cell_store = CellStore::default();
     let snapshot = build_snapshot(vec![(
         "Sheet1",
         20,
@@ -232,11 +253,11 @@ fn concat_keeps_existing_variadic_text_function_contract() {
             (6, 1, CellValue::Null, Some("A2&B2")),
         ],
     )]);
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
 
-    assert_value_eq(&value_at(&mirror, 2, 0), &value_at(&mirror, 2, 1));
-    assert_value_eq(&value_at(&mirror, 6, 0), &value_at(&mirror, 6, 1));
-    assert_mirror_text(&mirror, 0, 3, 0, "a");
-    assert_mirror_text(&mirror, 0, 4, 0, "abc");
-    assert_mirror_text(&mirror, 0, 5, 0, "ab");
+    assert_value_eq(&value_at(&cell_store, 2, 0), &value_at(&cell_store, 2, 1));
+    assert_value_eq(&value_at(&cell_store, 6, 0), &value_at(&cell_store, 6, 1));
+    assert_store_text(&cell_store, 0, 3, 0, "a");
+    assert_store_text(&cell_store, 0, 4, 0, "abc");
+    assert_store_text(&cell_store, 0, 5, 0, "ab");
 }

@@ -189,18 +189,18 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
     }
 
     allocator.stamp_snapshot_counters(&mut workbook_snap);
-    // Build CellMirror + viewport-only compute init.
+    // Build CellStore + viewport-only compute init.
     // Skips formula extraction entirely (deferred to ensure_graph_built).
     {
         let mut profile =
-            crate::xlsx_profile::PhaseTimer::new("import_deferred", "mirror_compute_rebuild");
+            crate::xlsx_profile::PhaseTimer::new("import_deferred", "store_compute_rebuild");
         engine.stores.compute = ComputeCore::new();
         engine
             .stores
             .compute
-            .init_from_snapshot_viewport_only(&mut engine.mirror, workbook_snap.clone())?;
+            .init_from_snapshot_viewport_only(&mut engine.cell_store, workbook_snap.clone())?;
         engine
-            .mirror
+            .cell_store
             .install_imported_array_caches(&engine.stores.storage.imported_array_caches);
         profile.counter("sheets", workbook_snap.sheets.len() as u64);
         profile.counter(
@@ -220,6 +220,7 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
         workbook_snap.next_axis_run_counter().saturating_sub(1),
     ));
     engine.stores.grid_id_alloc = std::sync::Arc::clone(&shared_alloc);
+    engine.cell_store.set_id_alloc(shared_alloc.clone());
     engine.stores.compute.set_id_alloc(shared_alloc);
     engine.stores.id_alloc =
         std::sync::Arc::new(crate::storage::new_runtime_metadata_id_allocator());
@@ -242,15 +243,9 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
         &workbook_snap,
         critical_sheet_range.clone(),
     )?;
-    engine.stores.layout_indexes = build_layout_indexes_from_parse_output_range(
-        &parse_output,
-        &workbook_snap,
-        &engine.stores.grid_indexes,
-        critical_sheet_range,
-        engine.stores.layout_metrics,
-    )?;
+    engine.stores.pixel_layouts = Default::default();
 
-    engine.mirror.install_native_axes(
+    engine.cell_store.install_native_axes(
         engine
             .stores
             .grid_indexes
@@ -266,27 +261,27 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
         &critical_range_styles_per_sheet,
     );
     install_imported_formats(
-        &mut engine.mirror,
+        &mut engine.cell_store,
         &engine.stores.storage.metadata.style_palette,
         &imported_formats,
     );
-    engine.mirror.finalize_range_hydration();
+    engine.cell_store.finalize_range_hydration();
 
     // Filter hydration lowers calendar criteria to workbook serials, so install
     // the epoch before normalizing the critical sheet's imported filters.
-    engine.mirror.date1904 =
+    engine.cell_store.date1904 =
         crate::storage::workbook::settings::get_settings(&engine.stores.storage.metadata).date1904;
 
     crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
         &mut engine.stores,
-        &mut engine.mirror,
+        &mut engine.cell_store,
         Some(&mut engine.import_report),
         domain_types::ImportPhase::CriticalSheet,
     );
 
     crate::storage::engine::cell_metadata::refresh(
         &engine.stores.storage,
-        &mut engine.mirror,
+        &mut engine.cell_store,
         engine.stores.layout_metrics,
     );
     engine.settings = derive_settings(&engine.stores.storage);
@@ -342,7 +337,7 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
     ));
     let mut allocator = DefaultIdAllocator::with_shared(shared_alloc.clone());
     for sheet_id in &sheet_ids {
-        if let Some(sheet) = engine.mirror.get_sheet(sheet_id) {
+        if let Some(sheet) = engine.cell_store.get_sheet(sheet_id) {
             allocator.reserve_axis(sheet.row_axis.store());
             allocator.reserve_axis(sheet.col_axis.store());
         }
@@ -354,7 +349,7 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
     for (index, (&sheet_id, sheet_data)) in sheet_ids.iter().zip(&output.sheets).enumerate() {
         let sheet =
             engine
-                .mirror
+                .cell_store
                 .get_sheet(&sheet_id)
                 .ok_or_else(|| ComputeError::Deserialize {
                     message: "missing native deferred sheet".into(),
@@ -429,17 +424,17 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
         &ranged_positions,
         &range_style_positions,
         data.loaded_sheet_index,
-        engine.mirror.all_tables(),
+        engine.cell_store.all_tables(),
         &mut allocator,
     )?;
     imported_ids.install_snapshot_identities(&mut snapshot);
 
     // Staging shares active range payloads via Arc. Only newly parsed sheets
     // decode payloads; after commit the old native state is dropped.
-    let mut mirror = engine.mirror.clone();
+    let mut cell_store = engine.cell_store.clone();
     let mut formula_cells = Vec::new();
     if let Some(&active) = sheet_ids.get(data.loaded_sheet_index) {
-        if let Some(sheet) = mirror.get_sheet(&active) {
+        if let Some(sheet) = cell_store.get_sheet(&active) {
             formula_cells.extend(sheet.cells_iter().filter_map(|(&id, _)| {
                 engine
                     .stores
@@ -461,25 +456,24 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
                 cell.formula.clone()?,
             ))
         }));
-        mirror.remove_sheet(&sheet_id);
-        mirror.add_sheet(sheet_snapshot.clone())?;
+        cell_store.remove_sheet(&sheet_id);
+        cell_store.add_sheet(sheet_snapshot.clone())?;
     }
     for table in imported_ids.canonical_tables {
-        mirror.set_table(table);
+        cell_store.set_table(table);
     }
     for pivot in &snapshot.pivot_tables {
-        mirror.upsert_pivot_table_def(pivot.clone());
+        cell_store.upsert_pivot_table_def(pivot.clone());
     }
     for region in &snapshot.data_table_regions {
-        mirror.upsert_data_table_region(region.clone());
+        cell_store.upsert_data_table_region(region.clone());
     }
-    mirror.install_imported_array_caches(&storage.imported_array_caches);
+    cell_store.install_imported_array_caches(&storage.imported_array_caches);
 
-    let mut grid_indexes = build_grid_indexes(&mirror, &snapshot, shared_alloc.clone())?;
-    let merge_indexes = build_merge_indexes(&storage, &snapshot, &grid_indexes)?;
+    let mut grid_indexes = build_grid_indexes(&cell_store, &snapshot, shared_alloc.clone())?;
+    let merge_indexes = build_merge_indexes(&storage, &snapshot, &cell_store)?;
     let layout_metrics = engine.stores.layout_metrics;
-    let layout_indexes = build_layout_indexes(&storage, &snapshot, &grid_indexes, layout_metrics)?;
-    mirror.install_native_axes(
+    cell_store.install_native_axes(
         grid_indexes
             .iter()
             .map(|(id, grid)| (*id, grid.row_axis(), grid.col_axis())),
@@ -489,33 +483,31 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
         .filter(|(id, _)| Some(id) != sheet_ids.get(data.loaded_sheet_index))
         .collect::<Vec<_>>();
     install_imported_formats(
-        &mut mirror,
+        &mut cell_store,
         &storage.metadata.style_palette,
         &imported_formats,
     );
-    mirror.finalize_range_hydration();
+    cell_store.finalize_range_hydration();
     let settings = derive_settings(&storage);
     let calculation = output.calculation.clone();
+    cell_store.set_id_alloc(shared_alloc.clone());
     let mut compute = ComputeCore::new();
-    crate::storage::engine::cell_metadata::refresh(&storage, &mut mirror, layout_metrics);
-    mirror.date1904 = crate::storage::workbook::settings::get_settings(&storage.metadata).date1904;
+    crate::storage::engine::cell_metadata::refresh(&storage, &mut cell_store, layout_metrics);
+    cell_store.date1904 =
+        crate::storage::workbook::settings::get_settings(&storage.metadata).date1904;
     compute.init_native_formula_descriptors(
-        &mut mirror,
+        &mut cell_store,
         &sheet_ids,
         &calculation.clone().into(),
         formula_cells,
         shared_alloc.clone(),
     );
     #[cfg(not(target_arch = "wasm32"))]
-    compute.ensure_graph_built(&mut mirror)?;
-    // Formula resolution can register value-free reference identities.
+    compute.ensure_graph_built(&mut cell_store)?;
+    // Formula resolution may extend the store's shared axes.
     for (sheet_id, grid) in &mut grid_indexes {
-        if let Some(sheet) = mirror.get_sheet(sheet_id) {
-            for (&id, &pos) in &sheet.id_to_pos {
-                if grid.cell_id_at(pos.row(), pos.col()).is_none() {
-                    grid.register_cell(id, pos.row(), pos.col());
-                }
-            }
+        if let Some(sheet) = cell_store.get_sheet(sheet_id) {
+            grid.restore_shared_axes(sheet.row_axis.clone(), sheet.col_axis.clone());
         }
     }
     let mut stores = EngineStores {
@@ -524,22 +516,22 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
         grid_id_alloc: shared_alloc,
         id_alloc: Arc::new(crate::storage::new_runtime_metadata_id_allocator()),
         grid_indexes,
-        layout_indexes,
+        pixel_layouts: Default::default(),
         merge_indexes,
         compute,
         cf_cache: FxHashMap::default(),
-        font_db: compute_text_measurement::FontDb::with_defaults(),
+        font_db: Default::default(),
         measurement_cache: compute_text_measurement::MeasurementCache::new(),
     };
     crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
         &mut stores,
-        &mut mirror,
+        &mut cell_store,
         Some(&mut import_report),
         domain_types::ImportPhase::FullHydration,
     );
     Ok(Some(DeferredHydrationCompletion {
         stores,
-        mirror,
+        cell_store,
         settings,
         calculation,
         import_report,
@@ -598,7 +590,7 @@ pub(in crate::storage::engine) fn commit_deferred_hydration(
 ) {
     engine.stores = completion.stores;
 
-    engine.mirror = completion.mirror;
+    engine.cell_store = completion.cell_store;
 
     engine.settings = completion.settings;
     engine.import_report = completion.import_report;

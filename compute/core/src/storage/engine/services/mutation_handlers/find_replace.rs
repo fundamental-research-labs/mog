@@ -1,8 +1,8 @@
 use cell_types::SheetId;
 use value_types::ComputeError;
 
+use crate::cells::CellStore;
 use crate::engine_types::queries::FindInRangeOptions;
-use crate::mirror::CellMirror;
 use crate::snapshot::RecalcResult;
 use crate::storage::engine::mutation::CellInput;
 use crate::storage::engine::stores::EngineStores;
@@ -21,7 +21,7 @@ use super::cell_mutations::mutation_set_cells_by_position;
 #[allow(clippy::too_many_arguments)]
 pub(in crate::storage::engine) fn replace_all_in_range(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -53,16 +53,16 @@ pub(in crate::storage::engine) fn replace_all_in_range(
     };
 
     let mut edits: Vec<(SheetId, u32, u32, CellInput)> = Vec::new();
-    if mirror.get_sheet(sheet_id).is_none() {
+    if cell_store.get_sheet(sheet_id).is_none() {
         return Ok((0, RecalcResult::empty()));
     }
     for row in start_row..=end_row {
         for col in start_col..=end_col {
             let pos = cell_types::SheetPos::new(row, col);
-            let cell_id = mirror.resolve_cell_id(sheet_id, pos);
+            let cell_id = cell_store.resolve_cell_id(sheet_id, pos);
             if crate::storage::engine::formula_read::formula_text_at(
                 stores,
-                mirror,
+                cell_store,
                 sheet_id,
                 row,
                 col,
@@ -72,7 +72,7 @@ pub(in crate::storage::engine) fn replace_all_in_range(
             {
                 continue;
             }
-            let Some(value) = mirror
+            let Some(value) = cell_store
                 .get_cell_value_at(sheet_id, pos)
                 .filter(|v| !v.is_null())
             else {
@@ -93,7 +93,7 @@ pub(in crate::storage::engine) fn replace_all_in_range(
     let recalc = if edits.is_empty() {
         RecalcResult::empty()
     } else {
-        mutation_set_cells_by_position(stores, mirror, edits, false)?
+        mutation_set_cells_by_position(stores, cell_store, edits, false)?
     };
 
     Ok((count, recalc))

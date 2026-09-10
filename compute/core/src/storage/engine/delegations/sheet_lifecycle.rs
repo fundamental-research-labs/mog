@@ -6,7 +6,6 @@ use crate::storage::engine::ComputeEngine;
 use crate::storage::engine::mutation;
 use crate::storage::sheet::{order, properties, settings, view, visibility};
 use cell_types::SheetId;
-use compute_wire::mutation::serialize_multi_viewport_patches;
 use value_types::ComputeError;
 
 pub(in crate::storage::engine) fn create_sheet(
@@ -58,24 +57,21 @@ pub(in crate::storage::engine) fn create_default_sheet_with_default_col_width(
 pub(in crate::storage::engine) fn delete_sheet(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     match engine.apply_mutation(mutation::EngineMutation::DeleteSheet {
         sheet_id: *sheet_id,
     })? {
         mutation::MutationOutput::Recalc(result) | mutation::MutationOutput::Plain(result) => {
-            Ok((serialize_multi_viewport_patches(&[]), result))
+            Ok(result)
         }
-        _ => Ok((
-            serialize_multi_viewport_patches(&[]),
-            MutationResult::empty(),
-        )),
+        _ => Ok(MutationResult::empty()),
     }
 }
 
 pub(in crate::storage::engine) fn reorder_sheets(
     engine: &mut ComputeEngine,
     new_order: Vec<String>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let ids: Vec<SheetId> = new_order
         .iter()
         .map(|s| {
@@ -103,7 +99,7 @@ pub(in crate::storage::engine) fn reorder_sheets(
         color: None,
         old_color: None,
     });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn copy_sheet(
@@ -127,7 +123,7 @@ pub(in crate::storage::engine) fn set_frozen_panes(
     sheet_id: &SheetId,
     rows: u32,
     cols: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let old = view::get_frozen_panes(&engine.stores.storage, sheet_id);
 
     view::set_frozen_panes(&mut engine.stores.storage, sheet_id, rows, cols);
@@ -150,7 +146,7 @@ pub(in crate::storage::engine) fn set_frozen_panes(
         color: None,
         old_color: None,
     });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn set_view_option(
@@ -158,7 +154,7 @@ pub(in crate::storage::engine) fn set_view_option(
     sheet_id: &SheetId,
     key: &str,
     value: bool,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     view::set_view_option(&mut engine.stores.storage, sheet_id, key, value);
     let settings = settings::get_sheet_settings_with_layout_metrics(
         &engine.stores.storage,
@@ -172,7 +168,7 @@ pub(in crate::storage::engine) fn set_view_option(
         changed_key: key.to_string(),
         settings: serde_json::to_value(&settings).expect("SheetSettings must serialize"),
     });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn set_scroll_position(
@@ -180,7 +176,7 @@ pub(in crate::storage::engine) fn set_scroll_position(
     sheet_id: &SheetId,
     top_row: u32,
     left_col: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     view::set_scroll_position(&mut engine.stores.storage, sheet_id, top_row, left_col);
     let mut result = MutationResult::empty();
     result.scroll_position_changes.push(ScrollPositionChange {
@@ -188,14 +184,14 @@ pub(in crate::storage::engine) fn set_scroll_position(
         top_row,
         left_col,
     });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn move_sheet(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     new_index: u32,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let old_index = {
         let order = engine.stores.storage.sheet_order();
         order
@@ -225,14 +221,14 @@ pub(in crate::storage::engine) fn move_sheet(
         color: None,
         old_color: None,
     });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn set_tab_color(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     color: Option<String>,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     let old_color =
         properties::get_sheet_meta(&engine.stores.storage, sheet_id).and_then(|m| m.tab_color);
     visibility::set_tab_color(&mut engine.stores.storage, sheet_id, color.as_deref());
@@ -254,14 +250,14 @@ pub(in crate::storage::engine) fn set_tab_color(
         color: color.map(|c| c.to_string()),
         old_color,
     });
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn set_sheet_hidden(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     hidden: bool,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     visibility::set_sheet_hidden(&mut engine.stores.storage, sheet_id, hidden);
 
     let mut result = MutationResult::empty();
@@ -289,17 +285,17 @@ pub(in crate::storage::engine) fn set_sheet_hidden(
     };
     result.sheet_lifecycle_runtime_hint = Some(hint);
 
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn set_sheet_enable_calculation(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     enabled: bool,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     visibility::set_sheet_enable_calculation(&mut engine.stores.storage, sheet_id, enabled);
 
-    engine.mirror.set_enable_calculation(sheet_id, enabled);
+    engine.cell_store.set_enable_calculation(sheet_id, enabled);
 
     let mut result = MutationResult::empty();
     result.sheet_changes.push(SheetChange {
@@ -320,14 +316,14 @@ pub(in crate::storage::engine) fn set_sheet_enable_calculation(
         old_color: None,
     });
 
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn set_sheet_visibility(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
     state: &str,
-) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+) -> Result<MutationResult, ComputeError> {
     visibility::set_sheet_visibility(&mut engine.stores.storage, sheet_id, state);
 
     let hidden = state == "hidden" || state == "veryHidden";
@@ -356,7 +352,7 @@ pub(in crate::storage::engine) fn set_sheet_visibility(
     };
     result.sheet_lifecycle_runtime_hint = Some(hint);
 
-    Ok((serialize_multi_viewport_patches(&[]), result))
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn get_sheet_visibility(

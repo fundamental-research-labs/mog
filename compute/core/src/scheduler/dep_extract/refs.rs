@@ -1,6 +1,6 @@
 use super::*;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::projection::ProjectionRegistry;
 use cell_types::SheetId;
 use formula_types::CellRef;
@@ -33,7 +33,7 @@ pub(super) fn ref_in_sheet_ctx(cell_ref: &CellRef, sheet_ctx: SheetId) -> CellRe
 /// typically produces 1-2 targets, so a Vec allocation per call is wasteful).
 pub(super) fn push_cell_ref_dep_targets(
     cell_ref: &CellRef,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     registry: Option<&ProjectionRegistry>,
     current_cell: Option<&CellId>,
     out: &mut Vec<DepTarget>,
@@ -46,8 +46,8 @@ pub(super) fn push_cell_ref_dep_targets(
             // If registry is available, check if this resolved cell's position
             // is inside a projection and the source is different from `id`
             if let Some(reg) = registry
-                && let Some(sheet_id) = mirror.sheet_for_cell(id)
-                && let Some(sheet) = mirror.get_sheet(&sheet_id)
+                && let Some(sheet_id) = cell_store.sheet_for_cell(id)
+                && let Some(sheet) = cell_store.get_sheet(&sheet_id)
                 && let Some(pos) = sheet.position_of(id)
                 && let Some((source, _, _)) = reg.resolve(&sheet_id, pos.row(), pos.col())
             {
@@ -85,26 +85,26 @@ pub(super) fn push_cell_ref_dep_targets(
 #[cfg(test)]
 pub(super) fn cell_ref_to_dep_targets(
     cell_ref: &CellRef,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     registry: Option<&ProjectionRegistry>,
     current_cell: Option<&CellId>,
 ) -> Vec<DepTarget> {
     let mut targets = Vec::new();
-    push_cell_ref_dep_targets(cell_ref, mirror, registry, current_cell, &mut targets);
+    push_cell_ref_dep_targets(cell_ref, cell_store, registry, current_cell, &mut targets);
     targets
 }
 
-/// Extract position info from a CellRef, using mirror for reverse lookup of Resolved refs.
+/// Extract position info from a CellRef, using cell_store for reverse lookup of Resolved refs.
 pub(super) fn cell_ref_to_position(
     cell_ref: &CellRef,
     current_sheet: &SheetId,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
 ) -> Option<(SheetId, u32, u32)> {
     match cell_ref {
         CellRef::Resolved(id) => {
             // O(1) reverse-lookup via cell_to_sheet index
-            let sheet_id = mirror.sheet_for_cell(id)?;
-            let sheet = mirror.get_sheet(&sheet_id)?;
+            let sheet_id = cell_store.sheet_for_cell(id)?;
+            let sheet = cell_store.get_sheet(&sheet_id)?;
             let pos = sheet.position_of(id)?;
             let (row, col) = (pos.row(), pos.col());
             Some((sheet_id, row, col))

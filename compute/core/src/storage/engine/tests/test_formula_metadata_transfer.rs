@@ -30,7 +30,7 @@ fn metadata_present(engine: &ComputeEngine, sheet_id: &cell_types::SheetId) -> b
         .cell_metadata
         .get(&cell_id_a1())
         .is_some_and(|metadata| {
-            engine.mirror.sheet_for_cell(&cell_id_a1()) == Some(*sheet_id)
+            engine.cell_store.sheet_for_cell(&cell_id_a1()) == Some(*sheet_id)
                 && metadata.formula.is_some()
                 && metadata.array_ref.is_some()
         })
@@ -266,7 +266,7 @@ fn cross_sheet_data_table_region_exports_and_undoes_with_the_cell_move() {
     engine
         .relocate_cells(&source, 2, 2, 3, 3, &target, 8, 9)
         .expect("cross-sheet data-table relocation");
-    let moved_region = &engine.mirror().all_data_table_regions()[0];
+    let moved_region = &engine.cell_store().all_data_table_regions()[0];
     assert_eq!(moved_region.sheet, TARGET_SHEET);
     assert_eq!((moved_region.start_row, moved_region.start_col), (8, 9));
     assert_eq!((moved_region.end_row, moved_region.end_col), (9, 10));
@@ -292,7 +292,7 @@ fn cross_sheet_data_table_region_exports_and_undoes_with_the_cell_move() {
     engine
         .undo()
         .expect("undo cross-sheet data-table relocation");
-    let restored_region = &engine.mirror().all_data_table_regions()[0];
+    let restored_region = &engine.cell_store().all_data_table_regions()[0];
     assert_eq!(restored_region.sheet, SOURCE_SHEET);
     assert_eq!(
         (restored_region.start_row, restored_region.start_col),
@@ -303,7 +303,7 @@ fn cross_sheet_data_table_region_exports_and_undoes_with_the_cell_move() {
     engine
         .redo()
         .expect("redo cross-sheet data-table relocation");
-    let redone_region = &engine.mirror().all_data_table_regions()[0];
+    let redone_region = &engine.cell_store().all_data_table_regions()[0];
     assert_eq!(redone_region.sheet, TARGET_SHEET);
     assert_eq!((redone_region.start_row, redone_region.start_col), (8, 9));
 }
@@ -439,7 +439,7 @@ fn partial_data_table_move_undo_restores_orphan_formulas_and_cached_values() {
                     .unwrap()
                     .starts_with("=TABLE(")
             );
-            let value = engine.mirror().get_cell_value_raw(id).unwrap().clone();
+            let value = engine.cell_store().get_cell_value_raw(id).unwrap().clone();
             assert!(
                 matches!(value, CellValue::Number(_)),
                 "table must have numeric results: {value:?}"
@@ -450,10 +450,10 @@ fn partial_data_table_move_undo_restores_orphan_formulas_and_cached_values() {
     engine.clear_history();
 
     engine.relocate_cells(&sid, 2, 2, 2, 2, &sid, 8, 9).unwrap();
-    assert!(engine.mirror().all_data_table_regions().is_empty());
+    assert!(engine.cell_store().all_data_table_regions().is_empty());
     for (id, value) in body_ids.iter().zip(&original_values) {
         assert_eq!(engine.compute().get_formula(id), None);
-        assert_eq!(engine.mirror().get_cell_value_raw(id), Some(value));
+        assert_eq!(engine.cell_store().get_cell_value_raw(id), Some(value));
     }
     for (index, (row, col)) in [(8, 9), (2, 3), (3, 2), (3, 3)].into_iter().enumerate() {
         assert_cell_id_at(
@@ -466,7 +466,7 @@ fn partial_data_table_move_undo_restores_orphan_formulas_and_cached_values() {
     }
 
     engine.undo().unwrap();
-    assert_eq!(engine.mirror().all_data_table_regions(), &[region]);
+    assert_eq!(engine.cell_store().all_data_table_regions(), &[region]);
     for (index, (row, col)) in [(2, 2), (2, 3), (3, 2), (3, 3)].into_iter().enumerate() {
         let id = body_ids[index];
         assert_cell_id_at(&engine, &sid, row, col, Some(&id.to_uuid_string()));
@@ -479,16 +479,16 @@ fn partial_data_table_move_undo_restores_orphan_formulas_and_cached_values() {
             "undo must restore formulas outside the moved rectangle"
         );
         assert_eq!(
-            engine.mirror().get_cell_value_raw(&id),
+            engine.cell_store().get_cell_value_raw(&id),
             Some(&original_values[index])
         );
     }
 
     engine.redo().unwrap();
-    assert!(engine.mirror().all_data_table_regions().is_empty());
+    assert!(engine.cell_store().all_data_table_regions().is_empty());
     assert_cell_id_at(&engine, &sid, 8, 9, Some(&body_ids[0].to_uuid_string()));
     for (id, value) in body_ids.iter().zip(&original_values) {
         assert_eq!(engine.compute().get_formula(id), None);
-        assert_eq!(engine.mirror().get_cell_value_raw(id), Some(value));
+        assert_eq!(engine.cell_store().get_cell_value_raw(id), Some(value));
     }
 }

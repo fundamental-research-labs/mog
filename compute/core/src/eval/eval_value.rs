@@ -101,7 +101,7 @@ impl From<CellValue> for EvalValue {
 impl EvalValue {
     /// Apply the formula-result numeric boundary while preserving evaluator
     /// control values such as lambdas and omitted arguments. This is applied to
-    /// values leaving an AST node; it does not rewrite CellMirror storage or
+    /// values leaving an AST node; it does not rewrite CellStore storage or
     /// imported CellValue constructors.
     #[inline]
     pub(in crate::eval) fn normalize_formula_value(self) -> Self {

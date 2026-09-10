@@ -220,8 +220,8 @@ fn copied_timeline_preserves_external_connections_when_the_source_cache_is_share
     create_region_sales_pivot(&mut engine, source, "ExternalPivot");
     let bytes = engine.export_to_xlsx_bytes().unwrap();
     let (mut engine, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
-    let source = engine.mirror().sheet_by_name("Sheet1").unwrap();
-    let report = engine.mirror().sheet_by_name("Report").unwrap();
+    let source = engine.cell_store().sheet_by_name("Sheet1").unwrap();
+    let report = engine.cell_store().sheet_by_name("Report").unwrap();
     let pivot = engine.pivot_get_all(&report).pop().unwrap();
     let mut external = engine.pivot_get_all(&source).pop().unwrap();
     // Both reports use the same source data and are connected to one cache.

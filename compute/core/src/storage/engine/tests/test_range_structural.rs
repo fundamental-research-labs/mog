@@ -7,7 +7,6 @@
 //! Fixtures share native axis UUIDs with their compact range payloads.
 
 use super::super::*;
-use super::helpers::*;
 use crate::snapshot::{RangeData, SheetSnapshot};
 use cell_types::{ColId, PayloadEncoding, RangeAnchor, RangeId, RangeKind, RowId, SheetPos};
 use formula_types::StructureChange;
@@ -245,23 +244,43 @@ fn range_elastic_insert_grows() {
 
     // Before: rows 0..4 have col-0 values [1,2,3,4,5]
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 0))
+        ),
         Some(1.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(1, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(1, 0))
+        ),
         Some(2.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(2, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(2, 0))
+        ),
         Some(3.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(3, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(3, 0))
+        ),
         Some(4.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(4, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(4, 0))
+        ),
         Some(5.0)
     );
 
@@ -277,48 +296,86 @@ fn range_elastic_insert_grows() {
     // After insertion the display positions should read:
     //   row 0 -> 1, row 1 -> 2, row 2 -> Null (new), row 3 -> 3, row 4 -> 4, row 5 -> 5
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 0))
+        ),
         Some(1.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(1, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(1, 0))
+        ),
         Some(2.0)
     );
     // The inserted row should be Null (no payload entry)
-    let inserted = engine.mirror().get_cell_value_at(&sid, SheetPos::new(2, 0));
+    let inserted = engine
+        .cell_store()
+        .get_cell_value_at(&sid, SheetPos::new(2, 0));
     assert!(
         inserted.is_none() || inserted == Some(&CellValue::Null),
         "Inserted row should be Null, got: {:?}",
         inserted
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(3, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(3, 0))
+        ),
         Some(3.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(4, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(4, 0))
+        ),
         Some(4.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(5, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(5, 0))
+        ),
         Some(5.0)
     );
 
     // Also check col 1 values shifted correctly
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 1))
+        ),
         Some(10.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(1, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(1, 1))
+        ),
         Some(20.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(3, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(3, 1))
+        ),
         Some(30.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(5, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(5, 1))
+        ),
         Some(50.0)
     );
 }
@@ -336,7 +393,12 @@ fn range_elastic_anchor_reassignment() {
     // Verify initial 5 values in col 0
     for r in 0..5u32 {
         assert!(
-            as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(r, 0))).is_some(),
+            as_f64(
+                engine
+                    .cell_store()
+                    .get_cell_value_at(&sid, SheetPos::new(r, 0))
+            )
+            .is_some(),
             "Row {} should have a value before any deletes",
             r
         );
@@ -353,11 +415,19 @@ fn range_elastic_anchor_reassignment() {
     // After deleting row 0, the old rows 1..4 shift to 0..3.
     // Range should still exist with 4 values: [2, 3, 4, 5] in col 0.
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 0))
+        ),
         Some(2.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(3, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(3, 0))
+        ),
         Some(5.0)
     );
 
@@ -371,15 +441,27 @@ fn range_elastic_anchor_reassignment() {
 
     // Range should have 3 values: [2, 3, 4]
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 0))
+        ),
         Some(2.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(1, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(1, 0))
+        ),
         Some(3.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(2, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(2, 0))
+        ),
         Some(4.0)
     );
 
@@ -392,7 +474,9 @@ fn range_elastic_anchor_reassignment() {
     engine.structure_change(&sid, &change3).unwrap();
 
     // After all rows gone, values should be Null.
-    let v = engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 0));
+    let v = engine
+        .cell_store()
+        .get_cell_value_at(&sid, SheetPos::new(0, 0));
     assert!(
         v.is_none() || v == Some(&CellValue::Null),
         "All range rows deleted: position should be Null, got: {:?}",
@@ -412,7 +496,11 @@ fn range_elastic_single_row_delete() {
 
     // Verify the single value exists
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 0))
+        ),
         Some(42.0)
     );
 
@@ -425,7 +513,9 @@ fn range_elastic_single_row_delete() {
     engine.structure_change(&sid, &change).unwrap();
 
     // The range should be gone; all positions read Null
-    let v = engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 0));
+    let v = engine
+        .cell_store()
+        .get_cell_value_at(&sid, SheetPos::new(0, 0));
     assert!(
         v.is_none() || v == Some(&CellValue::Null),
         "Single-row Range deleted: position should be Null, got: {:?}",
@@ -445,15 +535,27 @@ fn range_strict_insert_unchanged() {
 
     // Before: rows 0,1,2 have values [100, 200, 300]
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 0))
+        ),
         Some(100.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(1, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(1, 0))
+        ),
         Some(200.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(2, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(2, 0))
+        ),
         Some(300.0)
     );
 
@@ -469,22 +571,36 @@ fn range_strict_insert_unchanged() {
     // The strict range rows shift with the grid: row 0 stays, row 1 -> 2, row 2 -> 3.
     // Values remain bound to their row_ids so they follow the shift.
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 0))
+        ),
         Some(100.0)
     );
     // Inserted row at position 1 has no range value
-    let inserted = engine.mirror().get_cell_value_at(&sid, SheetPos::new(1, 0));
+    let inserted = engine
+        .cell_store()
+        .get_cell_value_at(&sid, SheetPos::new(1, 0));
     assert!(
         inserted.is_none() || inserted == Some(&CellValue::Null),
         "Inserted row in strict range should be Null, got: {:?}",
         inserted
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(2, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(2, 0))
+        ),
         Some(200.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(3, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(3, 0))
+        ),
         Some(300.0)
     );
 }
@@ -513,7 +629,11 @@ fn range_delete_cleans_overrides() {
 
     // Verify the override is visible
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(2, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(2, 0))
+        ),
         Some(999.0)
     );
 
@@ -527,7 +647,11 @@ fn range_delete_cleans_overrides() {
 
     // Row 2 is now what was row 3 (value = 4.0). The override should be gone.
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(2, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(2, 0))
+        ),
         Some(4.0),
         "After deleting the overridden row, the next Range value should appear"
     );
@@ -561,7 +685,11 @@ fn range_formula_survives_structural() {
 
     // Verify formula result: A1 + A2 = 1 + 2 = 3
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 2))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 2))
+        ),
         Some(3.0),
         "Formula =A1+A2 should evaluate to 3"
     );
@@ -577,7 +705,11 @@ fn range_formula_survives_structural() {
 
     // The formula cell moved from (0,2) to (1,2).
     // Its references should have adjusted: =A2+A3 = 1 + 2 = 3
-    let formula_val = as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(1, 2)));
+    let formula_val = as_f64(
+        engine
+            .cell_store()
+            .get_cell_value_at(&sid, SheetPos::new(1, 2)),
+    );
     assert_eq!(
         formula_val,
         Some(3.0),
@@ -612,7 +744,11 @@ fn range_elastic_insert_dep_reexpansion() {
 
     // Verify SUM = 1+2+3+4+5 = 15
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(6, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(6, 0))
+        ),
         Some(15.0),
         "SUM(A1:A5) should be 15"
     );
@@ -629,7 +765,11 @@ fn range_elastic_insert_dep_reexpansion() {
     // The SUM formula should have expanded to =SUM(A1:A6) and the new row
     // has Null (treated as 0), so SUM should still be 15.
     // The formula cell itself moved from row 6 to row 7.
-    let sum_val = as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(7, 0)));
+    let sum_val = as_f64(
+        engine
+            .cell_store()
+            .get_cell_value_at(&sid, SheetPos::new(7, 0)),
+    );
     assert_eq!(
         sum_val,
         Some(15.0),
@@ -658,13 +798,23 @@ fn xlsx_structural_roundtrip() {
 
     // After insert: [1, Null, 2, 3, 4, 5] in col 0
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 0))
+        ),
         Some(1.0)
     );
-    let v1 = engine.mirror().get_cell_value_at(&sid, SheetPos::new(1, 0));
+    let v1 = engine
+        .cell_store()
+        .get_cell_value_at(&sid, SheetPos::new(1, 0));
     assert!(v1.is_none() || v1 == Some(&CellValue::Null));
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(2, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(2, 0))
+        ),
         Some(2.0)
     );
 
@@ -678,23 +828,43 @@ fn xlsx_structural_roundtrip() {
 
     // After roundtrip: should be back to [1, 2, 3, 4, 5]
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 0))
+        ),
         Some(1.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(1, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(1, 0))
+        ),
         Some(2.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(2, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(2, 0))
+        ),
         Some(3.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(3, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(3, 0))
+        ),
         Some(4.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(4, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(4, 0))
+        ),
         Some(5.0)
     );
 }
@@ -711,19 +881,35 @@ fn xlsx_rowcol_insert_delete_roundtrip() {
 
     // Verify initial 2-col extent: col 0 and col 1
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 0))
+        ),
         Some(1.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 1))
+        ),
         Some(10.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(4, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(4, 0))
+        ),
         Some(5.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(4, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(4, 1))
+        ),
         Some(50.0)
     );
 
@@ -739,41 +925,77 @@ fn xlsx_rowcol_insert_delete_roundtrip() {
 
     // After insert: rows 0,1,2 unchanged, rows 3,4 = Null, rows 5,6 = old rows 3,4.
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 0))
+        ),
         Some(1.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(1, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(1, 0))
+        ),
         Some(2.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(2, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(2, 0))
+        ),
         Some(3.0)
     );
-    let v3 = engine.mirror().get_cell_value_at(&sid, SheetPos::new(3, 0));
+    let v3 = engine
+        .cell_store()
+        .get_cell_value_at(&sid, SheetPos::new(3, 0));
     assert!(v3.is_none() || v3 == Some(&CellValue::Null));
-    let v4 = engine.mirror().get_cell_value_at(&sid, SheetPos::new(4, 0));
+    let v4 = engine
+        .cell_store()
+        .get_cell_value_at(&sid, SheetPos::new(4, 0));
     assert!(v4.is_none() || v4 == Some(&CellValue::Null));
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(5, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(5, 0))
+        ),
         Some(4.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(6, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(6, 0))
+        ),
         Some(5.0)
     );
 
     // Verify col 1 also shifted correctly after row insert.
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 1))
+        ),
         Some(10.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(5, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(5, 1))
+        ),
         Some(40.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(6, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(6, 1))
+        ),
         Some(50.0)
     );
 
@@ -788,44 +1010,84 @@ fn xlsx_rowcol_insert_delete_roundtrip() {
     // After roundtrip, should be back to original [1,2,3,4,5] in col 0
     // and [10,20,30,40,50] in col 1.
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 0))
+        ),
         Some(1.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(1, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(1, 0))
+        ),
         Some(2.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(2, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(2, 0))
+        ),
         Some(3.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(3, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(3, 0))
+        ),
         Some(4.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(4, 0))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(4, 0))
+        ),
         Some(5.0)
     );
 
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(0, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(0, 1))
+        ),
         Some(10.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(1, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(1, 1))
+        ),
         Some(20.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(2, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(2, 1))
+        ),
         Some(30.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(3, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(3, 1))
+        ),
         Some(40.0)
     );
     assert_eq!(
-        as_f64(engine.mirror().get_cell_value_at(&sid, SheetPos::new(4, 1))),
+        as_f64(
+            engine
+                .cell_store()
+                .get_cell_value_at(&sid, SheetPos::new(4, 1))
+        ),
         Some(50.0)
     );
 }

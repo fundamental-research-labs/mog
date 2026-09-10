@@ -2,7 +2,7 @@ use cell_types::SheetId;
 use compute_fill::types::AdjustedRef;
 use formula_types::{IdentityFormula, ReferenceTarget, WorkbookLookup};
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::stores::EngineStores;
 
 use super::super::fill::{
@@ -38,7 +38,7 @@ use super::super::fill::{
 /// 3. Build new `ref_positions` against the *fresh* identity formula and run
 ///    the standard `calculate_adjusted_positions` + `build_adjusted_formula`
 ///    path. With refs now living on the target sheet,
-///    `mirror.sheet_for_cell(&id)` inside `build_adjusted_formula` returns the
+///    `cell_store.sheet_for_cell(&id)` inside `build_adjusted_formula` returns the
 ///    target sheet, so newly-allocated post-shift cells land there too.
 /// 4. Render via `to_a1_string` with `formula_sheet = target_sheet`.
 ///
@@ -48,7 +48,7 @@ use super::super::fill::{
 #[allow(clippy::too_many_arguments)]
 pub(super) fn build_cross_sheet_adjusted_formula(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     source_sheet_id: &SheetId,
     target_sheet_id: &SheetId,
     source_formula: &formula_types::IdentityFormula,
@@ -58,11 +58,11 @@ pub(super) fn build_cross_sheet_adjusted_formula(
     tgt_row: u32,
     tgt_col: u32,
 ) -> Option<String> {
-    use crate::mirror::MirrorPositionLookup;
+    use crate::cells::StorePositionLookup;
 
     // Step 1: render source formula to A1 against the source sheet. Naked refs
     // emit no sheet prefix; cross-sheet refs keep their explicit qualifier.
-    let source_lookup = MirrorPositionLookup::new(mirror, *source_sheet_id);
+    let source_lookup = StorePositionLookup::new(cell_store, *source_sheet_id);
     let a1 = source_formula_text
         .filter(|text| !text.trim().is_empty())
         .map(ensure_formula_prefix)
@@ -83,18 +83,18 @@ pub(super) fn build_cross_sheet_adjusted_formula(
     // `is_dynamic_array`/`is_volatile`/`is_aggregate` for the new AST.
     let rebased = stores
         .compute
-        .to_identity_formula(mirror, target_sheet_id, &a1)
+        .to_identity_formula(cell_store, target_sheet_id, &a1)
         .ok()?;
 
     // Step 3b: build fresh ref_positions for the rebased formula. The fill
     // engine works in pure (row, col) space, so this is a per-ref lookup
-    // against the (now rebased) mirror identities. Sheet membership for each
+    // against the (now rebased) cell_store identities. Sheet membership for each
     // ref doesn't enter the position math — only the deltas do.
     let ref_positions: Vec<compute_fill::formula_adjust::RefPosition> = rebased
         .refs
         .iter()
         .map(|r| {
-            resolve_identity_ref_to_fill_position(mirror, target_sheet_id, r, src_row, src_col)
+            resolve_identity_ref_to_fill_position(cell_store, target_sheet_id, r, src_row, src_col)
         })
         .collect();
 
@@ -116,12 +116,17 @@ pub(super) fn build_cross_sheet_adjusted_formula(
             preserve_original_ref_position(adjusted_ref, ref_position);
         }
     }
-    let (new_formula, overrides) =
-        build_adjusted_formula(stores, mirror, target_sheet_id, &rebased, &adjusted_refs)?;
+    let (new_formula, overrides) = build_adjusted_formula(
+        stores,
+        cell_store,
+        target_sheet_id,
+        &rebased,
+        &adjusted_refs,
+    )?;
 
     // Step 4: render against the target sheet so naked refs stay naked.
     let lookup = AdjustedPositionLookup {
-        mirror,
+        cell_store,
         formula_sheet: *target_sheet_id,
         overrides,
     };

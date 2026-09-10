@@ -1,7 +1,7 @@
 use cell_types::SheetId;
 use value_types::{CellValue, ComputeError};
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::RecalcResult;
 use crate::storage::engine::mutation::CellInput;
 use crate::storage::engine::stores::EngineStores;
@@ -12,7 +12,7 @@ use super::super::mutation_handlers::{
 
 pub(in crate::storage::engine) fn set_cell_values_parsed(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     updates: &[(u32, u32, String)],
 ) -> Result<RecalcResult, ComputeError> {
@@ -27,13 +27,13 @@ pub(in crate::storage::engine) fn set_cell_values_parsed(
             (*sheet_id, *row, *col, input)
         })
         .collect();
-    mutation_set_cells_by_position(stores, mirror, edits, false)
+    mutation_set_cells_by_position(stores, cell_store, edits, false)
 }
 
 /// Import typed values and optional formula source through the lossless write path.
 pub(in crate::storage::engine) fn import_values(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     sheet_id: &SheetId,
     updates: &[(u32, u32, CellValue, Option<String>)],
 ) -> Result<RecalcResult, ComputeError> {
@@ -41,5 +41,5 @@ pub(in crate::storage::engine) fn import_values(
         .iter()
         .map(|(row, col, value, formula)| (*sheet_id, *row, *col, value.clone(), formula.clone()))
         .collect();
-    mutation_set_cells_by_position_raw(stores, mirror, edits, false)
+    mutation_set_cells_by_position_raw(stores, cell_store, edits, false)
 }

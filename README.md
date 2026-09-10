@@ -105,6 +105,9 @@ cargo test -p mog
 cargo test -p compute-api
 ```
 
+Pull requests and `main` run `cargo build -p mog --locked` and
+`cargo test --workspace --locked` on GitHub Actions.
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).

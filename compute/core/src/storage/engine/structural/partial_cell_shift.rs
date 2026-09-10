@@ -1,9 +1,8 @@
 use super::super::ComputeEngine;
 use super::super::services;
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::{MutationResult, RecalcResult};
 use cell_types::{CellId, SheetId};
-use compute_wire::mutation::serialize_multi_viewport_patches;
 use formula_types::StructureChange;
 use value_types::ComputeError;
 
@@ -16,12 +15,9 @@ impl ComputeEngine {
         row_count: u32,
         col_count: u32,
         shift_right: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         if row_count == 0 || col_count == 0 {
-            return Ok((
-                serialize_multi_viewport_patches(&[]),
-                MutationResult::empty(),
-            ));
+            return Ok(MutationResult::empty());
         }
 
         self.ensure_partial_cell_shift_supported(sheet_id, "insert_cells_with_shift")?;
@@ -44,12 +40,9 @@ impl ComputeEngine {
         row_count: u32,
         col_count: u32,
         shift_left: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         if row_count == 0 || col_count == 0 {
-            return Ok((
-                serialize_multi_viewport_patches(&[]),
-                MutationResult::empty(),
-            ));
+            return Ok(MutationResult::empty());
         }
 
         self.ensure_partial_cell_shift_supported(sheet_id, "delete_cells_with_shift")?;
@@ -64,7 +57,7 @@ impl ComputeEngine {
         operation: &str,
     ) -> Result<(), ComputeError> {
         if self
-            .mirror
+            .cell_store
             .get_sheet(sheet_id)
             .is_some_and(|s| !s.range_views_is_empty())
         {
@@ -102,7 +95,10 @@ impl ComputeEngine {
             }
             for r in row..row_end {
                 for c in (col..col_limit).rev() {
-                    if let Some(cell_id) = grid.cell_id_at(r, c) {
+                    if let Some(cell_id) = self
+                        .cell_store
+                        .resolve_cell_id(sheet_id, cell_types::SheetPos::new(r, c))
+                    {
                         updates.push((cell_id, r, c.saturating_add(col_count)));
                     }
                 }
@@ -115,7 +111,10 @@ impl ComputeEngine {
             }
             for c in col..col_end {
                 for r in (row..row_limit).rev() {
-                    if let Some(cell_id) = grid.cell_id_at(r, c) {
+                    if let Some(cell_id) = self
+                        .cell_store
+                        .resolve_cell_id(sheet_id, cell_types::SheetPos::new(r, c))
+                    {
                         updates.push((cell_id, r.saturating_add(row_count), c));
                     }
                 }
@@ -153,12 +152,18 @@ impl ComputeEngine {
             }
             for r in row..row_end {
                 for c in col..delete_end {
-                    if let Some(cell_id) = grid.cell_id_at(r, c) {
+                    if let Some(cell_id) = self
+                        .cell_store
+                        .resolve_cell_id(sheet_id, cell_types::SheetPos::new(r, c))
+                    {
                         deleted_cell_ids.push(cell_id);
                     }
                 }
                 for c in delete_end..col_limit {
-                    if let Some(cell_id) = grid.cell_id_at(r, c) {
+                    if let Some(cell_id) = self
+                        .cell_store
+                        .resolve_cell_id(sheet_id, cell_types::SheetPos::new(r, c))
+                    {
                         updates.push((cell_id, r, c.saturating_sub(col_count)));
                     }
                 }
@@ -172,12 +177,18 @@ impl ComputeEngine {
             }
             for c in col..col_end {
                 for r in row..delete_end {
-                    if let Some(cell_id) = grid.cell_id_at(r, c) {
+                    if let Some(cell_id) = self
+                        .cell_store
+                        .resolve_cell_id(sheet_id, cell_types::SheetPos::new(r, c))
+                    {
                         deleted_cell_ids.push(cell_id);
                     }
                 }
                 for r in delete_end..row_limit {
-                    if let Some(cell_id) = grid.cell_id_at(r, c) {
+                    if let Some(cell_id) = self
+                        .cell_store
+                        .resolve_cell_id(sheet_id, cell_types::SheetPos::new(r, c))
+                    {
                         updates.push((cell_id, r.saturating_sub(row_count), c));
                     }
                 }
@@ -191,8 +202,15 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         updates: Vec<(CellId, u32, u32)>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let recalc = self.apply_partial_cell_remap(sheet_id, updates)?;
+    ) -> Result<MutationResult, ComputeError> {
+        let positions = self.partial_shift_positions(sheet_id, &[], &updates);
+        let mut recalc = self.apply_partial_cell_remap(sheet_id, updates)?;
+        services::cell_editing::append_position_changes(
+            &self.stores,
+            &self.cell_store,
+            &mut recalc,
+            positions,
+        );
         self.finish_structure_change(sheet_id, recalc, None)
     }
 
@@ -201,10 +219,33 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         deleted_cell_ids: Vec<CellId>,
         updates: Vec<(CellId, u32, u32)>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let recalc =
+    ) -> Result<MutationResult, ComputeError> {
+        let positions = self.partial_shift_positions(sheet_id, &deleted_cell_ids, &updates);
+        let mut recalc =
             self.apply_partial_cell_delete_and_remap(sheet_id, deleted_cell_ids, updates)?;
+        services::cell_editing::append_position_changes(
+            &self.stores,
+            &self.cell_store,
+            &mut recalc,
+            positions,
+        );
         self.finish_structure_change(sheet_id, recalc, None)
+    }
+
+    fn partial_shift_positions(
+        &self,
+        sheet_id: &SheetId,
+        deleted: &[CellId],
+        updates: &[(CellId, u32, u32)],
+    ) -> Vec<(SheetId, u32, u32)> {
+        let before = deleted
+            .iter()
+            .chain(updates.iter().map(|(id, _, _)| id))
+            .filter_map(|id| self.cell_store.resolve_position(id))
+            .map(|pos| (*sheet_id, pos.row(), pos.col()));
+        before
+            .chain(updates.iter().map(|(_, row, col)| (*sheet_id, *row, *col)))
+            .collect()
     }
 
     fn apply_partial_cell_remap(
@@ -220,7 +261,7 @@ impl ComputeEngine {
 
         let apply_result = services::structural::apply_structure_change(
             &mut self.stores,
-            &mut self.mirror,
+            &mut self.cell_store,
             sheet_id,
             &change,
         );
@@ -243,7 +284,7 @@ impl ComputeEngine {
         } else {
             Self::clear_cells_for_partial_structural_delete(
                 &mut self.stores,
-                &mut self.mirror,
+                &mut self.cell_store,
                 sheet_id,
                 &deleted_cell_ids,
             )
@@ -251,14 +292,15 @@ impl ComputeEngine {
 
         let recalc_result = match clear_result {
             Err(err) => Err(err),
-            Ok(()) if updates.is_empty() => {
-                self.stores.compute.structure_change(&mut self.mirror, None)
-            }
+            Ok(()) if updates.is_empty() => self
+                .stores
+                .compute
+                .structure_change(&mut self.cell_store, None),
             Ok(()) => {
                 let change = StructureChange::RemapPositions { updates };
                 let recalc = services::structural::apply_structure_change(
                     &mut self.stores,
-                    &mut self.mirror,
+                    &mut self.cell_store,
                     sheet_id,
                     &change,
                 )?;
@@ -271,20 +313,44 @@ impl ComputeEngine {
 
     fn clear_cells_for_partial_structural_delete(
         stores: &mut super::super::stores::EngineStores,
-        mirror: &mut CellMirror,
+        cell_store: &mut CellStore,
         sheet_id: &SheetId,
         cell_ids: &[CellId],
     ) -> Result<(), ComputeError> {
-        stores.compute.clear_cells(mirror, cell_ids)?;
+        let mut captured: rustc_hash::FxHashSet<_> = cell_ids.iter().copied().collect();
+        // Clearing a CSE member also clears its anchor formula.
+        for id in cell_ids {
+            if let Some(pos) = cell_store.resolve_position(id)
+                && let Some((anchor, _)) =
+                    cell_store.cse_anchor_covering(sheet_id, pos.row(), pos.col())
+            {
+                captured.insert(anchor);
+            }
+        }
+        for id in &captured {
+            if let Some(pos) = cell_store.resolve_position(id) {
+                super::super::history::cells::capture_cell(
+                    stores,
+                    cell_store,
+                    *sheet_id,
+                    *id,
+                    pos.row(),
+                    pos.col(),
+                );
+            }
+        }
+        stores.compute.clear_cells(cell_store, cell_ids)?;
+        crate::storage::infra::cell_iter::clear_metadata_for_cell_ids(
+            &mut stores.storage,
+            *sheet_id,
+            cell_ids,
+        );
+        for id in captured {
+            // Expanded CSE anchors retain their position but lose formula metadata.
+            stores.storage.clear_cell_metadata(id);
+        }
         for cell_id in cell_ids {
-            stores.storage.clear_cell_metadata(*cell_id);
-            mirror.remove_cell(cell_id);
-            let grid = stores.grid_indexes.get_mut(sheet_id).ok_or_else(|| {
-                ComputeError::SheetNotFound {
-                    sheet_id: sheet_id.to_uuid_string(),
-                }
-            })?;
-            grid.remove_cell(cell_id);
+            cell_store.remove_cell(cell_id);
         }
         Ok(())
     }

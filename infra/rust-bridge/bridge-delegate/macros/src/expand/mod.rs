@@ -1,7 +1,6 @@
 //! Code generation for delegate bindings.
 //!
-//! Consumes the same descriptor DSL as bridge-wasm, but instead of generating
-//! WASM bindings, generates Rust delegate methods on a target type and re-emits
+//! Generates Rust delegate methods on a target type and re-emits
 //! descriptor macros for that target type.
 
 mod descriptor;

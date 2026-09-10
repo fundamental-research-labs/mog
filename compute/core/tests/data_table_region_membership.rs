@@ -3,7 +3,7 @@
 //! These tests pin the chokepoint extension: the unified `cell_render_at`
 //! lookup (which already handles CSE / dynamic-array projection via
 //! `projection_registry`) now also surfaces Data Table region membership
-//! via `mirror.data_table_regions`. Both sources flow through ONE
+//! via `cell_store.data_table_regions`. Both sources flow through ONE
 //! `CellRender` enum — there is no parallel `data_table_at` accessor in
 //! the render path.
 //!
@@ -122,16 +122,16 @@ fn data_table_master_reports_anchor_region() {
     let (engine, _) = ComputeEngine::from_snapshot(snap).expect("engine");
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
-    let mirror = engine.mirror();
+    let cell_store = engine.cell_store();
 
     // B2 = (row=1, col=1) — the master cell. Should be a Plain view
     // with a region tagged `is_anchor: true`.
-    let render = mirror.cell_render_at(&sheet_id, 1, 1);
+    let render = cell_store.cell_render_at(&sheet_id, 1, 1);
     match render {
         CellRender::Plain(view) => {
             let region = view.region.expect(
                 "B2 (Data Table master) must report a region; cell_render_at \
-                 did not consult mirror.data_table_regions",
+                 did not consult cell_store.data_table_regions",
             );
             assert!(
                 matches!(region.kind, RegionKind::DataTable),
@@ -158,16 +158,16 @@ fn data_table_body_reports_member_region() {
     let (engine, _) = ComputeEngine::from_snapshot(snap).expect("engine");
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
-    let mirror = engine.mirror();
+    let cell_store = engine.cell_store();
 
     // C3 = (row=2, col=2) — body cell. Region with is_anchor=false,
     // but anchor coords pointing back to B2.
-    let render = mirror.cell_render_at(&sheet_id, 2, 2);
+    let render = cell_store.cell_render_at(&sheet_id, 2, 2);
     match render {
         CellRender::Plain(view) => {
             let region = view.region.expect(
                 "C3 (Data Table body) must report a region; cell_render_at \
-                 did not consult mirror.data_table_regions",
+                 did not consult cell_store.data_table_regions",
             );
             assert!(
                 matches!(region.kind, RegionKind::DataTable),
@@ -199,11 +199,11 @@ fn data_table_outside_returns_no_region() {
     let (engine, _) = ComputeEngine::from_snapshot(snap).expect("engine");
 
     let sheet_id = cell_types::SheetId::from_uuid_str(SHEET_UUID).unwrap();
-    let mirror = engine.mirror();
+    let cell_store = engine.cell_store();
 
     // A1 = (row=0, col=0) — outside the B2:C3 region. Should be Plain
     // with region == None.
-    let render = mirror.cell_render_at(&sheet_id, 0, 0);
+    let render = cell_store.cell_render_at(&sheet_id, 0, 0);
     match render {
         CellRender::Plain(view) => {
             assert!(
@@ -219,7 +219,7 @@ fn data_table_outside_returns_no_region() {
     }
 
     // D5 — outside region and no CellId. Should be Empty (no region).
-    let render = mirror.cell_render_at(&sheet_id, 4, 3);
+    let render = cell_store.cell_render_at(&sheet_id, 4, 3);
     assert!(
         matches!(render, CellRender::Empty),
         "D5 (no CellId, outside region) should be Empty, got {:?}",

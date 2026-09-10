@@ -3,7 +3,7 @@ use cell_types::SheetId;
 use formula_types::{IdentityFormula, Scope};
 use value_types::ComputeError;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::{ChangeKind, MutationResult, NamedRangeChange};
 use crate::storage::engine::mutation::MutationOutput;
 use crate::storage::engine::stores::EngineStores;
@@ -18,7 +18,7 @@ fn scope_of(scope: Option<&str>) -> Scope {
 /// Resolve API/import text once before it enters native authored storage.
 pub(in crate::storage::engine) fn normalize_named_range_reference(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     scope: Option<&str>,
     expression: &str,
 ) -> IdentityFormula {
@@ -28,31 +28,31 @@ pub(in crate::storage::engine) fn normalize_named_range_reference(
     }
     let context = scope
         .and_then(|scope| SheetId::from_uuid_str(scope).ok())
-        .or_else(|| mirror.sheet_ids().next().copied());
+        .or_else(|| cell_store.sheet_ids().next().copied());
     let a1 = format!("={}", expression.strip_prefix('=').unwrap_or(expression));
     context
         .and_then(|sheet| {
             stores
                 .compute
-                .to_identity_formula_with_rect_ranges(mirror, &sheet, &a1)
+                .to_identity_formula_with_rect_ranges(cell_store, &sheet, &a1)
                 .ok()
         })
         .unwrap_or_else(|| named_ranges::expression_template(expression))
 }
 
-fn install_name(stores: &mut EngineStores, mirror: &mut CellMirror, name: StoredDefinedName) {
+fn install_name(stores: &mut EngineStores, cell_store: &mut CellStore, name: StoredDefinedName) {
     let definitions = crate::storage::engine::construction::defined_names_to_named_range_defs(
         vec![name],
         |identity| {
             stores
                 .compute
-                .to_a1_display_qualified(mirror, &SheetId::from_raw(0), identity)
+                .to_a1_display_qualified(cell_store, &SheetId::from_raw(0), identity)
         },
     );
     for definition in definitions {
         stores
             .compute
-            .set_named_range(mirror, definition.name.clone(), definition);
+            .set_named_range(cell_store, definition.name.clone(), definition);
     }
 }
 
@@ -71,11 +71,15 @@ fn name_result(name: &StoredDefinedName) -> Result<MutationResult, ComputeError>
 
 pub(in crate::storage::engine) fn mutation_named_range_create(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     input: domain_types::DefinedNameInput,
 ) -> Result<MutationOutput, ComputeError> {
-    let identity =
-        normalize_named_range_reference(stores, mirror, input.scope.as_deref(), &input.refers_to);
+    let identity = normalize_named_range_reference(
+        stores,
+        cell_store,
+        input.scope.as_deref(),
+        &input.refers_to,
+    );
     capture_workbook_entry!(
         stores.storage,
         named_ranges,
@@ -92,7 +96,7 @@ pub(in crate::storage::engine) fn mutation_named_range_create(
         },
         &stores.id_alloc,
     )?;
-    install_name(stores, mirror, name.clone());
+    install_name(stores, cell_store, name.clone());
     stores.compute.mark_dirty();
     Ok(MutationOutput::Plain(name_result(&name)?))
 }
@@ -101,7 +105,7 @@ pub(in crate::storage::engine) fn mutation_named_range_create(
 /// dependency edges together. Recalculation sees the new name immediately.
 pub(in crate::storage::engine) fn mutation_named_range_update(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     id: String,
     updates: domain_types::NamedRangeUpdate,
 ) -> Result<MutationOutput, ComputeError> {
@@ -123,7 +127,7 @@ pub(in crate::storage::engine) fn mutation_named_range_update(
             .collect();
     let reference_changed = updates.refers_to.is_some();
     let reference = updates.refers_to.as_deref().map(|expression| {
-        normalize_named_range_reference(stores, mirror, existing.scope.as_deref(), expression)
+        normalize_named_range_reference(stores, cell_store, existing.scope.as_deref(), expression)
     });
     capture_workbook_entry!(
         stores.storage,
@@ -155,7 +159,7 @@ pub(in crate::storage::engine) fn mutation_named_range_update(
             .scope
             .as_deref()
             .and_then(|scope| SheetId::from_uuid_str(scope).ok());
-        let first_sheet = mirror.sheet_ids().next().copied();
+        let first_sheet = cell_store.sheet_ids().next().copied();
         let mut renamed_definitions = Vec::new();
         for (key, definition) in &stores.storage.metadata.named_ranges {
             let context = definition
@@ -168,7 +172,7 @@ pub(in crate::storage::engine) fn mutation_named_range_update(
                 context,
                 renamed_scope,
                 &local_scopes,
-                mirror,
+                cell_store,
                 &existing.name,
                 &name.name,
             );
@@ -188,28 +192,25 @@ pub(in crate::storage::engine) fn mutation_named_range_update(
                 .template = template;
         }
         if stores.storage.history.is_active() {
-            for sheet_id in mirror.sheet_ids().copied() {
-                let Some(sheet) = mirror.get_sheet(&sheet_id) else {
+            for sheet_id in cell_store.sheet_ids().copied() {
+                let Some(sheet) = cell_store.get_sheet(&sheet_id) else {
                     continue;
                 };
-                for (cell_id, entry) in sheet.cells_iter() {
-                    let Some(formula) = &entry.formula else {
-                        continue;
-                    };
+                for (cell_id, formula) in &sheet.formulas {
                     if rewrite_scoped_name_reference(
                         &formula.template,
                         Some(sheet_id),
                         renamed_scope,
                         &local_scopes,
-                        mirror,
+                        cell_store,
                         &existing.name,
                         &name.name,
                     ) != formula.template
-                        && let Some(pos) = mirror.resolve_position(cell_id)
+                        && let Some(pos) = cell_store.resolve_position(cell_id)
                     {
                         crate::storage::engine::history::cells::capture_cell(
                             stores,
-                            mirror,
+                            cell_store,
                             sheet_id,
                             *cell_id,
                             pos.row(),
@@ -220,43 +221,51 @@ pub(in crate::storage::engine) fn mutation_named_range_update(
             }
         }
         let changed_cells =
-            crate::storage::cells::formula_updater::update_mirror_formulas_on_named_range_rename(
-                mirror,
-                |mirror, sheet, template| {
+            crate::storage::cells::formula_updater::update_store_formulas_on_named_range_rename(
+                cell_store,
+                |cell_store, sheet, template| {
                     rewrite_scoped_name_reference(
                         template,
                         Some(sheet),
                         renamed_scope,
                         &local_scopes,
-                        mirror,
+                        cell_store,
                         &existing.name,
                         &name.name,
                     )
                 },
             );
         stores.compute.remove_named_range_scoped(
-            mirror,
+            cell_store,
             &scope_of(existing.scope.as_deref()),
             &existing.name,
         );
         for definition in named_ranges::get_all_named_ranges(&stores.storage.metadata) {
-            install_name(stores, mirror, definition);
+            install_name(stores, cell_store, definition);
         }
-        crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
-        Some(
-            stores
-                .compute
-                .structure_change_with_formula_refresh(mirror, None, &changed_cells)?,
-        )
+        crate::storage::engine::cell_metadata::refresh(
+            &stores.storage,
+            cell_store,
+            stores.layout_metrics,
+        );
+        Some(stores.compute.structure_change_with_formula_refresh(
+            cell_store,
+            None,
+            &changed_cells,
+        )?)
     } else {
-        install_name(stores, mirror, name.clone());
+        install_name(stores, cell_store, name.clone());
         if reference_changed {
             let scope = scope_of(name.scope.as_deref());
-            let seed = mirror
+            let seed = cell_store
                 .variables
                 .get_variable_cell_id(&scope, &name.name.to_ascii_lowercase());
-            crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
-            seed.map(|id| stores.compute.recalc(mirror, &[id]))
+            crate::storage::engine::cell_metadata::refresh(
+                &stores.storage,
+                cell_store,
+                stores.layout_metrics,
+            );
+            seed.map(|id| stores.compute.recalc(cell_store, &[id]))
                 .transpose()?
         } else {
             None
@@ -276,7 +285,7 @@ pub(in crate::storage::engine) fn mutation_named_range_update(
 
 pub(in crate::storage::engine) fn mutation_named_ranges_import(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     names: Vec<domain_types::DefinedName>,
 ) -> Result<MutationOutput, ComputeError> {
     let names: Vec<_> = names
@@ -284,7 +293,7 @@ pub(in crate::storage::engine) fn mutation_named_ranges_import(
         .map(|name| {
             let scope = name.scope.clone();
             name.map_reference(|expression| {
-                normalize_named_range_reference(stores, mirror, scope.as_deref(), &expression)
+                normalize_named_range_reference(stores, cell_store, scope.as_deref(), &expression)
             })
         })
         .collect();
@@ -298,7 +307,7 @@ pub(in crate::storage::engine) fn mutation_named_ranges_import(
     }
     let count = named_ranges::import_named_ranges(&mut stores.storage.metadata, names);
     for name in named_ranges::get_all_named_ranges(&stores.storage.metadata) {
-        install_name(stores, mirror, name);
+        install_name(stores, cell_store, name);
     }
     stores.compute.mark_dirty();
     let mut result = MutationResult::empty();
@@ -317,7 +326,7 @@ fn rewrite_scoped_name_reference(
     current_sheet: Option<SheetId>,
     renamed_scope: Option<SheetId>,
     local_scopes: &std::collections::HashSet<SheetId>,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     old_name: &str,
     new_name: &str,
 ) -> String {
@@ -357,7 +366,7 @@ fn rewrite_scoped_name_reference(
                     .map_or(0, |(index, c)| index + c.len_utf8());
                 Some(qualifier[start..].to_string())
             };
-            let Some(sheet) = sheet_name.and_then(|sheet| mirror.sheet_by_name(&sheet)) else {
+            let Some(sheet) = sheet_name.and_then(|sheet| cell_store.sheet_by_name(&sheet)) else {
                 continue;
             };
             Some(sheet)

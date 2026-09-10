@@ -13,7 +13,7 @@
 //! - Cell identity operations (get/create CellId, get cells in range).
 //!
 //! ## Architecture
-//! - `clear_cells_by_hex` is the position-agnostic value clear: preserves
+//! - `clear_cells_by_id` is the position-agnostic value clear: preserves
 //!   CellId (formulas referencing cleared cells get 0/empty, not #REF!).
 //! - `clear_range_and_return_ids` fully deletes (for structural operations
 //!   where #REF! is correct).
@@ -33,7 +33,7 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use clear::clear_cells_by_hex;
+pub(crate) use clear::{clear_cells_by_id, clear_metadata_for_cell_ids};
 pub(crate) use navigation::find_data_edge;
 pub(crate) use region::{get_current_region, get_data_bounds_for_range};
 pub(crate) use relocation::relocate_cells;

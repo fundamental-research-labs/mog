@@ -5,7 +5,7 @@ use cell_types::SheetId;
 pub fn validate_and_clean_comments(
     storage: &mut WorkbookStorage,
     sheet: &SheetId,
-    grid: &compute_document::identity::GridIndex,
+    grid: &crate::cells::SheetStore,
 ) -> usize {
     if storage.history.is_active() {
         if let Some(meta) = storage.sheet_metadata.get(sheet) {

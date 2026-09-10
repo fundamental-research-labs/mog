@@ -81,7 +81,11 @@ fn two_dimensional_fixture() -> Vec<u8> {
 }
 
 fn sheet_id(engine: &ComputeEngine) -> cell_types::SheetId {
-    *engine.mirror().sheet_ids().next().expect("sheet present")
+    *engine
+        .cell_store()
+        .sheet_ids()
+        .next()
+        .expect("sheet present")
 }
 
 fn assert_number(

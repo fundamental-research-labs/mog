@@ -2,7 +2,7 @@
 use cell_types::{SheetId, SheetRange};
 use domain_types::AuthoredStyleRun;
 
-use crate::mirror::{CellMirror, FormatRange};
+use crate::cells::{CellStore, FormatRange};
 use crate::storage::{engine::stores::EngineStores, properties};
 
 use super::super::PaletteOps;
@@ -38,11 +38,11 @@ fn subtract(rectangles: Vec<SheetRange>, cut: SheetRange) -> Vec<SheetRange> {
 
 pub(in crate::storage::engine) fn export_authored_style_runs_for_sheet(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     palette: &impl PaletteOps,
 ) -> Vec<AuthoredStyleRun> {
-    let Some(sheet) = mirror.get_sheet(sheet_id) else {
+    let Some(sheet) = cell_store.get_sheet(sheet_id) else {
         return Vec::new();
     };
     // Unedited imported rectangles retain their original XF lineage. Edited
@@ -81,14 +81,14 @@ pub(in crate::storage::engine) fn export_authored_style_runs_for_sheet(
     let rows = properties::get_all_row_formats(&stores.storage, sheet_id, grid);
     let columns = properties::get_all_col_formats(&stores.storage, sheet_id, grid);
     let sheet_name = sheet_id.to_uuid_string();
-    let mut structured: Vec<SheetRange> = mirror
+    let mut structured: Vec<SheetRange> = cell_store
         .all_tables()
         .iter()
         .filter(|table| table.sheet_id == sheet_name)
         .map(|table| table.range)
         .collect();
     structured.extend(
-        mirror
+        cell_store
             .all_pivot_tables()
             .iter()
             .filter(|pivot| pivot.sheet == sheet_name && !pivot.is_empty_rendered_region())
@@ -153,9 +153,9 @@ pub(in crate::storage::engine) fn export_authored_style_runs_for_sheet(
             col_edges.dedup();
             let mut row_runs: Vec<AuthoredStyleRun> = Vec::new();
             for cols in col_edges.windows(2) {
-                let Some(style_id) =
-                    resolved_range_style_id(stores, mirror, sheet_id, row, cols[0], true, palette)
-                else {
+                let Some(style_id) = resolved_range_style_id(
+                    stores, cell_store, sheet_id, row, cols[0], true, palette,
+                ) else {
                     continue;
                 };
                 if let Some(previous) = row_runs.last_mut().filter(|previous| {

@@ -89,6 +89,7 @@ pub(in crate::storage::engine) fn delete_floating_object(
 
 pub(in crate::storage::engine) fn create_floating_object(
     stores: &mut EngineStores,
+    cell_store: &crate::cells::CellStore,
     sheet_id: &SheetId,
     config: &serde_json::Value,
 ) -> Result<MutationResult, ComputeError> {
@@ -107,8 +108,8 @@ pub(in crate::storage::engine) fn create_floating_object(
     let bounds = data.as_ref().and_then(|obj| {
         serde_json::to_value(obj).ok().and_then(|json| {
             compute_object_pixel_bounds(
-                stores.grid_indexes.get(sheet_id),
-                stores.layout_indexes.get(sheet_id),
+                cell_store.get_sheet(sheet_id),
+                stores.pixel_layout(sheet_id).as_deref(),
                 &json,
             )
         })
@@ -148,6 +149,7 @@ pub(in crate::storage::engine) fn update_floating_object(
 
 pub(in crate::storage::engine) fn create_shape(
     stores: &mut EngineStores,
+    cell_store: &mut crate::cells::CellStore,
     sheet_id: &SheetId,
     mut config: CreateShapeConfig,
 ) -> Result<MutationResult, ComputeError> {
@@ -155,20 +157,20 @@ pub(in crate::storage::engine) fn create_shape(
     if let (Some(px_f), Some(py_f)) = (config.pixel_x, config.pixel_y) {
         let px = px_f.get();
         let py = py_f.get();
-        let li = stores.layout_indexes.get(sheet_id);
-        let row = li.map_or(
+        let li = stores.pixel_layout(sheet_id);
+        let row = li.as_deref().map_or(
             (py / stores.layout_metrics.default_row_height_px).max(0.0) as u32,
             |l| l.get_row_at_pixel(domain_types::units::Pixels(py)) as u32,
         );
-        let col = li.map_or(
+        let col = li.as_deref().map_or(
             (px / stores.layout_metrics.default_column_width_px).max(0.0) as u32,
             |l| l.get_col_at_pixel(domain_types::units::Pixels(px)) as u32,
         );
-        let row_pos = li.map_or(
+        let row_pos = li.as_deref().map_or(
             row as f64 * stores.layout_metrics.default_row_height_px,
             |l| l.get_row_position(row as usize).0,
         );
-        let col_pos = li.map_or(
+        let col_pos = li.as_deref().map_or(
             col as f64 * stores.layout_metrics.default_column_width_px,
             |l| l.get_col_position(col as usize).0,
         );
@@ -183,13 +185,13 @@ pub(in crate::storage::engine) fn create_shape(
         &mut stores.storage,
         sheet_id,
         &config,
-        stores.grid_indexes.get_mut(sheet_id),
+        Some(&mut *cell_store),
         &stores.id_alloc,
     )?;
     let object_id = object_json["id"].as_str().unwrap_or("").to_string();
     let bounds = compute_object_pixel_bounds(
-        stores.grid_indexes.get(sheet_id),
-        stores.layout_indexes.get(sheet_id),
+        cell_store.get_sheet(sheet_id),
+        stores.pixel_layout(sheet_id).as_deref(),
         &object_json,
     );
     let data: Option<FloatingObject> = serde_json::from_value(object_json.clone()).ok();
@@ -208,6 +210,7 @@ pub(in crate::storage::engine) fn create_shape(
 
 pub(in crate::storage::engine) fn move_floating_object_typed(
     stores: &mut EngineStores,
+    cell_store: &mut crate::cells::CellStore,
     sheet_id: &SheetId,
     object_id: &str,
     target: MoveTarget,
@@ -217,12 +220,12 @@ pub(in crate::storage::engine) fn move_floating_object_typed(
         sheet_id,
         object_id,
         &target,
-        stores.grid_indexes.get_mut(sheet_id),
+        Some(&mut *cell_store),
     );
     let bounds = updated.as_ref().and_then(|v| {
         compute_object_pixel_bounds(
-            stores.grid_indexes.get(sheet_id),
-            stores.layout_indexes.get(sheet_id),
+            cell_store.get_sheet(sheet_id),
+            stores.pixel_layout(sheet_id).as_deref(),
             v,
         )
     });
@@ -247,6 +250,7 @@ pub(in crate::storage::engine) fn move_floating_object_typed(
 
 pub(in crate::storage::engine) fn resize_floating_object_typed(
     stores: &mut EngineStores,
+    cell_store: &crate::cells::CellStore,
     sheet_id: &SheetId,
     object_id: &str,
     config: ResizeConfig,
@@ -259,8 +263,8 @@ pub(in crate::storage::engine) fn resize_floating_object_typed(
     );
     let bounds = updated.as_ref().and_then(|v| {
         compute_object_pixel_bounds(
-            stores.grid_indexes.get(sheet_id),
-            stores.layout_indexes.get(sheet_id),
+            cell_store.get_sheet(sheet_id),
+            stores.pixel_layout(sheet_id).as_deref(),
             v,
         )
     });
@@ -280,6 +284,7 @@ pub(in crate::storage::engine) fn resize_floating_object_typed(
 
 pub(in crate::storage::engine) fn rotate_floating_object_typed(
     stores: &mut EngineStores,
+    cell_store: &crate::cells::CellStore,
     sheet_id: &SheetId,
     object_id: &str,
     rotation: f64,
@@ -292,8 +297,8 @@ pub(in crate::storage::engine) fn rotate_floating_object_typed(
     );
     let bounds = updated.as_ref().and_then(|v| {
         compute_object_pixel_bounds(
-            stores.grid_indexes.get(sheet_id),
-            stores.layout_indexes.get(sheet_id),
+            cell_store.get_sheet(sheet_id),
+            stores.pixel_layout(sheet_id).as_deref(),
             v,
         )
     });
@@ -335,6 +340,7 @@ pub(in crate::storage::engine) fn update_shape_style(
 
 pub(in crate::storage::engine) fn flip_floating_object_typed(
     stores: &mut EngineStores,
+    cell_store: &crate::cells::CellStore,
     sheet_id: &SheetId,
     object_id: &str,
     axis: FlipAxis,
@@ -347,8 +353,8 @@ pub(in crate::storage::engine) fn flip_floating_object_typed(
     );
     let bounds = updated.as_ref().and_then(|v| {
         compute_object_pixel_bounds(
-            stores.grid_indexes.get(sheet_id),
-            stores.layout_indexes.get(sheet_id),
+            cell_store.get_sheet(sheet_id),
+            stores.pixel_layout(sheet_id).as_deref(),
             v,
         )
     });
@@ -368,6 +374,7 @@ pub(in crate::storage::engine) fn flip_floating_object_typed(
 
 pub(in crate::storage::engine) fn duplicate_floating_object_typed(
     stores: &mut EngineStores,
+    cell_store: &crate::cells::CellStore,
     sheet_id: &SheetId,
     object_id: &str,
     offset_x: f64,
@@ -386,8 +393,8 @@ pub(in crate::storage::engine) fn duplicate_floating_object_typed(
     })?;
     let new_object_id = new_object_json["id"].as_str().unwrap_or("").to_string();
     let bounds = compute_object_pixel_bounds(
-        stores.grid_indexes.get(sheet_id),
-        stores.layout_indexes.get(sheet_id),
+        cell_store.get_sheet(sheet_id),
+        stores.pixel_layout(sheet_id).as_deref(),
         &new_object_json,
     );
     let data: Option<FloatingObject> = serde_json::from_value(new_object_json).ok();
@@ -433,14 +440,15 @@ pub(in crate::storage::engine) fn get_all_floating_objects_typed(
 
 pub(in crate::storage::engine) fn compute_all_object_bounds(
     stores: &EngineStores,
+    cell_store: &crate::cells::CellStore,
     sheet_id: &SheetId,
 ) -> Vec<(String, FloatingObjectBounds)> {
-    let grid = stores.grid_indexes.get(sheet_id);
-    let layout = stores.layout_indexes.get(sheet_id);
+    let grid = cell_store.get_sheet(sheet_id);
+    let layout = stores.pixel_layout(sheet_id);
     let all_objects = floating_objects::get_all_floating_objects(&stores.storage, sheet_id);
     let mut results = Vec::with_capacity(all_objects.len());
     for (object_id, obj_json) in &all_objects {
-        if let Some(bounds) = compute_object_pixel_bounds(grid, layout, obj_json) {
+        if let Some(bounds) = compute_object_pixel_bounds(grid, layout.as_deref(), obj_json) {
             results.push((object_id.clone(), bounds));
         }
     }

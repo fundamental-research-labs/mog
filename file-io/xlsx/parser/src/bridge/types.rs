@@ -1,7 +1,4 @@
-//! Bridge-specific serializable result types for the Tauri IPC boundary.
-//!
-//! This module provides serializable mirror types of the result types in
-//! `output::results`, for use by the Tauri bridge (native desktop path).
+//! Serializable mirrors of the result types in `output::results`.
 //!
 //! These types are intentionally kept in sync with their counterparts.
 //! When adding fields to the result types, add them here too.
@@ -12,7 +9,7 @@ use crate::output::results::ParseTimings;
 // BridgeParseTimings
 // =============================================================================
 
-/// Serializable mirror of [`ParseTimings`] for the Tauri IPC bridge.
+/// Serializable mirror of [`ParseTimings`].
 ///
 /// All 34 fields match `ParseTimings` exactly.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -101,7 +98,7 @@ impl From<&ParseTimings> for BridgeParseTimings {
 // BridgeLazyParseResult
 // =============================================================================
 
-/// Serializable lazy parse result for the Tauri IPC bridge.
+/// Serializable lazy parse result.
 ///
 /// Mirror of `LazyParseResult` with serialization support.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -121,7 +118,7 @@ pub struct BridgeLazyParseResult {
 // BridgeLazyParseResultWithErrors
 // =============================================================================
 
-/// Serializable lazy parse result with error recovery info for the Tauri IPC bridge.
+/// Serializable lazy parse result with error recovery info.
 ///
 /// Mirror of `LazyParseResultWithErrors` with serialization support.
 #[derive(Debug, Clone, serde::Serialize)]

@@ -17,7 +17,7 @@ fn lifecycle_copy_sheet() {
     let (_hex, _result) = engine.copy_sheet(&sid, "DataCopy").expect("copy_sheet");
 
     let copy_sid = engine
-        .mirror()
+        .cell_store()
         .sheet_by_name("DataCopy")
         .expect("copied sheet should exist");
 
@@ -36,7 +36,7 @@ fn lifecycle_copy_sheet() {
     // either the evaluated value or only a resolvable copied CellId.
     let sum = cell_at(&engine, &copy_sid, 0, 1);
     let copy_b1_cid = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&copy_sid, SheetPos::new(0, 1));
     assert!(
         (as_f64(&sum) - 55.0).abs() < 1e-9 || copy_b1_cid.is_some(),
@@ -52,7 +52,7 @@ fn copy_sheet_remaps_cell_properties_and_comments_to_copy_cell_ids() {
     let source_sid = sheet_id(0);
 
     let source_a1_id = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&source_sid, SheetPos::new(0, 0))
         .expect("source A1 cell id");
     let bold = CellFormat {
@@ -83,12 +83,12 @@ fn copy_sheet_remaps_cell_properties_and_comments_to_copy_cell_ids() {
         .copy_sheet(&source_sid, "DataCopy")
         .expect("copy_sheet");
     let copy_sid = engine
-        .mirror()
+        .cell_store()
         .sheet_by_name("DataCopy")
         .expect("copied sheet should exist");
 
     let copy_a1_id = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&copy_sid, SheetPos::new(0, 0))
         .expect("copy A1 cell id");
     assert_ne!(source_a1_id, copy_a1_id, "copy must get fresh cell ids");
@@ -96,7 +96,7 @@ fn copy_sheet_remaps_cell_properties_and_comments_to_copy_cell_ids() {
     assert_eq!(copy_format.bold, Some(true), "copy A1 should stay bold");
 
     let copy_b1_id = engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(&copy_sid, SheetPos::new(0, 1))
         .expect("copy B1 cell id");
     let copy_comments = engine.get_comments_for_cell_by_position(&copy_sid, 0, 1);
@@ -136,7 +136,7 @@ fn copy_sheet_preserves_existing_cross_sheet_dependency_edges() {
         .copy_sheet(&sheet1_sid, "Sheet1 (2)")
         .expect("copy_sheet");
     let copy_sid = engine
-        .mirror()
+        .cell_store()
         .sheet_by_name("Sheet1 (2)")
         .expect("copied sheet should exist");
 

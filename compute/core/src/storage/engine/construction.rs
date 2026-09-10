@@ -12,12 +12,12 @@ use std::sync::Arc;
 use rustc_hash::FxHashMap;
 
 use cell_types::{AxisIdentityStore, CellId, ColId, IdAllocator, RowId, SheetId};
-use compute_layout_index::LayoutIndex;
+use compute_layout_index::PixelLayout;
 use value_types::ComputeError;
 
+use crate::cells::CellStore;
 use crate::identity::GridIndex;
-use crate::mirror::CellMirror;
-use crate::range_manager::RangeSpatialIndex;
+use crate::range_manager::MergeList;
 use crate::scheduler::ComputeCore;
 use crate::snapshot::{RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use crate::storage::WorkbookStorage;
@@ -28,11 +28,11 @@ use crate::storage::workbook::{
 use domain_types::{self, ImportedCellProjectionRole};
 use formula_types::{NamedRangeDef, Scope};
 
+use super::ComputeEngine;
 use super::merge_index::{MergeRangeRef, MergeSpatialItem};
 use super::settings::EngineSettings;
 use super::stores::EngineStores;
 use super::viewport::service::ViewportService;
-use super::{ComputeEngine, MutationCoordinator};
 use compute_document::hex::hex_to_id;
 
 mod assembly;
@@ -58,13 +58,12 @@ pub(super) use deferred::{
     commit_deferred_hydration, import_from_xlsx_bytes_deferred, stage_deferred_hydration,
 };
 pub(super) use indexes::{
-    build_grid_indexes, build_grid_indexes_from_allocations_range, build_layout_index_for_sheet,
-    build_layout_indexes, build_layout_indexes_from_parse_output_range, build_merge_indexes,
-    build_merge_indexes_from_parse_output_range,
+    build_grid_indexes, build_grid_indexes_from_allocations_range, build_merge_indexes,
+    build_merge_indexes_from_parse_output_range, build_pixel_layout_for_sheet,
 };
 pub(super) use named_ranges::{defined_names_to_named_range_defs, normalize_named_range_refs};
 pub(super) use range_styles::{build_imported_range_style_plan, range_style_formats_enabled};
-pub(in crate::storage::engine) use rebuild::build_finalized_mirror_from_snapshot;
+pub(in crate::storage::engine) use rebuild::build_finalized_store_from_snapshot;
 pub(super) use runtime::{
     collect_imported_formats, derive_settings, install_imported_formats, load_theme_palette,
     sync_enable_calculation_flags,

@@ -89,7 +89,7 @@ fn cell_id_at(
     col: u32,
 ) -> cell_types::CellId {
     engine
-        .mirror()
+        .cell_store()
         .resolve_cell_id(sheet_id, SheetPos::new(row, col))
         .unwrap_or_else(|| panic!("missing cell at row {row}, col {col}"))
 }
@@ -178,7 +178,7 @@ fn empty_formula_metadata_survives_parse_native_export_without_formula_registrat
     );
 
     let (engine, _) = ComputeEngine::from_xlsx_bytes(&source).expect("hydrate source fixture");
-    let sheet_id = *engine.mirror().sheet_ids().next().expect("sheet id");
+    let sheet_id = *engine.cell_store().sheet_ids().next().expect("sheet id");
     for (label, row, col) in [("array follower C1", 0, 2), ("standalone D1", 0, 3)] {
         let cell_id = cell_id_at(&engine, &sheet_id, row, col);
         assert_eq!(

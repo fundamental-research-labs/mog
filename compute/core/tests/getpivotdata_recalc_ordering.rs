@@ -2,7 +2,7 @@
 //!
 //! `ComputeEngine::recalculate*()` must materialize stored pivot output before
 //! full formula recalculation. GETPIVOTDATA reads the rendered pivot region
-//! through the cell mirror, so stale or absent pivot output would make the
+//! through the cell store, so stale or absent pivot output would make the
 //! formula evaluate to the wrong value.
 
 use cell_types::{SheetId, SheetPos};
@@ -127,7 +127,7 @@ fn pivot_sheet_id() -> SheetId {
 
 fn getpivotdata_value(engine: &ComputeEngine) -> f64 {
     match engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&pivot_sheet_id(), SheetPos::new(0, 6))
     {
         Some(CellValue::Number(n)) => n.get(),
@@ -137,7 +137,7 @@ fn getpivotdata_value(engine: &ComputeEngine) -> f64 {
                     (0..3)
                         .map(|col| {
                             engine
-                                .mirror()
+                                .cell_store()
                                 .get_cell_value_at(&pivot_sheet_id(), SheetPos::new(row, col))
                                 .cloned()
                         })
@@ -146,7 +146,7 @@ fn getpivotdata_value(engine: &ComputeEngine) -> f64 {
                 .collect();
             panic!(
                 "expected GETPIVOTDATA formula to evaluate to 30, got {other:?}; pivot cells: {pivot_cells:?}; pivot defs: {:?}",
-                engine.mirror().all_pivot_tables()
+                engine.cell_store().all_pivot_tables()
             );
         }
     }
@@ -217,11 +217,11 @@ fn native_overall_totals_follow_each_rendered_measure_for_every_axis_layout() {
             for (row, expected) in [(20, 37.0), (21, 3.0), (22, 2.0)] {
                 assert_eq!(
                     engine
-                        .mirror()
+                        .cell_store()
                         .get_cell_value_at(&pivot_sheet_id(), SheetPos::new(row, 0)),
                     Some(&CellValue::Number(FiniteF64::must(expected))),
                     "row_group={row_group}, col_group={col_group}; defs={:?}",
-                    engine.mirror().all_pivot_tables()
+                    engine.cell_store().all_pivot_tables()
                 );
             }
         }
@@ -336,7 +336,7 @@ fn imported_overall_totals_use_axis_measure_indices_on_either_axis() {
                     for row in [0, 1] {
                         assert_eq!(
                             preserved
-                                .mirror()
+                                .cell_store()
                                 .get_cell_value_at(&sheet, SheetPos::new(row, 0)),
                             Some(&CellValue::number(0.0)),
                             "preserve-cache export/reimport must not calculate"
@@ -357,11 +357,11 @@ fn imported_overall_totals_use_axis_measure_indices_on_either_axis() {
                     };
                     assert_eq!(
                         engine
-                            .mirror()
+                            .cell_store()
                             .get_cell_value_at(&sheet, SheetPos::new(row, 0)),
                         Some(&expected),
                         "on_rows={data_on_rows}, totals={include_totals}, roundtrip={roundtrip}; defs={:?}",
-                        engine.mirror().all_pivot_tables()
+                        engine.cell_store().all_pivot_tables()
                     );
                 }
                 if roundtrip == 0 {
@@ -417,7 +417,7 @@ fn overall_totals_require_one_in_bounds_cell_for_the_requested_measure() {
         };
         assert_eq!(
             engine
-                .mirror()
+                .cell_store()
                 .get_cell_value_at(&pivot_sheet_id(), SheetPos::new(0, 6)),
             Some(&expected)
         );

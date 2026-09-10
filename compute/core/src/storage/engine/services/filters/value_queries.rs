@@ -1,4 +1,4 @@
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::services::resolved_formats;
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::EngineStores;
@@ -8,13 +8,13 @@ use value_types::{CellValue, DateSystem};
 
 pub(super) fn get_unique_column_values(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     filter_id: &str,
     header_col: u32,
 ) -> Vec<CellValue> {
     let header_cell_id =
-        match super::resolve_header_col(stores, mirror, sheet_id, filter_id, header_col) {
+        match super::resolve_header_col(stores, cell_store, sheet_id, filter_id, header_col) {
             Some(id) => id,
             None => return vec![],
         };
@@ -26,44 +26,46 @@ pub(super) fn get_unique_column_values(
         &header_cell_id,
         |row, col| {
             let pos = SheetPos::new(row, col);
-            mirror
+            cell_store
                 .get_cell_value_at(&sid, pos)
                 .cloned()
                 .unwrap_or(CellValue::Null)
         },
-        |hex| super::resolve_filter_cell_pos(stores, mirror, sheet_id, hex),
+        |hex| super::resolve_filter_cell_pos(cell_store, sheet_id, hex),
     )
 }
 
 pub(super) fn get_filtered_record_count(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     settings: &EngineSettings,
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Option<filters::FilterRecordCount> {
     let filter = crate::storage::engine::services::imported_filter_runtime::project_imported_date_group_filters_for_evaluation(
-        stores, mirror, sheet_id, filter_id,
+        stores, cell_store, sheet_id, filter_id,
     );
     let sid = *sheet_id;
     let icons = crate::storage::engine::services::cf_cache::evaluate_filter_icons(
-        stores, mirror, sheet_id, filter_id,
+        stores, cell_store, sheet_id, filter_id,
     );
     let results = filters::evaluate_filter_state_with_date_system(
         filter.as_ref(),
         |row, col| {
             let pos = SheetPos::new(row, col);
-            mirror
+            cell_store
                 .get_cell_value_at(&sid, pos)
                 .cloned()
                 .unwrap_or(CellValue::Null)
         },
         |row, col| {
-            resolved_formats::get_resolved_cell_format(stores, mirror, settings, sheet_id, row, col)
+            resolved_formats::get_resolved_cell_format(
+                stores, cell_store, settings, sheet_id, row, col,
+            )
         },
         |row, col| icons.get(&(row, col)).cloned(),
-        |hex| super::resolve_filter_cell_pos(stores, mirror, sheet_id, hex),
-        DateSystem::from_date1904(mirror.date1904),
+        |hex| super::resolve_filter_cell_pos(cell_store, sheet_id, hex),
+        DateSystem::from_date1904(cell_store.date1904),
     );
     if results.is_empty() {
         return None;

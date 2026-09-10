@@ -1,9 +1,9 @@
-use cell_types::{CellId, RangePos, SheetId, SheetPos};
+use cell_types::{RangePos, SheetId, SheetPos};
 use compute_document::hex::id_to_hex;
 use value_types::{CellValue, ComputeError};
 
-use crate::mirror::CellMirror;
-use crate::snapshot::{CellChange, CellPosition, RecalcResult};
+use crate::cells::CellStore;
+use crate::snapshot::RecalcResult;
 use crate::snapshot::{ChangeKind, PivotTableChange, TableChange};
 use crate::storage::engine::services::{metadata_shift, mutation};
 use crate::storage::engine::stores::EngineStores;
@@ -19,7 +19,7 @@ use super::patches::{merge_recalc_results, synthetic_null_change};
 #[allow(clippy::too_many_arguments)]
 pub(in crate::storage::engine) fn mutation_relocate_cells(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     source_sheet_id: &SheetId,
     src_start_row: u32,
     src_start_col: u32,
@@ -41,7 +41,7 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
     use crate::storage::infra::cell_iter;
 
     // Range guard: reject if the source sheet is Range-backed.
-    if mirror
+    if cell_store
         .get_sheet(source_sheet_id)
         .is_some_and(|s| !s.range_views_is_empty())
     {
@@ -61,7 +61,7 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
 
     crate::storage::engine::history::relocate::capture_relocation(
         stores,
-        mirror,
+        cell_store,
         *source_sheet_id,
         src_start_row,
         src_start_col,
@@ -71,78 +71,22 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
         target_row,
         target_col,
     );
-    let result = if source_sheet_id == target_sheet_id {
-        let grid = stores
-            .grid_indexes
-            .get_mut(source_sheet_id)
-            .ok_or_else(|| ComputeError::SheetNotFound {
-                sheet_id: id_to_hex(source_sheet_id.as_u128()).to_string(),
-            })?;
-        let result = cell_iter::relocate_cells(
-            &mut stores.storage,
-            *source_sheet_id,
-            &source_range,
-            *target_sheet_id,
-            target_row,
-            target_col,
-            grid,
-            None,
-        );
-        result
-    } else {
-        // Cross-sheet: need mutable borrows of two different grids. `get_many_mut`
-        // isn't available, so split the map with `iter_mut` + a match.
-        let (src_grid, tgt_grid) = {
-            let mut src: Option<&mut _> = None;
-            let mut tgt: Option<&mut _> = None;
-            for (sid, grid) in stores.grid_indexes.iter_mut() {
-                if sid == source_sheet_id {
-                    src = Some(grid);
-                } else if sid == target_sheet_id {
-                    tgt = Some(grid);
-                }
-            }
-            match (src, tgt) {
-                (Some(s), Some(t)) => (s, t),
-                _ => {
-                    return Err(ComputeError::SheetNotFound {
-                        sheet_id: format!(
-                            "source={} target={}",
-                            id_to_hex(source_sheet_id.as_u128()),
-                            id_to_hex(target_sheet_id.as_u128())
-                        ),
-                    });
-                }
-            }
-        };
-        let result = cell_iter::relocate_cells(
-            &mut stores.storage,
-            *source_sheet_id,
-            &source_range,
-            *target_sheet_id,
-            target_row,
-            target_col,
-            src_grid,
-            Some(tgt_grid),
-        );
-        result
-    };
-
-    let region_mutation = if result.moved_cell_ids.is_empty() {
-        data_tables::DataTableRegionMutation::default()
-    } else {
-        data_tables::relocate_regions(
-            mirror,
-            source_sheet_id,
-            src_start_row,
-            src_start_col,
-            src_end_row,
-            src_end_col,
-            target_sheet_id,
-            target_row,
-            target_col,
-        )
-    };
+    for sid in [source_sheet_id, target_sheet_id] {
+        if cell_store.get_sheet(sid).is_none() {
+            return Err(ComputeError::SheetNotFound {
+                sheet_id: sid.to_uuid_string(),
+            });
+        }
+    }
+    let result = cell_iter::relocate_cells(
+        &mut stores.storage,
+        *source_sheet_id,
+        &source_range,
+        *target_sheet_id,
+        target_row,
+        target_col,
+        cell_store,
+    );
 
     metadata_shift::relocate_validation_ranges(
         stores,
@@ -157,7 +101,7 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
     );
     let table_changes = relocate_whole_tables(
         stores,
-        mirror,
+        cell_store,
         source_sheet_id,
         src_start_row,
         src_start_col,
@@ -175,7 +119,7 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
     let source_sheet_hex = source_sheet_id.to_uuid_string();
     let pivot_changes: Vec<PivotTableChange> = metadata_shift::relocate_pivot_ranges(
         stores,
-        mirror,
+        cell_store,
         source_sheet_id,
         src_start_row,
         src_start_col,
@@ -193,68 +137,79 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
     })
     .collect();
 
-    if let Some(grid) = stores.grid_indexes.get(target_sheet_id) {
-        mirror.install_sheet_axes(*target_sheet_id, grid.row_axis(), grid.col_axis());
-    }
-
-    // 2. Sync mirror and compute for all affected cells. The GridIndex is
-    //    already in its final state post-relocation, so we can look up
-    //    target positions straight from it.
-    let mut moved_validation_edits: Vec<(SheetId, CellId, u32, u32, CellValue, Option<String>)> =
-        Vec::new();
-    let mut moved_cell_ids = Vec::new();
-    let mut clear_ids: Vec<CellId> = Vec::new();
-
-    for &cell_id in &result.target_cells_cleared {
-        stores.storage.clear_cell_metadata(cell_id);
-        clear_ids.push(cell_id);
-    }
-
-    for &cell_id in &result.moved_cell_ids {
-        if let Some(grid) = stores.grid_indexes.get(target_sheet_id)
-            && let Some((new_row, new_col)) = grid.cell_position(&cell_id)
-        {
-            let value = mirror.get_cell_value_raw(&cell_id).cloned();
-            mirror.move_cell(&cell_id, target_sheet_id, SheetPos::new(new_row, new_col));
-            let array_ref = stores
-                .storage
-                .cell_metadata(&cell_id)
-                .and_then(|metadata| metadata.array_ref.as_deref());
-            mutation::reconcile_persisted_array_ref(mirror, target_sheet_id, &cell_id, array_ref);
-            if let Some(value) = value {
-                moved_validation_edits.push((
-                    *target_sheet_id,
-                    cell_id,
-                    new_row,
-                    new_col,
-                    value,
-                    None,
-                ));
-            }
-            moved_cell_ids.push(cell_id);
-        }
-    }
-
-    let stale_table_recalc = reconcile_data_table_cells(stores, mirror, &region_mutation)?;
-
-    // filter viewport R5.3: emit clear-patches for the target-cleared range.
-    // The clear pass populates `recalc.changed_cells` with `Null` entries
-    // for each cell displaced by the move so the viewport buffer
-    // atomically transitions away from the old values; previously this
-    // was discarded via `let _ =` and the source cells stayed in the
-    // buffer until a viewport refresh.
-    crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
-    let clear_recalc = if clear_ids.is_empty() {
+    // Clear displaced cells while their old positions are still available to recalc.
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
+    let clear_recalc = if result.target_cells_cleared.is_empty() {
         RecalcResult::empty()
     } else {
-        stores.compute.clear_cells(mirror, &clear_ids)?
+        stores
+            .compute
+            .clear_cells(cell_store, &result.target_cells_cleared)?
     };
+    for id in &result.target_cells_cleared {
+        cell_store.remove_cell(id);
+    }
+    let moves: Vec<_> = result
+        .moved_cell_ids
+        .iter()
+        .zip(&result.source_positions_vacated)
+        .map(|(&id, &(row, col))| {
+            (
+                id,
+                *target_sheet_id,
+                SheetPos::new(
+                    target_row + row - src_start_row,
+                    target_col + col - src_start_col,
+                ),
+            )
+        })
+        .collect();
+    cell_store.move_cells(&moves);
+    super::super::super::cell_editing::sync_grid_axes(stores, cell_store);
+    let moved_cell_ids = result.moved_cell_ids.clone();
+    let moved_validation_edits: Vec<_> = moves
+        .iter()
+        .filter_map(|(id, sid, pos)| {
+            cell_store
+                .get_cell_value_raw(id)
+                .cloned()
+                .map(|value| (*sid, *id, pos.row(), pos.col(), value, None))
+        })
+        .collect();
 
     if !moved_validation_edits.is_empty() {
         stores
             .compute
-            .validate_raw_user_edit_region_writes(mirror, &moved_validation_edits)?;
+            .validate_raw_user_edit_region_writes(cell_store, &moved_validation_edits)?;
     }
+
+    let region_mutation = if result.moved_cell_ids.is_empty() {
+        data_tables::DataTableRegionMutation::default()
+    } else {
+        data_tables::relocate_regions(
+            cell_store,
+            source_sheet_id,
+            src_start_row,
+            src_start_col,
+            src_end_row,
+            src_end_col,
+            target_sheet_id,
+            target_row,
+            target_col,
+        )
+    };
+    for (cell_id, sheet_id, _) in &moves {
+        let array_ref = stores
+            .storage
+            .cell_metadata(cell_id)
+            .and_then(|metadata| metadata.array_ref.as_deref());
+        mutation::reconcile_persisted_array_ref(cell_store, sheet_id, cell_id, array_ref);
+    }
+    let stale_table_recalc = reconcile_data_table_cells(stores, cell_store, &region_mutation)?;
 
     let mut recalc = if moved_cell_ids.is_empty() {
         clear_recalc
@@ -264,90 +219,36 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
         // shifts and can drop identity references that were already correct.
         stores
             .compute
-            .regenerate_formula_strings_and_cell_formula_text(mirror);
-        let mut moved_recalc = stores.compute.recalc(mirror, &moved_cell_ids)?;
-        append_moved_cell_target_changes(stores, mirror, &mut moved_recalc, &moved_cell_ids);
+            .regenerate_formula_strings_and_cell_formula_text(cell_store);
+        let mut moved_recalc = stores.compute.recalc(cell_store, &moved_cell_ids)?;
+        super::super::super::cell_editing::append_position_changes(
+            stores,
+            cell_store,
+            &mut moved_recalc,
+            moves
+                .iter()
+                .map(|(_, sheet, pos)| (*sheet, pos.row(), pos.col())),
+        );
         merge_recalc_results(&mut moved_recalc, clear_recalc);
         moved_recalc
     };
 
     merge_recalc_results(&mut recalc, stale_table_recalc);
-
-    // 3. Source-position clear pass.
-    //
-    // R5.3 covered `target_cells_cleared` (pre-existing destination cells
-    // displaced by the move) but NOT the source positions the moved cells
-    // vacated. Same-sheet cut-paste therefore left the source viewport
-    // buffer showing stale values: `register_cell` cleaned up the grid
-    // index but no patch was emitted for the old positions, so the
-    // buffered value at A1 stayed visible until a full viewport refresh.
-    //
-    // R5.3 deleted the kernel-side `onCutPasteComplete` band-aid on the
-    // premise that the Rust patch channel handled this. It didn't — fix
-    // is here.
-    //
-    // We append synthetic Null `CellChange` entries (position-keyed,
-    // empty `cell_id` since no live CellId remains at the vacated
-    // position) for each source position that's now empty. These flow
-    // through `flush_viewport_patches()` the same way target writes do;
-    // the binary patch's value-type bits are `Null` (0), which tells the
-    // viewport buffer the cell is empty.
-    //
-    // Filter out source positions that now host a moved CellId — overlap
-    // case (e.g. moving A1:A3 to A2:A4 keeps A2 and A3 occupied by the
-    // moved cells). Emitting Null at those positions would shadow the
-    // valid destination write that already lives in `recalc.changed_cells`.
-    if !result.source_positions_vacated.is_empty() {
-        let post_grid_has = |row: u32, col: u32| {
-            stores
-                .grid_indexes
-                .get(source_sheet_id)
-                .and_then(|g| g.cell_id_at(row, col))
-                .is_some()
-        };
-        let mut source_clears = Vec::with_capacity(result.source_positions_vacated.len());
-        for &(row, col) in &result.source_positions_vacated {
-            // If a CellId still occupies this position post-relocate, the
-            // destination write (or an overlap-survivor) already produces
-            // the correct patch. Skip.
-            if post_grid_has(row, col) {
-                continue;
-            }
-
-            // Same-sheet relocate corrupts the mirror at the source
-            // position: `apply_edit` for the moved cell wrote the new
-            // (row,col) into `pos_to_id`/`id_to_pos`/`col_data` but did
-            // NOT erase the old (row,col). The old `pos_to_id[(r,c)]`
-            // still points at the moved CellId, and `col_data[col][row]`
-            // still holds the old value. `for_each_cell_in_range` (the
-            // production read path the kernel's `getCellsViaBridge`
-            // fallback uses) sees `cell_id_at(r,c)=None` (grid is
-            // right) but falls through to
-            // `mirror.get_cell_value_at((r,c))` which returns the
-            // stale value, so `query_range` reports the source cell
-            // as still occupied. Cross-sheet doesn't hit this because
-            // the source sheet's mirror entry never had the moved
-            // CellId at the new position to begin with — only
-            // same-sheet has the dual-mapping problem.
-            //
-            // Restore mirror coherence by vacating the position. The
-            // CellId itself stays alive (it's at the new position
-            // now); we only clear the position→id and col_data
-            // entries left behind.
-            mirror.vacate_position(source_sheet_id, SheetPos::new(row, col));
-
-            source_clears.push(synthetic_null_change(source_sheet_id, row, col));
-        }
-        if !source_clears.is_empty() {
-            let mut source_recalc = RecalcResult::empty();
-            source_recalc.changed_cells = source_clears;
-            merge_recalc_results(&mut recalc, source_recalc);
+    // Report source positions that became empty, including overlap handling.
+    for &(row, col) in &result.source_positions_vacated {
+        if cell_store
+            .resolve_cell_id(source_sheet_id, SheetPos::new(row, col))
+            .is_none()
+        {
+            recalc
+                .changed_cells
+                .push(synthetic_null_change(source_sheet_id, row, col));
         }
     }
 
     stores
         .compute
-        .regenerate_formula_strings_and_cell_formula_text(mirror);
+        .regenerate_formula_strings_and_cell_formula_text(cell_store);
 
     let moved_ids: Vec<String> = result
         .moved_cell_ids
@@ -369,68 +270,17 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
 
     crate::storage::sheet::comments::relocate_anchors(
         &mut stores.storage,
-        mirror,
+        cell_store,
         source_sheet_id,
         target_sheet_id,
     );
     Ok((recalc, relocate_result, table_changes, pivot_changes))
 }
 
-fn append_moved_cell_target_changes(
-    stores: &EngineStores,
-    mirror: &CellMirror,
-    recalc: &mut RecalcResult,
-    moved_cell_ids: &[CellId],
-) {
-    for cell_id in moved_cell_ids {
-        let Some(sheet_id) = mirror.sheet_for_cell(cell_id) else {
-            continue;
-        };
-        let Some(pos) = mirror.resolve_position(cell_id) else {
-            continue;
-        };
-        let sheet_id_str = sheet_id.to_uuid_string();
-        let value = stores
-            .compute
-            .get_cell_value(mirror, cell_id)
-            .cloned()
-            .or_else(|| mirror.get_cell_value(cell_id).cloned())
-            .unwrap_or(CellValue::Null);
-        let mut change = CellChange {
-            cell_id: cell_id.to_uuid_string(),
-            sheet_id: sheet_id_str,
-            position: Some(CellPosition {
-                row: pos.row(),
-                col: pos.col(),
-            }),
-            value,
-            display_text: None,
-            old_display_text: None,
-            old_formula: None,
-            new_formula: None,
-            number_format: None,
-            format_idx: None,
-            extra_flags: 0,
-            old_value: None,
-        };
-        if let Some(existing) = recalc.changed_cells.iter_mut().find(|existing| {
-            existing.sheet_id == change.sheet_id
-                && existing.position.as_ref().is_some_and(|existing_pos| {
-                    existing_pos.row == pos.row() && existing_pos.col == pos.col()
-                })
-        }) {
-            change.old_value = existing.old_value.take();
-            *existing = change;
-        } else {
-            recalc.changed_cells.push(change);
-        }
-    }
-}
-
 #[allow(clippy::too_many_arguments)]
 fn relocate_whole_tables(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     source_sheet_id: &SheetId,
     src_start_row: u32,
     src_start_col: u32,
@@ -442,7 +292,7 @@ fn relocate_whole_tables(
 ) -> Vec<TableChange> {
     let source_sheet_hex = source_sheet_id.to_uuid_string();
     let target_sheet_hex = target_sheet_id.to_uuid_string();
-    let tables_to_move: Vec<_> = mirror
+    let tables_to_move: Vec<_> = cell_store
         .all_tables()
         .iter()
         .filter(|table| {
@@ -477,7 +327,7 @@ fn relocate_whole_tables(
             target_start_row + table_row_span,
             target_start_col + table_col_span,
         );
-        stores.compute.set_table(mirror, table.clone());
+        stores.compute.set_table(cell_store, table.clone());
         changes.push(TableChange {
             name: table.name,
             table_id: Some(table.id),
@@ -492,26 +342,21 @@ fn relocate_whole_tables(
 /// Remove orphan TABLE dependencies and preserve their current cached values.
 pub(super) fn reconcile_data_table_cells(
     stores: &mut EngineStores,
-    mirror: &mut CellMirror,
+    cell_store: &mut CellStore,
     mutation: &data_tables::DataTableRegionMutation,
 ) -> Result<RecalcResult, ComputeError> {
     let mut edits = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for (sheet, sr, sc, er, ec) in &mutation.formula_ranges {
-        let ids: Vec<_> = stores
-            .grid_indexes
-            .get(sheet)
-            .map(|grid| {
-                grid.cells_in_range(*sr, *sc, *er, *ec)
-                    .map(|(id, _, _)| id)
-                    .collect()
-            })
-            .unwrap_or_default();
+        let ids: Vec<_> = cell_store
+            .cells_in_range(sheet, *sr, *sc, *er, *ec)
+            .map(|(id, _, _)| id)
+            .collect();
         for id in &ids {
-            if let Some(pos) = mirror.resolve_position(id) {
+            if let Some(pos) = cell_store.resolve_position(id) {
                 crate::storage::engine::history::cells::capture_cell(
                     stores,
-                    mirror,
+                    cell_store,
                     *sheet,
                     *id,
                     pos.row(),
@@ -519,12 +364,14 @@ pub(super) fn reconcile_data_table_cells(
                 );
             }
         }
-        for id in data_tables::clear_table_formula_cells(&mut stores.storage, mirror, sheet, &ids) {
+        for id in
+            data_tables::clear_table_formula_cells(&mut stores.storage, cell_store, sheet, &ids)
+        {
             if !seen.insert(id) {
                 continue;
             }
-            if let Some(pos) = mirror.resolve_position(&id) {
-                let value = mirror
+            if let Some(pos) = cell_store.resolve_position(&id) {
+                let value = cell_store
                     .get_cell_value_raw(&id)
                     .cloned()
                     .unwrap_or(CellValue::Null);
@@ -535,9 +382,13 @@ pub(super) fn reconcile_data_table_cells(
     if edits.is_empty() {
         return Ok(RecalcResult::empty());
     }
-    crate::storage::engine::cell_metadata::refresh(&stores.storage, mirror, stores.layout_metrics);
+    crate::storage::engine::cell_metadata::refresh(
+        &stores.storage,
+        cell_store,
+        stores.layout_metrics,
+    );
     stores.compute.set_cells_raw_with_trust(
-        mirror,
+        cell_store,
         &edits,
         true,
         crate::scheduler::WriteTrust::TrustedReplay,

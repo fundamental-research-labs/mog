@@ -88,7 +88,7 @@ impl SheetObjects {
         let sid = self.sheet_id;
         let cfg = config.clone();
         self.dispatch
-            .call_engine(move |e| e.create_floating_object(&sid, &cfg).map(|(_, r)| r))
+            .call_engine(move |e| e.create_floating_object(&sid, &cfg))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -102,7 +102,7 @@ impl SheetObjects {
         let oid = object_id.to_string();
         let upd = updates.clone();
         self.dispatch
-            .call_engine(move |e| e.update_floating_object(&sid, &oid, &upd).map(|(_, r)| r))
+            .call_engine(move |e| e.update_floating_object(&sid, &oid, &upd))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -111,7 +111,7 @@ impl SheetObjects {
         let sid = self.sheet_id;
         let oid = object_id.to_string();
         self.dispatch
-            .call_engine(move |e| e.delete_floating_object(&sid, &oid).map(|(_, r)| r))
+            .call_engine(move |e| e.delete_floating_object(&sid, &oid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -120,7 +120,7 @@ impl SheetObjects {
         let sid = self.sheet_id;
         let oid = object_id.to_string();
         self.dispatch
-            .call_engine(move |e| e.bring_floating_object_to_front(&sid, &oid).map(|(_, r)| r))
+            .call_engine(move |e| e.bring_floating_object_to_front(&sid, &oid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -129,7 +129,7 @@ impl SheetObjects {
         let sid = self.sheet_id;
         let oid = object_id.to_string();
         self.dispatch
-            .call_engine(move |e| e.send_floating_object_to_back(&sid, &oid).map(|(_, r)| r))
+            .call_engine(move |e| e.send_floating_object_to_back(&sid, &oid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -138,7 +138,7 @@ impl SheetObjects {
         let sid = self.sheet_id;
         let oid = object_id.to_string();
         self.dispatch
-            .call_engine(move |e| e.bring_floating_object_forward(&sid, &oid).map(|(_, r)| r))
+            .call_engine(move |e| e.bring_floating_object_forward(&sid, &oid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -147,7 +147,7 @@ impl SheetObjects {
         let sid = self.sheet_id;
         let oid = object_id.to_string();
         self.dispatch
-            .call_engine(move |e| e.send_floating_object_backward(&sid, &oid).map(|(_, r)| r))
+            .call_engine(move |e| e.send_floating_object_backward(&sid, &oid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -162,7 +162,7 @@ impl SheetObjects {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.create_shape(&sid, config).map(|(_, r)| r))
+            .call_engine(move |e| e.create_shape(&sid, config))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -175,10 +175,7 @@ impl SheetObjects {
         let sid = self.sheet_id;
         let oid = object_id.to_string();
         self.dispatch
-            .call_engine(move |e| {
-                e.move_floating_object_typed(&sid, &oid, target)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.move_floating_object_typed(&sid, &oid, target))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -191,10 +188,7 @@ impl SheetObjects {
         let sid = self.sheet_id;
         let oid = object_id.to_string();
         self.dispatch
-            .call_engine(move |e| {
-                e.resize_floating_object_typed(&sid, &oid, config)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.resize_floating_object_typed(&sid, &oid, config))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -207,10 +201,7 @@ impl SheetObjects {
         let sid = self.sheet_id;
         let oid = object_id.to_string();
         self.dispatch
-            .call_engine(move |e| {
-                e.rotate_floating_object_typed(&sid, &oid, rotation)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.rotate_floating_object_typed(&sid, &oid, rotation))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -223,7 +214,7 @@ impl SheetObjects {
         let sid = self.sheet_id;
         let oid = object_id.to_string();
         self.dispatch
-            .call_engine(move |e| e.update_shape_style(&sid, &oid, style).map(|(_, r)| r))
+            .call_engine(move |e| e.update_shape_style(&sid, &oid, style))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -236,10 +227,7 @@ impl SheetObjects {
         let sid = self.sheet_id;
         let oid = object_id.to_string();
         self.dispatch
-            .call_engine(move |e| {
-                e.flip_floating_object_typed(&sid, &oid, axis)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.flip_floating_object_typed(&sid, &oid, axis))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -253,10 +241,7 @@ impl SheetObjects {
         let sid = self.sheet_id;
         let oid = object_id.to_string();
         self.dispatch
-            .call_engine(move |e| {
-                e.duplicate_floating_object_typed(&sid, &oid, offset_x, offset_y)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.duplicate_floating_object_typed(&sid, &oid, offset_x, offset_y))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -272,7 +257,7 @@ impl SheetObjects {
         let sid = self.sheet_id;
         let cfg = config.clone();
         self.dispatch
-            .call_engine(move |e| e.create_floating_object_group(&sid, &cfg).map(|(_, r)| r))
+            .call_engine(move |e| e.create_floating_object_group(&sid, &cfg))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -286,10 +271,7 @@ impl SheetObjects {
         let gid = group_id.to_string();
         let upd = updates.clone();
         self.dispatch
-            .call_engine(move |e| {
-                e.update_floating_object_group(&sid, &gid, &upd)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.update_floating_object_group(&sid, &gid, &upd))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -298,7 +280,7 @@ impl SheetObjects {
         let sid = self.sheet_id;
         let gid = group_id.to_string();
         self.dispatch
-            .call_engine(move |e| e.delete_floating_object_group(&sid, &gid).map(|(_, r)| r))
+            .call_engine(move |e| e.delete_floating_object_group(&sid, &gid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 }

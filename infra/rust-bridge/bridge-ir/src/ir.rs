@@ -2,16 +2,14 @@
 //!
 //! These mirror `bridge-core`'s upstream descriptor shape (see
 //! `bridge-core/src/descriptor.rs`), but live here so that downstream target
-//! crates (bridge-napi-macros, bridge-cli-macros) — which consume the
+//! crates (`bridge-delegate-macros` and remaining descriptor consumers) — which consume the
 //! `__bridge_descriptor_*!` declarative-macro DSL, not the Rust impl block —
 //! can share a single IR instead of each maintaining their own parallel
 //! copy. bridge-core itself continues to build its own IR from the
 //! upstream Rust source and stays target-neutral there.
 //!
-//! Target-specific classification (e.g. bridge-napi's `ReturnInfo` with
-//! `is_bytes_tuple` / `is_self_tuple`, or bridge-cli's `CliView`
-//! projection) is layered on as a per-target extension trait over these
-//! types rather than living inside the IR itself.
+//! Target-specific classification is layered on as a per-target extension
+//! trait over these types rather than living inside the IR itself.
 
 use std::collections::BTreeMap;
 
@@ -28,8 +26,8 @@ pub struct ApiDescriptor {
     /// `Some(..)` when the impl block is `#[bridge::api(service = "...", key = "...")]`,
     /// `None` for pure stateless APIs.
     pub service: Option<ServiceMeta>,
-    /// Group name from `#[bridge::api(group = "...")]`, consumed by bridge-tauri
-    /// for module scoping and by bridge-delegate for descriptor naming.
+    /// Group name from `#[bridge::api(group = "...")]`, consumed by
+    /// bridge-delegate for descriptor naming.
     pub group_name: Option<String>,
     /// Optional function-name prefix override. When `Some(p)` with non-empty
     /// `p`, generated function names use `{p}_{method_name}`; `Some("")`
@@ -43,8 +41,7 @@ pub struct ApiDescriptor {
     /// Target-neutral metadata bag. `bridge-core`'s attribute parser drops any
     /// unrecognized `key = "value"` pair here verbatim; downstream targets
     /// layer an extension trait over this IR to read the keys they care
-    /// about (e.g. `bridge-cli` reads `cli_group`; `bridge-napi` ignores
-    /// every key). `BTreeMap` rather than `HashMap` so the emitted DSL is
+    /// about. `BTreeMap` rather than `HashMap` so the emitted DSL is
     /// deterministic across compilations.
     pub extras: BTreeMap<String, String>,
 }
@@ -59,10 +56,9 @@ pub struct ServiceMeta {
 /// How a method accesses state.
 ///
 /// The variants line up with `bridge-core::AccessLevel`. Downstream targets
-/// may collapse equivalent variants at codegen time (e.g. bridge-napi treats
-/// `Structural` like `Write` and `Session` like `Read` at the FFI shape
-/// level) — that collapse is a per-target concern and does not affect the
-/// shared IR.
+/// may collapse equivalent variants at codegen time (`Structural` like
+/// `Write`, `Session` like `Read` at the FFI shape level) — that collapse
+/// is a per-target concern and does not affect the shared IR.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AccessLevel {
     Pure,

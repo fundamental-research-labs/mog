@@ -2,19 +2,19 @@ use cell_types::SheetId;
 use formula_types::CellRef;
 use value_types::ComputeError;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::range_manager::{A1RangeRef, parse_range, stringify_range};
 
 use super::errors::invalid_data_table;
 use super::geometry::Rect;
 
 pub(super) fn resolve_range_sheet(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     default_sheet: &SheetId,
     range: &A1RangeRef,
 ) -> Result<SheetId, ComputeError> {
     match range.sheet_name.as_deref() {
-        Some(sheet_name) => mirror.sheet_by_name(sheet_name).ok_or_else(|| {
+        Some(sheet_name) => cell_store.sheet_by_name(sheet_name).ok_or_else(|| {
             invalid_data_table(
                 "DATA_TABLE_SHEET_NOT_FOUND",
                 &format!("sheet not found: {sheet_name}"),
@@ -25,7 +25,7 @@ pub(super) fn resolve_range_sheet(
 }
 
 pub(super) fn resolve_optional_input_cell(
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     default_sheet: &SheetId,
     raw: Option<&str>,
     label: &str,
@@ -46,7 +46,7 @@ pub(super) fn resolve_optional_input_cell(
             &format!("{label} must be a single cell"),
         ));
     }
-    let sheet = resolve_range_sheet(mirror, default_sheet, &range)?;
+    let sheet = resolve_range_sheet(cell_store, default_sheet, &range)?;
     Ok(Some((sheet, rect.start_row, rect.start_col)))
 }
 pub(super) fn rect_from_range(range: &A1RangeRef) -> Rect {

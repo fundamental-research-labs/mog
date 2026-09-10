@@ -4,7 +4,7 @@
 //!
 //! Since `ParseOutput` is position-keyed with no CellIds, we use
 //! `NamedRangeDef::from_expression` which stores the raw A1 `refers_to` string.
-//! The scheduler will resolve this to identity refs once the CellMirror is live.
+//! The scheduler will resolve this to identity refs once the CellStore is live.
 //!
 //! The `resolver` maps XLSX sheet indices to actual SheetIds so that
 //! sheet-scoped named ranges use the correct scope for variable lookup.
@@ -164,23 +164,34 @@ pub(crate) fn link_named_ranges_to_data_ranges(
             }
 
             for rd in &sheet.ranges {
-                if rd.kind != RangeKind::Data || rd.col_ids.len() != 1 {
+                if rd.kind != RangeKind::Data
+                    || rd
+                        .col_axis
+                        .as_ref()
+                        .map_or(rd.col_ids.len(), |axis| axis.len() as usize)
+                        != 1
+                {
                     continue;
                 }
-
-                // Check if the Data Range covers the same column.
-                if rd.col_ids[0] != nr_col_id {
+                let (rd_first_row, rd_last_row, rd_col) = match &rd.anchor {
+                    cell_types::RangeAnchor::Elastic {
+                        start_row,
+                        end_row,
+                        start_col,
+                        ..
+                    } => (*start_row, *end_row, *start_col),
+                    cell_types::RangeAnchor::Strict { row_ids, col_ids } => {
+                        let (Some(first), Some(last), Some(col)) =
+                            (row_ids.first(), row_ids.last(), col_ids.first())
+                        else {
+                            continue;
+                        };
+                        (*first, *last, *col)
+                    }
+                };
+                if rd_col != nr_col_id {
                     continue;
                 }
-
-                // Check if the Data Range's row span covers the named range's
-                // row span. The Data Range's row_ids are ordered, so the first
-                // and last give us the row span boundaries.
-                if rd.row_ids.is_empty() {
-                    continue;
-                }
-                let rd_first_row = rd.row_ids[0];
-                let rd_last_row = *rd.row_ids.last().unwrap();
 
                 // The named range is covered if its row span is a subset of
                 // the Data Range's row span.

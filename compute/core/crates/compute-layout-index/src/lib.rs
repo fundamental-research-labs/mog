@@ -1,21 +1,12 @@
-//! Spatial layout index for spreadsheet cell-to-pixel mapping.
+//! Sparse, derived spreadsheet cell-to-pixel geometry.
 //!
-//! Provides O(log k) position lookups and inverse queries using a Fenwick tree
-//! over dimension deltas, where k is the number of rows/columns with custom
-//! dimensions (out of potentially millions of total entries).
-//!
-//! # Architecture
-//!
-//! - `FenwickTree`: Binary Indexed Tree storing prefix sums of dimension deltas.
-//! - `AxisIndex`: Per-axis (rows or columns) spatial index combining a sparse
-//!   BTreeMap of custom dimensions with a FenwickTree for O(log n) queries.
-//! - `LayoutIndex`: Per-sheet struct owning row and column `AxisIndex` instances.
+//! Positions use sorted prefixes of custom/hidden dimension deltas: O(k) memory
+//! and O(log k) position queries for k overrides, independent of axis length.
 
 use domain_types::units::Pixels;
 
 pub mod axis;
 pub mod error;
-pub mod fenwick;
 
 pub use axis::AxisIndex;
 pub use error::*;
@@ -23,9 +14,9 @@ pub use error::*;
 /// Per-sheet spatial layout index for cell-to-pixel mapping.
 ///
 /// Owns row and column `AxisIndex` instances. Constructed from dimension data
-/// on sheet load, updated incrementally on dimension mutations.
+/// on demand from canonical dimension metadata.
 #[derive(Debug, Clone)]
-pub struct LayoutIndex {
+pub struct PixelLayout {
     rows: AxisIndex,
     cols: AxisIndex,
 }
@@ -41,10 +32,9 @@ pub const DEFAULT_COL_WIDTH_MACOS: Pixels = Pixels(72.0);
 
 /// Returns the platform-appropriate default column width.
 ///
-/// Uses compile-time `cfg!(target_os)` for native builds (Tauri, N-API).
-/// For WASM builds this returns `DEFAULT_COL_WIDTH` (64.0) — callers should
-/// prefer the sheet metadata's `defaultColWidth` which TypeScript sets
-/// based on runtime platform detection.
+/// Uses compile-time `cfg!(target_os)`. Non-macOS targets return
+/// `DEFAULT_COL_WIDTH` (64.0); callers can override with sheet metadata
+/// `defaultColWidth`.
 pub fn platform_default_col_width() -> Pixels {
     if cfg!(target_os = "macos") {
         DEFAULT_COL_WIDTH_MACOS
@@ -59,7 +49,7 @@ pub const MAX_ROWS: usize = 1_048_576;
 /// Maximum number of columns per sheet.
 pub const MAX_COLS: usize = 16_384;
 
-impl LayoutIndex {
+impl PixelLayout {
     /// Create a new layout index with platform-appropriate default dimensions.
     pub fn new(row_count: usize, col_count: usize) -> Self {
         Self::with_defaults(

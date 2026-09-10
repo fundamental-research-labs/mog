@@ -214,7 +214,7 @@ fn attr_bool(attrs: &HashMap<String, String>, key: &str, default: bool) -> bool 
 ///    - Modern anchor from `<controlPr>` in worksheet XML is preferred.
 ///    - VML anchor is used as fallback.
 ///
-/// Returns `Vec<FormControlOutput>` ready for WASM serialization.
+/// Returns `Vec<FormControlOutput>`.
 pub fn parse_form_controls_for_sheet(
     archive: &crate::zip::XlsxArchive,
     sheet_num: usize,

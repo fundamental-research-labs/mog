@@ -8,7 +8,7 @@
 //!   cargo test -p compute-core --test recalc_dense_aggregate -- --nocapture
 
 use cell_types::{CellId, SheetId};
-use compute_core::mirror::CellMirror;
+use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, RecalcResult, SheetSnapshot, WorkbookSnapshot};
 use value_types::CellValue;
@@ -141,10 +141,10 @@ fn test_sum_large_numeric_column() {
 
     let snapshot = build_snapshot(vec![("Sheet1", 1001, 2, cells)]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_sum_large_numeric_column ===");
@@ -176,10 +176,10 @@ fn test_average_large_numeric_column() {
 
     let snapshot = build_snapshot(vec![("Sheet1", 501, 2, cells)]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_average_large_numeric_column ===");
@@ -219,10 +219,10 @@ fn test_count_large_numeric_column() {
 
     let snapshot = build_snapshot(vec![("Sheet1", 401, 2, cells)]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_count_large_numeric_column ===");
@@ -256,10 +256,10 @@ fn test_min_max_large_column() {
 
     let snapshot = build_snapshot(vec![("Sheet1", 501, 3, cells)]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_min_max_large_column ===");
@@ -304,10 +304,10 @@ fn test_sum_with_boolean_cells() {
 
     let snapshot = build_snapshot(vec![("Sheet1", 121, 2, cells)]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_sum_with_boolean_cells ===");
@@ -341,10 +341,10 @@ fn test_sum_partial_recalc_progressive() {
 
     let snapshot = build_snapshot(vec![("Sheet1", 501, 2, cells)]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_sum_partial_recalc_progressive (init) ===");
@@ -359,7 +359,7 @@ fn test_sum_partial_recalc_progressive() {
     let cell_id = CellId::from_uuid_str(&cell_uuid(0, 0, 0)).expect("parse cell uuid");
 
     let result2 = core
-        .set_cell(&mut mirror, &sheet_id, cell_id, 0, 0, "1001")
+        .set_cell(&mut cell_store, &sheet_id, cell_id, 0, 0, "1001")
         .expect("set_cell failed");
 
     println!("\n=== test_sum_partial_recalc_progressive (after set_cell) ===");
@@ -410,10 +410,10 @@ fn test_counta_with_mixed_types() {
 
     let snapshot = build_snapshot(vec![("Sheet1", 151, 2, cells)]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_counta_with_mixed_types ===");
@@ -454,10 +454,10 @@ fn test_sum_multi_argument() {
 
     let snapshot = build_snapshot(vec![("Sheet1", 101, 3, cells)]);
 
-    let mut mirror = CellMirror::new();
+    let mut cell_store = CellStore::new();
     let mut core = ComputeCore::new();
     let result = core
-        .init_from_snapshot(&mut mirror, snapshot)
+        .init_from_snapshot(&mut cell_store, snapshot)
         .expect("init failed");
 
     println!("\n=== test_sum_multi_argument ===");

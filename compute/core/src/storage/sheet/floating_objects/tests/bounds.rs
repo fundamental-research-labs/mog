@@ -1,9 +1,9 @@
 use crate::storage::sheet::floating_objects::compute_object_pixel_bounds;
-use compute_layout_index::LayoutIndex;
+use compute_layout_index::PixelLayout;
 
 #[test]
 fn test_compute_object_pixel_bounds_projects_emu_anchor_units() {
-    let layout = LayoutIndex::with_defaults(
+    let layout = PixelLayout::with_defaults(
         10,
         10,
         domain_types::units::Pixels(20.0),
@@ -33,7 +33,7 @@ fn test_compute_object_pixel_bounds_projects_emu_anchor_units() {
 
 #[test]
 fn test_compute_object_pixel_bounds_projects_two_cell_emu_offsets() {
-    let layout = LayoutIndex::with_defaults(
+    let layout = PixelLayout::with_defaults(
         10,
         10,
         domain_types::units::Pixels(20.0),

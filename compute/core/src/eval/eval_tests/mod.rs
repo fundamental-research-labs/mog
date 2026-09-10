@@ -2,7 +2,7 @@
 
 use super::test_helpers::*;
 use super::*;
-use crate::eval_bridge::MirrorContext;
+use crate::eval_bridge::EvalContext;
 use cell_types::*;
 use compute_parser::{AbsFlags, CellRefNode, RangeRef};
 use formula_types::*;

@@ -2287,10 +2287,7 @@ impl Host {
                                         if unbounded {
                                             Value::Null
                                         } else {
-                                            range_values_json(
-                                                &range.sheet,
-                                                range.address.as_deref().expect("bounded address"),
-                                            )?
+                                            range_values_json(&range.sheet, metadata.bounds)?
                                         },
                                     );
                                 }
@@ -2300,10 +2297,7 @@ impl Host {
                                         if unbounded {
                                             Value::Null
                                         } else {
-                                            range_formulas_json(
-                                                &range.sheet,
-                                                range.address.as_deref().expect("bounded address"),
-                                            )?
+                                            range_formulas_json(&range.sheet, metadata.bounds)?
                                         },
                                     );
                                 }
@@ -2466,6 +2460,7 @@ impl Host {
 
 struct RangeMetadata {
     address: String,
+    bounds: (u32, u32, u32, u32),
     row_index: u32,
     column_index: u32,
     row_count: u32,
@@ -2475,12 +2470,14 @@ struct RangeMetadata {
 
 fn range_metadata(range: &RangeRef) -> Result<RangeMetadata, BatchError> {
     let parsed = parsed_range(range)?;
-    let (start_row, start_col, _, _) = parsed.bounds();
+    let bounds = parsed.bounds();
+    let (start_row, start_col, _, _) = bounds;
     let sheet_name = range.sheet.name().map_err(engine_error)?;
     let address = format!("{}!{}", qualified_sheet_name(&sheet_name), parsed.to_a1());
 
     Ok(RangeMetadata {
         address,
+        bounds,
         row_index: start_row,
         column_index: start_col,
         row_count: parsed.row_count(),
@@ -2937,10 +2934,8 @@ fn has_formula_intent(value: &str, property: WriteProperty) -> bool {
     }
 }
 
-fn range_values_json(sheet: &Sheet, address: &str) -> Result<Value, BatchError> {
-    let (sr, sc, er, ec) = compute_api::CellRange::from(address)
-        .resolve()
-        .map_err(engine_error)?;
+fn range_values_json(sheet: &Sheet, bounds: (u32, u32, u32, u32)) -> Result<Value, BatchError> {
+    let (sr, sc, er, ec) = bounds;
     let values = sheet
         .get_range_values_2d(compute_api::CellRange::Bounds(sr, sc, er, ec))
         .map_err(engine_error)?;
@@ -2952,10 +2947,8 @@ fn range_values_json(sheet: &Sheet, address: &str) -> Result<Value, BatchError> 
     ))
 }
 
-fn range_formulas_json(sheet: &Sheet, address: &str) -> Result<Value, BatchError> {
-    let (sr, sc, er, ec) = compute_api::CellRange::from(address)
-        .resolve()
-        .map_err(engine_error)?;
+fn range_formulas_json(sheet: &Sheet, bounds: (u32, u32, u32, u32)) -> Result<Value, BatchError> {
+    let (sr, sc, er, ec) = bounds;
     let mut rows = Vec::new();
     for row in sr..=er {
         let mut cells = Vec::new();

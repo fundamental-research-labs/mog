@@ -1,4 +1,3 @@
-use super::shared;
 use crate::snapshot::MutationResult;
 use crate::storage::engine::ComputeEngine;
 use crate::storage::engine::services;
@@ -27,10 +26,11 @@ impl ComputeEngine {
         author_id: Option<String>,
         parent_id: Option<String>,
         comment_type: CommentType,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
-            let (result, row, col) = services::objects::add_comment(
+            services::objects::add_comment(
                 &mut engine.stores,
+                &engine.cell_store,
                 sheet_id,
                 cell_id,
                 text,
@@ -38,9 +38,7 @@ impl ComputeEngine {
                 author_id.as_deref(),
                 parent_id.as_deref(),
                 comment_type,
-            )?;
-            let patches = engine.produce_comment_viewport_patches(sheet_id, &[(row, col)], true);
-            Ok((patches, result))
+            )
         })
     }
 
@@ -52,9 +50,14 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         comment_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
-            services::objects::convert_note_to_thread(&mut engine.stores, sheet_id, comment_id)
+            services::objects::convert_note_to_thread(
+                &mut engine.stores,
+                &engine.cell_store,
+                sheet_id,
+                comment_id,
+            )
         })
     }
 
@@ -64,9 +67,15 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         comment_id: &str,
         text: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
-            services::objects::update_comment(&mut engine.stores, sheet_id, comment_id, text)
+            services::objects::update_comment(
+                &mut engine.stores,
+                &engine.cell_store,
+                sheet_id,
+                comment_id,
+                text,
+            )
         })
     }
 
@@ -75,16 +84,14 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         comment_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
-            let (result, cell_pos, still_has) =
-                services::objects::delete_comment(&mut engine.stores, sheet_id, comment_id)?;
-            let patches = if let Some((row, col)) = cell_pos {
-                engine.produce_comment_viewport_patches(sheet_id, &[(row, col)], still_has)
-            } else {
-                shared::empty_patches()
-            };
-            Ok((patches, result))
+            services::objects::delete_comment(
+                &mut engine.stores,
+                &engine.cell_store,
+                sheet_id,
+                comment_id,
+            )
         })
     }
 
@@ -94,9 +101,15 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         cell_id: &str,
         resolved: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
-            services::objects::set_thread_resolved(&mut engine.stores, sheet_id, cell_id, resolved)
+            services::objects::set_thread_resolved(
+                &mut engine.stores,
+                &engine.cell_store,
+                sheet_id,
+                cell_id,
+                resolved,
+            )
         })
     }
 
@@ -147,9 +160,15 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         comment_id: &str,
         visible: bool,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
-            services::objects::set_note_visible(&mut engine.stores, sheet_id, comment_id, visible)
+            services::objects::set_note_visible(
+                &mut engine.stores,
+                &engine.cell_store,
+                sheet_id,
+                comment_id,
+                visible,
+            )
         })
     }
 
@@ -161,10 +180,11 @@ impl ComputeEngine {
         comment_id: &str,
         height: Option<f64>,
         width: Option<f64>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::set_note_dimensions(
                 &mut engine.stores,
+                &engine.cell_store,
                 sheet_id,
                 comment_id,
                 height,
@@ -188,12 +208,14 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         cell_id: &str,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
-            let (result, row, col) =
-                services::objects::delete_comments_for_cell(&mut engine.stores, sheet_id, cell_id)?;
-            let patches = engine.produce_comment_viewport_patches(sheet_id, &[(row, col)], false);
-            Ok((patches, result))
+            services::objects::delete_comments_for_cell(
+                &mut engine.stores,
+                &engine.cell_store,
+                sheet_id,
+                cell_id,
+            )
         })
     }
 
@@ -202,16 +224,9 @@ impl ComputeEngine {
     pub fn clear_all_comments(
         &mut self,
         sheet_id: &SheetId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
-            let (result, positions) =
-                services::objects::clear_all_comments(&mut engine.stores, sheet_id)?;
-            let patches = if positions.is_empty() {
-                shared::empty_patches()
-            } else {
-                engine.produce_comment_viewport_patches(sheet_id, &positions, false)
-            };
-            Ok((patches, result))
+            services::objects::clear_all_comments(&mut engine.stores, &engine.cell_store, sheet_id)
         })
     }
 
@@ -221,9 +236,13 @@ impl ComputeEngine {
     pub fn validate_and_clean_comments(
         &mut self,
         sheet_id: &SheetId,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
-            services::objects::validate_and_clean_comments(&mut engine.stores, sheet_id)
+            services::objects::validate_and_clean_comments(
+                &mut engine.stores,
+                &engine.cell_store,
+                sheet_id,
+            )
         })
     }
 
@@ -236,10 +255,11 @@ impl ComputeEngine {
         comment_id: &str,
         content: &str,
         mentions: Vec<CommentMention>,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             services::objects::update_comment_mentions(
                 &mut engine.stores,
+                &engine.cell_store,
                 sheet_id,
                 comment_id,
                 content,
@@ -254,8 +274,7 @@ impl ComputeEngine {
 
     /// Add a comment to a cell identified by (row, col) position.
     ///
-    /// Resolves the CellId from the grid index. If no cell exists at the
-    /// position, a new CellId is registered in the shared native identity index.
+    /// Resolves or allocates the CellId in the shared cell store.
     #[bridge::write]
     #[allow(clippy::too_many_arguments)]
     pub fn add_comment_by_position(
@@ -268,11 +287,11 @@ impl ComputeEngine {
         author_id: Option<String>,
         parent_id: Option<String>,
         comment_type: CommentType,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let (result, cell_id) = services::objects::add_comment_by_position(
                 &mut engine.stores,
-                &mut engine.mirror,
+                &mut engine.cell_store,
                 sheet_id,
                 row,
                 col,
@@ -282,9 +301,9 @@ impl ComputeEngine {
                 parent_id.as_deref(),
                 comment_type,
             )?;
-            engine.mirror.set_comment(sheet_id, cell_id);
-            let patches = engine.produce_comment_viewport_patches(sheet_id, &[(row, col)], true);
-            Ok((patches, result))
+            engine.cell_store.set_comment(sheet_id, cell_id);
+
+            Ok(result)
         })
     }
 
@@ -296,13 +315,25 @@ impl ComputeEngine {
         row: u32,
         col: u32,
     ) -> Vec<Comment> {
-        services::objects::get_comments_for_cell_by_position(&self.stores, sheet_id, row, col)
+        services::objects::get_comments_for_cell_by_position(
+            &self.stores,
+            &self.cell_store,
+            sheet_id,
+            row,
+            col,
+        )
     }
 
     /// Check whether a cell at (row, col) has any comments.
     #[bridge::read]
     pub fn has_comments_by_position(&self, sheet_id: &SheetId, row: u32, col: u32) -> bool {
-        services::objects::has_comments_by_position(&self.stores, sheet_id, row, col)
+        services::objects::has_comments_by_position(
+            &self.stores,
+            &self.cell_store,
+            sheet_id,
+            row,
+            col,
+        )
     }
 
     /// Delete all comments for a cell identified by (row, col) position.
@@ -312,23 +343,19 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         row: u32,
         col: u32,
-    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    ) -> Result<MutationResult, ComputeError> {
         self.with_history(|engine| {
             let (result, cell_id) = services::objects::delete_comments_for_cell_by_position(
                 &mut engine.stores,
+                &engine.cell_store,
                 sheet_id,
                 row,
                 col,
             )?;
             if let Some(cid) = cell_id {
-                engine.mirror.remove_comment(sheet_id, &cid);
-                let patches =
-                    engine.produce_comment_viewport_patches(sheet_id, &[(row, col)], false);
-                Ok((patches, result))
-            } else {
-                let patches = shared::empty_patches();
-                Ok((patches, result))
+                engine.cell_store.remove_comment(sheet_id, &cid);
             }
+            Ok(result)
         })
     }
 

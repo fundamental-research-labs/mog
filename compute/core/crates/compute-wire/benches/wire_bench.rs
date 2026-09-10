@@ -2,18 +2,14 @@
 
 #![allow(clippy::pedantic, clippy::all, missing_docs)]
 
-use std::collections::HashMap;
-
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 
+use compute_wire::flags as render_flags;
 use compute_wire::palette::FormatPalette;
 use compute_wire::types::*;
 use compute_wire::viewport::serialize_viewport_binary;
-use compute_wire::{flags as render_flags, mutation::serialize_mutation_result};
 use domain_types::{CellFormat, FontSize};
 use ooxml_types::styles::{HorizontalAlign, UnderlineStyle};
-use snapshot_types::{CellChange, RecalcResult};
-use value_types::{CellError, CellValue};
 
 // ---------------------------------------------------------------------------
 // Helper: build a realistic format palette with ~10 unique formats
@@ -260,118 +256,6 @@ fn make_viewport_data(rows: u32, cols: u32) -> ViewportRenderData {
 }
 
 // ---------------------------------------------------------------------------
-// Helper: build RecalcResult with N changed cells
-// ---------------------------------------------------------------------------
-
-fn make_recalc_result(n: usize) -> RecalcResult {
-    let mut changed_cells = Vec::with_capacity(n);
-    for i in 0..n {
-        let cell = match i % 5 {
-            0 => CellChange {
-                cell_id: format!("c{}", i),
-                sheet_id: "s1".into(),
-                position: Some(snapshot_types::CellPosition {
-                    row: (i / 10) as u32,
-                    col: (i % 10) as u32,
-                }),
-                value: CellValue::number(i as f64 * 3.14),
-                display_text: Some(format!("{:.2}", i as f64 * 3.14)),
-                old_display_text: None,
-                old_formula: None,
-                new_formula: None,
-                number_format: None,
-                format_idx: Some((i % 10) as u16),
-                extra_flags: 0,
-                old_value: None,
-            },
-            1 => CellChange {
-                cell_id: format!("c{}", i),
-                sheet_id: "s1".into(),
-                position: Some(snapshot_types::CellPosition {
-                    row: (i / 10) as u32,
-                    col: (i % 10) as u32,
-                }),
-                value: CellValue::Text(format!("Result for row {}", i).into()),
-                display_text: Some(format!("Result for row {}", i)),
-                old_display_text: None,
-                old_formula: None,
-                new_formula: None,
-                number_format: None,
-                format_idx: Some(0),
-                extra_flags: 0,
-                old_value: None,
-            },
-            2 => CellChange {
-                cell_id: format!("c{}", i),
-                sheet_id: "s1".into(),
-                position: Some(snapshot_types::CellPosition {
-                    row: (i / 10) as u32,
-                    col: (i % 10) as u32,
-                }),
-                value: CellValue::Boolean(i % 2 == 0),
-                display_text: Some(if i % 2 == 0 {
-                    "TRUE".into()
-                } else {
-                    "FALSE".into()
-                }),
-                old_display_text: None,
-                old_formula: None,
-                new_formula: None,
-                number_format: None,
-                format_idx: None,
-                extra_flags: 0,
-                old_value: None,
-            },
-            3 => CellChange {
-                cell_id: format!("c{}", i),
-                sheet_id: "s1".into(),
-                position: Some(snapshot_types::CellPosition {
-                    row: (i / 10) as u32,
-                    col: (i % 10) as u32,
-                }),
-                value: CellValue::Error(CellError::Div0, None),
-                display_text: None,
-                old_display_text: None,
-                old_formula: None,
-                new_formula: None,
-                number_format: None,
-                format_idx: None,
-                extra_flags: 0,
-                old_value: None,
-            },
-            _ => CellChange {
-                cell_id: format!("c{}", i),
-                sheet_id: "s1".into(),
-                position: Some(snapshot_types::CellPosition {
-                    row: (i / 10) as u32,
-                    col: (i % 10) as u32,
-                }),
-                value: CellValue::number(i as f64),
-                display_text: Some(format!("{}", i)),
-                old_display_text: None,
-                old_formula: None,
-                new_formula: None,
-                number_format: None,
-                format_idx: Some(1),
-                extra_flags: render_flags::HAS_FORMULA,
-                old_value: None,
-            },
-        };
-        changed_cells.push(cell);
-    }
-    RecalcResult {
-        changed_cells,
-        projection_changes: vec![],
-        errors: vec![],
-        validation_annotations: vec![],
-        metrics: Default::default(),
-        old_values: HashMap::new(),
-        policy_preserved_parse_outcomes: Vec::new(),
-        policy_preserved_parse_summary: None,
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Benchmark: serialize_viewport_binary at different scales
 // ---------------------------------------------------------------------------
 
@@ -459,36 +343,6 @@ fn bench_palette_intern(c: &mut Criterion) {
 }
 
 // ---------------------------------------------------------------------------
-// Benchmark: serialize_mutation_result at different scales
-// ---------------------------------------------------------------------------
-
-fn bench_mutation_serialization(c: &mut Criterion) {
-    let mut group = c.benchmark_group("mutation_serialize");
-
-    // Small mutation: 10 changed cells
-    {
-        let result = make_recalc_result(10);
-        group.bench_function("10_cells", |b| {
-            b.iter(|| {
-                serialize_mutation_result(black_box(&result), black_box("sheet-uuid-1234"), 0, None)
-            });
-        });
-    }
-
-    // Large mutation: 1000 changed cells
-    {
-        let result = make_recalc_result(1000);
-        group.bench_function("1000_cells", |b| {
-            b.iter(|| {
-                serialize_mutation_result(black_box(&result), black_box("sheet-uuid-1234"), 0, None)
-            });
-        });
-    }
-
-    group.finish();
-}
-
-// ---------------------------------------------------------------------------
 // Benchmark: deserialize_viewport at different scales
 // ---------------------------------------------------------------------------
 
@@ -541,6 +395,5 @@ criterion_group!(
     bench_viewport_deserialization,
     bench_viewport_json_baseline,
     bench_palette_intern,
-    bench_mutation_serialization,
 );
 criterion_main!(benches);

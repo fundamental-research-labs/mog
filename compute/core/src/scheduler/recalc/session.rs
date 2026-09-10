@@ -25,7 +25,7 @@ pub(in super::super) fn past_deadline(deadline: &Deadline) -> bool {
 /// evaluator runs formulas on rayon worker threads, which persist their
 /// thread-locals across recalc calls. Clearing only the main thread leaves
 /// stale entries on workers — the SUMIFS result cache keys by pointer
-/// identity of the column slice, and mirror mutations reuse the same
+/// identity of the column slice, and cell_store mutations reuse the same
 /// column pointer, so a worker's cached result from a prior recalc
 /// silently "hits" on a new recalc with different underlying data.
 ///
@@ -45,5 +45,5 @@ fn clear_current_thread_caches() {
     compute_functions::helpers::column_index::clear();
     compute_functions::helpers::sumifs_result_cache::clear();
     crate::eval::cache::subexpr_cache::clear();
-    crate::mirror::clear_caches();
+    crate::cells::clear_caches();
 }

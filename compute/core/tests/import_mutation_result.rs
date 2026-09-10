@@ -71,17 +71,12 @@ fn import_from_xlsx_bytes_returns_mutation_result_with_floating_objects() {
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot_types::WorkbookSnapshot::default())
         .expect("from_snapshot(empty) should succeed");
 
-    let (patches, result) = engine
+    let result = engine
         .import_from_xlsx_bytes(&bytes, true)
         .expect("import_from_xlsx_bytes should succeed");
 
     // Patches payload exists but contains no real viewport patches —
     // hydration uses per-viewport prefetch instead, not threaded patches.
-    assert!(
-        patches.len() <= 16,
-        "hydration patches binary should be empty/header-only, got {} bytes",
-        patches.len(),
-    );
 
     // RecalcResult is embedded.
     let _ = &result.recalc;
@@ -127,7 +122,7 @@ fn import_from_xlsx_bytes_populates_table_and_filter_changes_when_present() {
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot_types::WorkbookSnapshot::default())
         .expect("from_snapshot(empty) should succeed");
 
-    let (_patches, result) = engine
+    let result = engine
         .import_from_xlsx_bytes(&bytes, true)
         .expect("import_from_xlsx_bytes should succeed");
 
@@ -168,7 +163,7 @@ fn import_from_xlsx_bytes_floating_object_bounds_are_computed() {
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot_types::WorkbookSnapshot::default())
         .expect("from_snapshot(empty) should succeed");
 
-    let (_patches, result) = engine
+    let result = engine
         .import_from_xlsx_bytes(&bytes, true)
         .expect("import_from_xlsx_bytes should succeed");
 
@@ -226,7 +221,7 @@ fn import_from_csv_bytes_returns_mutation_result() {
     let (mut engine, _) = ComputeEngine::from_snapshot(snapshot_types::WorkbookSnapshot::default())
         .expect("from_snapshot(empty) should succeed");
 
-    let (_patches, result) = engine
+    let result = engine
         .import_from_csv_bytes(csv, CsvImportOptions::default())
         .expect("import_from_csv_bytes should succeed");
 

@@ -1,19 +1,9 @@
 use std::sync::Arc;
 
-use cell_types::{CellId, ColId, IdAllocator, RowId, SheetId};
-use rustc_hash::FxHashMap;
+use cell_types::{ColId, IdAllocator, RowId, SheetId};
 
-/// Tracks identity-position mappings for a single sheet.
-///
-/// Design: CellIds are created lazily. Empty cells don't have CellIds.
-/// When a cell is first written to, a CellId is generated.
-/// When a row is inserted, RowIds are generated for the new rows.
-/// When a column is inserted, ColIds are generated for the new columns.
-///
-/// The GridIndex maintains:
-/// - Row identities: row_index -> RowId, RowId -> row_index
-/// - Column identities: col_index -> ColId, ColId -> col_index
-/// - Cell identities: (row, col) -> CellId, CellId -> (row, col)
+/// Compact row and column identity indexes for a single sheet.
+/// Authored cell identities belong to the cell store; positions derive from these axes.
 #[derive(Debug, Clone)]
 pub struct GridIndex {
     pub(super) sheet_id: SheetId,
@@ -28,8 +18,4 @@ pub struct GridIndex {
 
     // Column identity tracking. See row_axis.
     pub(super) col_axis: Arc<super::AxisIndex<ColId>>,
-
-    // Cell identity tracking (SPARSE -- only materialized cells)
-    pub(super) cell_at_pos: FxHashMap<(u32, u32), CellId>, // (row, col) -> CellId
-    pub(super) cell_to_pos: FxHashMap<CellId, (u32, u32)>, // CellId -> (row, col)
 }

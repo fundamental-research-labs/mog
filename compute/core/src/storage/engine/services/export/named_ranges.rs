@@ -2,7 +2,7 @@ use cell_types::SheetId;
 use compute_document::hex::hex_to_id;
 use domain_types::NamedRange;
 
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::workbook::named_ranges as workbook_named_ranges;
 
@@ -15,7 +15,7 @@ use super::print_defined_names::{collides_with_print_defined_name, export_print_
 /// `DefinedName.raw_refers_to`.
 pub(super) fn export_workbook_named_ranges(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_ids: &[SheetId],
     inventory: &[domain_types::WorkbookSheetPackageInfo],
     imported_order_to_export_order: &std::collections::HashMap<u32, u32>,
@@ -63,7 +63,7 @@ pub(super) fn export_workbook_named_ranges(
                         identity.template.clone()
                     } else {
                         let a1 = stores.compute.to_a1_display_qualified(
-                            mirror,
+                            cell_store,
                             &SheetId::from_raw(0),
                             &identity,
                         );

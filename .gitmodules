@@ -1,0 +1,3 @@
+[submodule "calipers"]
+	path = vendor/calipers
+	url = git@github.com:fundamental-research-labs/calipers.git

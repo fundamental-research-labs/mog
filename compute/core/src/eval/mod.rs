@@ -67,11 +67,6 @@ pub use external::{
 // Internal re-exports for sibling submodules (accessible via `super::`)
 // ---------------------------------------------------------------------------
 
-// eval_primitives.rs needs: super::{agg_sum, agg_average, agg_count, ...}
-use engine::aggregate::{
-    agg_average, agg_count, agg_counta, agg_countblank, agg_max, agg_min, agg_sum,
-};
-
 // resolve_cell_ref_position is a free function used internally
 #[allow(unused_imports)]
 use lookup::range_geometry::resolve_cell_ref_position;

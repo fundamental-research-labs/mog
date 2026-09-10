@@ -35,10 +35,10 @@ fn test_if_produces_array_for_match() {
         sheet_snapshot(SHEET1_UUID, "Data", 4, 2, data_cells),
         sheet_snapshot(SHEET2_UUID, "Results", 1, 1, results_cells),
     ]);
-    let (mirror, _core, result) = init_core(snapshot);
+    let (cell_store, _core, result) = init_core(snapshot);
 
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET2_UUID,
         0,
@@ -84,10 +84,10 @@ fn test_iferror_index_match_with_array_if() {
         sheet_snapshot(SHEET1_UUID, "Query", 5, 3, query_cells),
         sheet_snapshot(SHEET2_UUID, "Results", 1, 1, results_cells),
     ]);
-    let (mirror, _core, result) = init_core(snapshot);
+    let (cell_store, _core, result) = init_core(snapshot);
 
     assert_text_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET2_UUID,
         0,
@@ -112,10 +112,10 @@ fn test_large_with_mixed_array() {
         formula_cell(1, 2, 1, "LARGE(A1:A5,3)"),
     ];
     let snapshot = workbook_snapshot(vec![sheet_snapshot(SHEET1_UUID, "Sheet1", 5, 2, cells)]);
-    let (mirror, _core, result) = init_core(snapshot);
+    let (cell_store, _core, result) = init_core(snapshot);
 
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -124,7 +124,7 @@ fn test_large_with_mixed_array() {
         "LARGE([FALSE, 200, 300, FALSE, 100], 1) should be 300",
     );
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         1,
@@ -133,7 +133,7 @@ fn test_large_with_mixed_array() {
         "LARGE([FALSE, 200, 300, FALSE, 100], 2) should be 200",
     );
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         2,
@@ -191,10 +191,10 @@ fn test_full_integration_two_sheet_index_match() {
         sheet_snapshot(SHEET1_UUID, "Data", 4, 3, data_cells),
         sheet_snapshot(SHEET2_UUID, "Results", 1, 3, results_cells),
     ]);
-    let (mirror, _core, result) = init_core(snapshot);
+    let (cell_store, _core, result) = init_core(snapshot);
 
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET2_UUID,
         0,
@@ -203,7 +203,7 @@ fn test_full_integration_two_sheet_index_match() {
         "MATCH('Beta', Data!A1:A4, 0) should return 2",
     );
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET2_UUID,
         0,
@@ -212,7 +212,7 @@ fn test_full_integration_two_sheet_index_match() {
         "INDEX(Data!C1:C4, MATCH('Beta', Data!A1:A4, 0)) should return 200",
     );
     assert_text_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET2_UUID,
         0,

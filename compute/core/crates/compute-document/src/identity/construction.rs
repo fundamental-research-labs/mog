@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
 use cell_types::{AxisIdentityId, AxisIdentityStore, ColId, IdAllocator, RowId, SheetId};
-use rustc_hash::FxHashMap;
 
 use super::GridIndex;
 
 impl GridIndex {
     /// Create a new GridIndex for a sheet with the given dimensions.
-    /// Generates RowIds and ColIds for all initial rows/columns.
+    /// Allocates one compact identity run per axis.
     pub fn new(sheet_id: SheetId, rows: u32, cols: u32, id_alloc: Arc<IdAllocator>) -> Self {
         let row_axis = native_axis(rows, &id_alloc);
         let col_axis = native_axis(cols, &id_alloc);
@@ -29,10 +28,8 @@ impl GridIndex {
         Self {
             sheet_id,
             id_alloc,
-            row_axis: Arc::new(super::AxisIndex::new(row_axis)),
-            col_axis: Arc::new(super::AxisIndex::new(col_axis)),
-            cell_at_pos: FxHashMap::default(),
-            cell_to_pos: FxHashMap::default(),
+            row_axis: Arc::new(super::AxisIndex::new(sheet_id, row_axis)),
+            col_axis: Arc::new(super::AxisIndex::new(sheet_id, col_axis)),
         }
     }
 
@@ -50,8 +47,6 @@ impl GridIndex {
             id_alloc,
             row_axis,
             col_axis,
-            cell_at_pos: FxHashMap::default(),
-            cell_to_pos: FxHashMap::default(),
         }
     }
 
@@ -71,12 +66,6 @@ impl GridIndex {
     #[inline]
     pub fn col_count(&self) -> u32 {
         self.col_axis.len()
-    }
-
-    /// Number of materialized cells (cells with CellIds).
-    #[inline]
-    pub fn cell_count(&self) -> u32 {
-        self.cell_at_pos.len() as u32
     }
 }
 

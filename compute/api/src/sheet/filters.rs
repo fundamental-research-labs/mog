@@ -52,7 +52,7 @@ impl SheetFilters {
     pub fn create(&self, config: serde_json::Value) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.create_filter(&sid, config).map(|(_, r)| r))
+            .call_engine(move |e| e.create_filter(&sid, config))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -61,7 +61,7 @@ impl SheetFilters {
         let sid = self.sheet_id;
         let fid = filter_id.to_string();
         self.dispatch
-            .call_engine(move |e| e.delete_filter(&sid, &fid).map(|(_, r)| r))
+            .call_engine(move |e| e.delete_filter(&sid, &fid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -75,10 +75,7 @@ impl SheetFilters {
         let sid = self.sheet_id;
         let fid = filter_id.to_string();
         self.dispatch
-            .call_engine(move |e| {
-                e.set_column_filter(&sid, &fid, header_col, criteria)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.set_column_filter(&sid, &fid, header_col, criteria))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -91,10 +88,7 @@ impl SheetFilters {
         let sid = self.sheet_id;
         let fid = filter_id.to_string();
         self.dispatch
-            .call_engine(move |e| {
-                e.clear_column_filter(&sid, &fid, header_col)
-                    .map(|(_, r)| r)
-            })
+            .call_engine(move |e| e.clear_column_filter(&sid, &fid, header_col))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -106,7 +100,7 @@ impl SheetFilters {
         let sid = self.sheet_id;
         let fid = filter_id.to_string();
         self.dispatch
-            .call_engine(move |e| e.clear_all_column_filters(&sid, &fid).map(|(_, r)| r))
+            .call_engine(move |e| e.clear_all_column_filters(&sid, &fid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -115,7 +109,7 @@ impl SheetFilters {
         let sid = self.sheet_id;
         let fid = filter_id.to_string();
         self.dispatch
-            .call_engine(move |e| e.apply_filter(&sid, &fid).map(|(_, r)| r))
+            .call_engine(move |e| e.apply_filter(&sid, &fid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -124,7 +118,7 @@ impl SheetFilters {
         let sid = self.sheet_id;
         let fid = filter_id.to_string();
         self.dispatch
-            .call_engine(move |e| e.reapply_filter(&sid, &fid).map(|(_, r)| r))
+            .call_engine(move |e| e.reapply_filter(&sid, &fid))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
@@ -135,7 +129,7 @@ impl SheetFilters {
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
-            .call_engine(move |e| e.apply_advanced_filter(&sid, request).map(|(_, r)| r))
+            .call_engine(move |e| e.apply_advanced_filter(&sid, request))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 }

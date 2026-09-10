@@ -23,10 +23,10 @@ fn test_index_row_zero_col_zero() {
         formula_cell(1, 0, 4, "INDEX(A1:C3,2,0)"),
     ];
     let snapshot = workbook_snapshot(vec![sheet_snapshot(SHEET1_UUID, "Sheet1", 3, 8, cells)]);
-    let (mirror, _core, result) = init_core(snapshot);
+    let (cell_store, _core, result) = init_core(snapshot);
 
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -35,7 +35,7 @@ fn test_index_row_zero_col_zero() {
         "D0: first element of column 2 (B0=20)",
     );
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -58,10 +58,10 @@ fn test_index_two_arg_single_row_col() {
         formula_cell(1, 1, 3, "INDEX(A1:A3,2)"),
     ];
     let snapshot = workbook_snapshot(vec![sheet_snapshot(SHEET1_UUID, "Sheet1", 3, 4, cells)]);
-    let (mirror, _core, result) = init_core(snapshot);
+    let (cell_store, _core, result) = init_core(snapshot);
 
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         0,
@@ -70,7 +70,7 @@ fn test_index_two_arg_single_row_col() {
         "INDEX(A1:C1, 2) on single-row should treat 2 as column index",
     );
     assert_number_value(
-        &mirror,
+        &cell_store,
         &result,
         SHEET1_UUID,
         1,

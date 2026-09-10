@@ -730,7 +730,7 @@ fn imported_chart_auxiliary_parts_replay_only_with_imported_chart_identity() {
 }
 
 #[test]
-fn stale_standard_chart_authority_preserves_safe_style_and_replaces_chart_identity() {
+fn stale_standard_chart_authority_rebuilds_chart_identity_and_preserves_safe_style() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.title = None;
     imported_chart.data_range = None;
@@ -767,12 +767,22 @@ fn stale_standard_chart_authority_preserves_safe_style_and_replaces_chart_identi
         .iter()
         .find(|rel| rel.rel_type == REL_CHART)
         .expect("chart relationship should be present");
+    let chart_rels = String::from_utf8(
+        archive
+            .read_file("xl/charts/_rels/chart1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
 
     assert!(archive.contains("xl/charts/chart1.xml"));
     assert!(!archive.contains("xl/charts/chart9.xml"));
     // Chart styles are independent safe companions, even when the stale
     // imported ChartSpace and its package identity cannot be replayed.
     assert!(archive.contains("xl/charts/style9.xml"));
+    assert!(chart_rels.contains(r#"Target="style9.xml""#));
+    assert!(content_types.contains("/xl/charts/style9.xml"));
     assert!(!archive.contains("xl/charts/vendor9.xml"));
     let generated_chart_rels = crate::domain::workbook::read::parse_all_rels(
         &archive
@@ -788,6 +798,7 @@ fn stale_standard_chart_authority_preserves_safe_style_and_replaces_chart_identi
             .iter()
             .any(|rel| rel.target == "vendor9.xml")
     );
+    assert!(!chart_rels.contains("vendor9.xml"));
     assert!(!archive.contains("xl/charts/_rels/chart9.xml.rels"));
     assert_eq!(chart_rel.target, "../charts/chart1.xml");
     assert_ne!(chart_rel.id, "rId9");
@@ -799,7 +810,7 @@ fn stale_standard_chart_authority_preserves_safe_style_and_replaces_chart_identi
     assert_export_report_contains(
         &report,
         ExportDiagnosticCode::ChartAuxiliaryPartDropped,
-        "vendor9.xml",
+        "xl/charts/vendor9.xml",
     );
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
@@ -1374,7 +1385,7 @@ fn modeled_chart_export_reports_omitted_level_and_bubble_size_ref_caches() {
 }
 
 #[test]
-fn reconstructed_imported_chart_preserves_safe_style_and_drops_opaque_auxiliary_parts() {
+fn reconstructed_imported_chart_preserves_safe_style_and_drops_unsupported_auxiliary_parts() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.title = Some("Modeled Revenue".to_string());
     imported_chart.definition = Some(domain_types::ChartDefinition::Chart(
@@ -1399,6 +1410,12 @@ fn reconstructed_imported_chart_preserves_safe_style_and_drops_opaque_auxiliary_
     let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let chart_xml = String::from_utf8(archive.read_file("xl/charts/chart1.xml").unwrap()).unwrap();
+    let chart_rels = String::from_utf8(
+        archive
+            .read_file("xl/charts/_rels/chart1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
 
     assert!(chart_xml.contains("Modeled Revenue"));
     assert!(!chart_xml.contains("Stale Revenue"));
@@ -1406,6 +1423,7 @@ fn reconstructed_imported_chart_preserves_safe_style_and_drops_opaque_auxiliary_
     // Chart styles are independent safe companions, even when the stale
     // imported ChartSpace and its package identity cannot be replayed.
     assert!(archive.contains("xl/charts/style9.xml"));
+    assert!(chart_rels.contains(r#"Target="style9.xml""#));
     assert!(!archive.contains("xl/charts/vendor9.xml"));
     let generated_chart_rels = crate::domain::workbook::read::parse_all_rels(
         &archive
@@ -1421,6 +1439,7 @@ fn reconstructed_imported_chart_preserves_safe_style_and_drops_opaque_auxiliary_
             .iter()
             .any(|rel| rel.target == "vendor9.xml")
     );
+    assert!(!chart_rels.contains("vendor9.xml"));
     assert!(!archive.contains("xl/charts/_rels/chart9.xml.rels"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }

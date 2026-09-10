@@ -44,10 +44,15 @@ pub(crate) fn run_case(case: &Class1Case) -> TestOutcome {
     // computed may not match the engine's (engines can rewrite ids on
     // load). Fall back to by-id if at-pos doesn't find it.
     let pre_op_value = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, SheetPos::new(20, 12))
         .cloned()
-        .or_else(|| engine.mirror().get_cell_value(&formula_cell_id).cloned())
+        .or_else(|| {
+            engine
+                .cell_store()
+                .get_cell_value(&formula_cell_id)
+                .cloned()
+        })
         .unwrap_or(CellValue::Null);
 
     // Forward op — set the target cell to the new value. We use
@@ -75,10 +80,15 @@ pub(crate) fn run_case(case: &Class1Case) -> TestOutcome {
 
     // Post-inverse value of the dependent formula.
     let post_value = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&sid, SheetPos::new(20, 12))
         .cloned()
-        .or_else(|| engine.mirror().get_cell_value(&formula_cell_id).cloned())
+        .or_else(|| {
+            engine
+                .cell_store()
+                .get_cell_value(&formula_cell_id)
+                .cloned()
+        })
         .unwrap_or(CellValue::Null);
 
     if cell_values_bit_equal(&pre_op_value, &post_value) {
@@ -242,21 +252,26 @@ fn run_case_v2(case: &Class1CaseV2) -> TestOutcome {
     let dependent_sheet = sheet_id(SHEET1_UUID);
 
     let pre_op_value = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&dependent_sheet, SheetPos::new(20, 12))
         .cloned()
-        .or_else(|| engine.mirror().get_cell_value(&formula_cell_id).cloned())
+        .or_else(|| {
+            engine
+                .cell_store()
+                .get_cell_value(&formula_cell_id)
+                .cloned()
+        })
         .unwrap_or(CellValue::Null);
 
-    // Capture the ACTUAL prior value from the mirror at the target cell.
+    // Capture the ACTUAL prior value from the cell store at the target cell.
     // The case's `prior` field is the ValueType-derived seed that *was
     // requested*, but when fixture layering (named-range seed block,
     // structured-table seed block) overlaps the target position, the
     // engine's effective pre-op value may differ. The identity invariant
     // is "write new_value then write back what-was-actually-there → same
-    // dependent"; use the live mirror value as the true prior.
+    // dependent"; use the live cell_store value as the true prior.
     let live_prior = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&target_sheet_id, SheetPos::new(target_row, target_col))
         .cloned()
         .unwrap_or(CellValue::Null);
@@ -300,10 +315,15 @@ fn run_case_v2(case: &Class1CaseV2) -> TestOutcome {
     }
 
     let post_value = engine
-        .mirror()
+        .cell_store()
         .get_cell_value_at(&dependent_sheet, SheetPos::new(20, 12))
         .cloned()
-        .or_else(|| engine.mirror().get_cell_value(&formula_cell_id).cloned())
+        .or_else(|| {
+            engine
+                .cell_store()
+                .get_cell_value(&formula_cell_id)
+                .cloned()
+        })
         .unwrap_or(CellValue::Null);
 
     if cell_values_bit_equal(&pre_op_value, &post_value) {

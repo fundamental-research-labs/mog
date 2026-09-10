@@ -22,44 +22,12 @@ use domain_types::{
 };
 use value_types::CellValue;
 
+use crate::cells::CellStore;
 use crate::import::phantom::{parse_cell_ref, parse_range_ref};
-use crate::mirror::CellMirror;
 use crate::range_manager::pos_to_a1;
 use crate::storage::sheet::{cf_store, hyperlinks, schemas};
 
 use crate::storage::engine::stores::EngineStores;
-
-// -------------------------------------------------------------------
-// Resolve cell position
-// -------------------------------------------------------------------
-
-/// Resolve a cell_id hex to (row, col) via the in-memory GridIndex —
-/// the authoritative runtime store for cell position.
-///
-/// Catches cells that are registered in GridIndex but not materialised
-/// in CellMirror (e.g., style-only cells, comment-only cells).
-pub(super) fn resolve_cell_position_from_grid_index(
-    stores: &EngineStores,
-    sheet_id: &SheetId,
-    cell_id_hex: &str,
-) -> Option<(u32, u32)> {
-    let grid = stores.grid_indexes.get(sheet_id)?;
-    let raw_id = compute_document::hex::hex_to_id(cell_id_hex)?;
-    let cell_id = cell_types::CellId::from_raw(raw_id);
-    grid.cell_position(&cell_id)
-}
-
-/// Resolve a hydrated comment/note target through the runtime GridIndex.
-///
-/// Imported comments store `cell_ref` as a CellId hex string. The authoritative
-/// GridIndex resolves that identity back into its current A1 position.
-pub(super) fn resolve_hydrated_comment_position(
-    stores: &EngineStores,
-    sheet_id: &SheetId,
-    cell_id_hex: &str,
-) -> Option<(u32, u32)> {
-    resolve_cell_position_from_grid_index(stores, sheet_id, cell_id_hex)
-}
 
 // -------------------------------------------------------------------
 // Hyperlinks export
@@ -68,12 +36,12 @@ pub(super) fn resolve_hydrated_comment_position(
 /// Export native hyperlink metadata in authored order at current coordinates.
 pub(in crate::storage::engine) fn export_hyperlinks_for_sheet(
     stores: &EngineStores,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
 ) -> Vec<Hyperlink> {
-    stores
-        .grid_indexes
-        .get(sheet_id)
-        .map(|grid| hyperlinks::get_all_hyperlinks(&stores.storage, sheet_id, grid))
+    cell_store
+        .get_sheet(sheet_id)
+        .map(|sheet| hyperlinks::get_all_hyperlinks(&stores.storage, sheet_id, sheet))
         .unwrap_or_default()
 }
 
@@ -298,7 +266,7 @@ pub(in crate::storage::engine) fn export_outline_groups_for_sheet(
 /// Export floating objects from native sheet metadata.
 pub(in crate::storage::engine) fn export_floating_objects_for_sheet(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
 ) -> (
     Vec<FloatingObject>,
@@ -371,12 +339,12 @@ pub(in crate::storage::engine) fn export_floating_objects_for_sheet(
         }
     }
 
-    if let Some(grid) = stores.grid_indexes.get(sheet_id) {
+    if let Some(sheet) = cell_store.get_sheet(sheet_id) {
         for object in &mut floating_objects {
-            crate::storage::sheet::floating_objects::project_anchor_positions(object, grid);
+            crate::storage::sheet::floating_objects::project_anchor_positions(object, sheet);
         }
     }
-    project_form_control_references_for_export(&mut floating_objects, stores, mirror, sheet_id);
+    project_form_control_references_for_export(&mut floating_objects, cell_store, sheet_id);
 
     (
         floating_objects,
@@ -389,8 +357,7 @@ pub(in crate::storage::engine) fn export_floating_objects_for_sheet(
 
 fn project_form_control_references_for_export(
     objects: &mut [FloatingObject],
-    stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
 ) {
     for obj in objects {
@@ -407,12 +374,14 @@ fn project_form_control_references_for_export(
         });
         let linked_cell_a1 = linked_ref
             .as_deref()
-            .and_then(|reference| form_control_cell_ref_to_abs_a1(stores, sheet_id, reference));
+            .and_then(|reference| form_control_cell_ref_to_abs_a1(cell_store, sheet_id, reference));
         let checked_state = if is_checkbox_control_type(&control.control_type) {
             linked_ref
                 .as_deref()
-                .and_then(|reference| form_control_cell_ref_to_pos(stores, sheet_id, reference))
-                .and_then(|(row, col)| mirror.get_cell_value_at(sheet_id, SheetPos::new(row, col)))
+                .and_then(|reference| form_control_cell_ref_to_pos(cell_store, sheet_id, reference))
+                .and_then(|(row, col)| {
+                    cell_store.get_cell_value_at(sheet_id, SheetPos::new(row, col))
+                })
                 .and_then(checkbox_state_from_value)
         } else {
             None
@@ -438,7 +407,7 @@ fn project_form_control_references_for_export(
         });
         if let Some(range_ref) = input_range
             .as_deref()
-            .and_then(|reference| form_control_range_ref_to_abs_a1(stores, sheet_id, reference))
+            .and_then(|reference| form_control_range_ref_to_abs_a1(cell_store, sheet_id, reference))
         {
             control.input_range = Some(range_ref.clone());
             if let Some(control_pr) = control
@@ -460,21 +429,21 @@ fn project_form_control_references_for_export(
 }
 
 fn form_control_cell_ref_to_abs_a1(
-    stores: &EngineStores,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     reference: &str,
 ) -> Option<String> {
-    let (row, col) = form_control_cell_ref_to_pos(stores, sheet_id, reference)?;
+    let (row, col) = form_control_cell_ref_to_pos(cell_store, sheet_id, reference)?;
     Some(absolute_a1(row, col))
 }
 
 fn form_control_cell_ref_to_pos(
-    stores: &EngineStores,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     reference: &str,
 ) -> Option<(u32, u32)> {
     if let Some(cell_hex) = form_control_cell_id_hex(reference)
-        && let Some(pos) = resolve_cell_position_from_grid_index(stores, sheet_id, &cell_hex)
+        && let Some(pos) = super::resolve_cell_position(cell_store, sheet_id, &cell_hex)
     {
         return Some(pos);
     }
@@ -483,12 +452,12 @@ fn form_control_cell_ref_to_pos(
 }
 
 fn form_control_range_ref_to_abs_a1(
-    stores: &EngineStores,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     reference: &str,
 ) -> Option<String> {
     let (start_row, start_col, end_row, end_col) =
-        form_control_range_ref_to_positions(stores, sheet_id, reference)?;
+        form_control_range_ref_to_positions(cell_store, sheet_id, reference)?;
     Some(format!(
         "{}:{}",
         absolute_a1(start_row, start_col),
@@ -497,7 +466,7 @@ fn form_control_range_ref_to_abs_a1(
 }
 
 fn form_control_range_ref_to_positions(
-    stores: &EngineStores,
+    cell_store: &CellStore,
     sheet_id: &SheetId,
     reference: &str,
 ) -> Option<(u32, u32, u32, u32)> {
@@ -509,8 +478,8 @@ fn form_control_range_ref_to_positions(
         }
         let start_id = value.get("startId").and_then(|v| v.as_str())?;
         let end_id = value.get("endId").and_then(|v| v.as_str())?;
-        let (start_row, start_col) = form_control_cell_ref_to_pos(stores, sheet_id, start_id)?;
-        let (end_row, end_col) = form_control_cell_ref_to_pos(stores, sheet_id, end_id)?;
+        let (start_row, start_col) = form_control_cell_ref_to_pos(cell_store, sheet_id, start_id)?;
+        let (end_row, end_col) = form_control_cell_ref_to_pos(cell_store, sheet_id, end_id)?;
         return Some((start_row, start_col, end_row, end_col));
     }
 

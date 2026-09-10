@@ -1,4 +1,4 @@
-use crate::mirror::CellMirror;
+use crate::cells::CellStore;
 use crate::snapshot::{
     ChangeKind, MutationResult, NamedRangeChange, RecalcResult, WorkbookSettingsChange,
 };
@@ -18,11 +18,11 @@ use super::sheet_hydration::build_sheet_hydration_changes;
 /// filters, sparklines, named ranges, conditional formats, pivots, grouping)
 /// exactly as it does for live mutations.
 ///
-/// Kernel mirror direct-state bridge: also emits the mirror-backed direct-state
+/// Kernel cell_store direct-state bridge: also emits the cell store-backed direct-state
 /// families — sheet identity (name/order/visibility/tab-color/frozen panes),
 /// per-sheet settings, page breaks, print area/titles/settings, split config,
 /// scroll position, and workbook settings — so the first-paint
-/// `MutationResult` is sufficient to fully populate the kernel TS mirror
+/// `MutationResult` is sufficient to fully populate the kernel TS cell_store
 /// without a separate hydration RPC.
 ///
 /// **What is NOT emitted:**
@@ -34,14 +34,14 @@ use super::sheet_hydration::build_sheet_hydration_changes;
 /// - `sortingChanges` — sorting is an action, not a stored entity.
 pub(in crate::storage::engine) fn build_mutation_result_for_hydration(
     stores: &EngineStores,
-    mirror: &CellMirror,
+    cell_store: &CellStore,
     recalc: RecalcResult,
 ) -> MutationResult {
     let mut result = MutationResult::from_recalc(recalc);
 
     let sheet_ids = stores.storage.sheet_order();
     for sid in &sheet_ids {
-        build_sheet_hydration_changes(stores, mirror, sid, None, &mut result);
+        build_sheet_hydration_changes(stores, cell_store, sid, None, &mut result);
     }
 
     // ----- Named ranges (workbook-scoped enumeration) -----
@@ -57,8 +57,8 @@ pub(in crate::storage::engine) fn build_mutation_result_for_hydration(
     // ----- Workbook-level settings (full snapshot) -----
     //
     // Single emit; `changed_keys` enumerates every camelCase top-level
-    // field on the snapshot so the kernel mirror knows the entire
-    // payload was "changed from nothing" on hydration. The mirror
+    // field on the snapshot so the kernel cell_store knows the entire
+    // payload was "changed from nothing" on hydration. The cell store
     // replaces its full workbook-settings payload from `settings`.
     let workbook_settings = workbook::settings::get_settings(&stores.storage.metadata);
     let workbook_settings_value =

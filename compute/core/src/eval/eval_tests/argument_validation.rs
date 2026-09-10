@@ -11,7 +11,7 @@ use super::*;
 
 #[test]
 fn index_negative_row_returns_value_error() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![vec![
@@ -26,7 +26,7 @@ fn index_negative_row_returns_value_error() {
 
 #[test]
 fn index_negative_row_with_col_returns_value_error() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![
@@ -44,7 +44,7 @@ fn index_negative_row_with_col_returns_value_error() {
 
 #[test]
 fn index_negative_col_returns_value_error() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let arr = ASTNode::Array {
         rows: vec![vec![
@@ -70,7 +70,7 @@ fn index_negative_col_returns_value_error() {
 
 #[test]
 fn unary_plus_non_numeric_text_passes_through() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = ASTNode::UnaryOp {
         op: UnaryOp::Plus,
@@ -81,7 +81,7 @@ fn unary_plus_non_numeric_text_passes_through() {
 
 #[test]
 fn unary_plus_alphanumeric_text_passes_through() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = ASTNode::UnaryOp {
         op: UnaryOp::Plus,
@@ -92,7 +92,7 @@ fn unary_plus_alphanumeric_text_passes_through() {
 
 #[test]
 fn unary_plus_empty_string_passes_through() {
-    let (m, s) = test_mirror();
+    let (m, s) = test_store();
     let ctx = make_ctx(&m, s);
     let node = ASTNode::UnaryOp {
         op: UnaryOp::Plus,

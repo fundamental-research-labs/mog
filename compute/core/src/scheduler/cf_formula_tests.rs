@@ -1,6 +1,6 @@
 use super::*;
+use crate::cells::CellStore;
 use crate::cf::types::{CFRule, CFRuleKind, CfRenderStyle};
-use crate::mirror::CellMirror;
 use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use cell_types::RangePos;
 use compute_parser::{AbsFlags, CellRefNode, RangeRef};
@@ -158,11 +158,11 @@ fn make_blanks_rule(blanks: bool) -> CFRule {
 #[test]
 fn test_cf_formula_simple() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, make_cf_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, make_cf_snapshot())
         .unwrap();
     let rules = vec![make_formula_rule("=A1>5", 1)];
-    let results = core.eval_cf(&mirror, &sheet_id(), &rules);
+    let results = core.eval_cf(&cell_store, &sheet_id(), &rules);
     // Only A3=10 satisfies >5
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].row, 2);
@@ -172,10 +172,10 @@ fn test_cf_formula_simple() {
 #[test]
 fn test_cf_blanks_rule_does_not_match_formula_empty_string() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, make_blanks_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, make_blanks_snapshot())
         .unwrap();
-    let results = core.eval_cf(&mirror, &sheet_id(), &[make_blanks_rule(true)]);
+    let results = core.eval_cf(&cell_store, &sheet_id(), &[make_blanks_rule(true)]);
 
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].row, 0);
@@ -184,10 +184,10 @@ fn test_cf_blanks_rule_does_not_match_formula_empty_string() {
 #[test]
 fn test_cf_non_blanks_rule_matches_formula_empty_string() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, make_blanks_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, make_blanks_snapshot())
         .unwrap();
-    let results = core.eval_cf(&mirror, &sheet_id(), &[make_blanks_rule(false)]);
+    let results = core.eval_cf(&cell_store, &sheet_id(), &[make_blanks_rule(false)]);
 
     let mut rows: Vec<u32> = results.iter().map(|r| r.row).collect();
     rows.sort();
@@ -197,11 +197,11 @@ fn test_cf_non_blanks_rule_matches_formula_empty_string() {
 #[test]
 fn test_cf_formula_relative_shift() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, make_cf_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, make_cf_snapshot())
         .unwrap();
     let rules = vec![make_formula_rule("=A1>=3", 1)];
-    let results = core.eval_cf(&mirror, &sheet_id(), &rules);
+    let results = core.eval_cf(&cell_store, &sheet_id(), &rules);
     // A2=5, A3=10, A4=3 satisfy >=3
     assert_eq!(results.len(), 3);
     let mut rows: Vec<u32> = results.iter().map(|r| r.row).collect();
@@ -212,36 +212,36 @@ fn test_cf_formula_relative_shift() {
 #[test]
 fn test_cf_formula_absolute_ref() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, make_cf_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, make_cf_snapshot())
         .unwrap();
     // $A$1>5 => all cells check A1=1, 1>5=false
     let rules = vec![make_formula_rule("=$A$1>5", 1)];
-    let results = core.eval_cf(&mirror, &sheet_id(), &rules);
+    let results = core.eval_cf(&cell_store, &sheet_id(), &rules);
     assert_eq!(results.len(), 0);
 }
 
 #[test]
 fn test_cf_formula_absolute_ref_match() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, make_cf_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, make_cf_snapshot())
         .unwrap();
     // $A$1>0 => all cells check A1=1, 1>0=true
     let rules = vec![make_formula_rule("=$A$1>0", 1)];
-    let results = core.eval_cf(&mirror, &sheet_id(), &rules);
+    let results = core.eval_cf(&cell_store, &sheet_id(), &rules);
     assert_eq!(results.len(), 5);
 }
 
 #[test]
 fn test_cf_formula_mixed_ref() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, make_cf_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, make_cf_snapshot())
         .unwrap();
     // $A1>3: col absolute, row relative
     let rules = vec![make_formula_rule("=$A1>3", 1)];
-    let results = core.eval_cf(&mirror, &sheet_id(), &rules);
+    let results = core.eval_cf(&cell_store, &sheet_id(), &rules);
     // A2=5>3, A3=10>3
     assert_eq!(results.len(), 2);
     let mut rows: Vec<u32> = results.iter().map(|r| r.row).collect();
@@ -252,12 +252,12 @@ fn test_cf_formula_mixed_ref() {
 #[test]
 fn test_cf_formula_boolean_result() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, make_cf_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, make_cf_snapshot())
         .unwrap();
     // =A1=10 => only A3=10 matches
     let rules = vec![make_formula_rule("=A1=10", 1)];
-    let results = core.eval_cf(&mirror, &sheet_id(), &rules);
+    let results = core.eval_cf(&cell_store, &sheet_id(), &rules);
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].row, 2);
 }
@@ -265,12 +265,12 @@ fn test_cf_formula_boolean_result() {
 #[test]
 fn test_cf_formula_numeric_result() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, make_cf_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, make_cf_snapshot())
         .unwrap();
     // =A1 => raw value, truthy if non-zero. A5=0 is falsy.
     let rules = vec![make_formula_rule("=A1", 1)];
-    let results = core.eval_cf(&mirror, &sheet_id(), &rules);
+    let results = core.eval_cf(&cell_store, &sheet_id(), &rules);
     assert_eq!(results.len(), 4);
     let mut rows: Vec<u32> = results.iter().map(|r| r.row).collect();
     rows.sort();
@@ -280,34 +280,34 @@ fn test_cf_formula_numeric_result() {
 #[test]
 fn test_cf_formula_error() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, make_cf_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, make_cf_snapshot())
         .unwrap();
     // =1/0 => IEEE 754 Infinity (truthy) or error. Must not panic.
     let rules = vec![make_formula_rule("=1/0", 1)];
-    let results = core.eval_cf(&mirror, &sheet_id(), &rules);
+    let results = core.eval_cf(&cell_store, &sheet_id(), &rules);
     assert!(results.len() <= 5);
 }
 
 #[test]
 fn test_cf_formula_invalid_parse() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, make_cf_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, make_cf_snapshot())
         .unwrap();
     let rules = vec![make_formula_rule("=!!!INVALID!!!", 1)];
-    let results = core.eval_cf(&mirror, &sheet_id(), &rules);
+    let results = core.eval_cf(&cell_store, &sheet_id(), &rules);
     assert_eq!(results.len(), 0);
 }
 
 #[test]
 fn test_cf_formula_no_equals_prefix() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, make_cf_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, make_cf_snapshot())
         .unwrap();
     let rules = vec![make_formula_rule("A1>5", 1)];
-    let results = core.eval_cf(&mirror, &sheet_id(), &rules);
+    let results = core.eval_cf(&cell_store, &sheet_id(), &rules);
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].row, 2);
 }
@@ -315,8 +315,8 @@ fn test_cf_formula_no_equals_prefix() {
 #[test]
 fn test_cf_formula_empty_range() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, make_cf_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, make_cf_snapshot())
         .unwrap();
     // Range outside any populated area — should produce no results
     let rules = vec![CFRule {
@@ -328,7 +328,7 @@ fn test_cf_formula_empty_range() {
             formula: "=A1>0".to_string(),
         },
     }];
-    let results = core.eval_cf(&mirror, &sheet_id(), &rules);
+    let results = core.eval_cf(&cell_store, &sheet_id(), &rules);
     assert_eq!(results.len(), 0);
 }
 
@@ -415,8 +415,8 @@ fn test_cf_formula_cross_column() {
         calculation_settings: None,
     };
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, snapshot).unwrap();
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
     // =A1>B1, applied to A1:A3
     let rules = vec![CFRule {
         priority: 1,
@@ -427,7 +427,7 @@ fn test_cf_formula_cross_column() {
             formula: "=A1>B1".to_string(),
         },
     }];
-    let results = core.eval_cf(&mirror, &sheet_id(), &rules);
+    let results = core.eval_cf(&cell_store, &sheet_id(), &rules);
     assert_eq!(results.len(), 2);
     let mut rows: Vec<u32> = results.iter().map(|r| r.row).collect();
     rows.sort();
@@ -609,11 +609,11 @@ fn test_shift_ast_range() {
 #[test]
 fn test_cf_formula_with_function() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, make_cf_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, make_cf_snapshot())
         .unwrap();
     let rules = vec![make_formula_rule("=A1>SUM(A1:A5)/5", 1)];
-    let results = core.eval_cf(&mirror, &sheet_id(), &rules);
+    let results = core.eval_cf(&cell_store, &sheet_id(), &rules);
     assert_eq!(results.len(), 3);
     let mut rows: Vec<u32> = results.iter().map(|r| r.row).collect();
     rows.sort();
@@ -623,8 +623,8 @@ fn test_cf_formula_with_function() {
 #[test]
 fn test_cf_formula_multiple_rules() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, make_cf_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, make_cf_snapshot())
         .unwrap();
     let rules = vec![
         CFRule {
@@ -652,7 +652,7 @@ fn test_cf_formula_multiple_rules() {
             },
         },
     ];
-    let results = core.eval_cf(&mirror, &sheet_id(), &rules);
+    let results = core.eval_cf(&cell_store, &sheet_id(), &rules);
     // A3: both rules -> red bg + bold
     let a3 = results.iter().find(|r| r.row == 2).unwrap();
     let a3s = a3.style.as_ref().unwrap();
@@ -671,8 +671,8 @@ fn test_cf_formula_multiple_rules() {
 #[test]
 fn test_cf_formula_stop_if_true() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, make_cf_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, make_cf_snapshot())
         .unwrap();
     let rules = vec![
         CFRule {
@@ -700,7 +700,7 @@ fn test_cf_formula_stop_if_true() {
             },
         },
     ];
-    let results = core.eval_cf(&mirror, &sheet_id(), &rules);
+    let results = core.eval_cf(&cell_store, &sheet_id(), &rules);
     // A3 matches rule1 (stop), rule2 NOT evaluated
     let a3 = results.iter().find(|r| r.row == 2).unwrap();
     assert_eq!(
@@ -717,20 +717,20 @@ fn test_cf_formula_stop_if_true() {
 #[test]
 fn test_cf_formula_row_absolute() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, make_cf_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, make_cf_snapshot())
         .unwrap();
     // =A$1>3: row absolute (always row 0 = A1=1), 1>3=false for all
     let rules = vec![make_formula_rule("=A$1>3", 1)];
-    let results = core.eval_cf(&mirror, &sheet_id(), &rules);
+    let results = core.eval_cf(&cell_store, &sheet_id(), &rules);
     assert_eq!(results.len(), 0);
 }
 
 #[test]
 fn test_cf_formula_mixed_with_value_rules() {
     let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    core.init_from_snapshot(&mut mirror, make_cf_snapshot())
+    let mut cell_store = CellStore::new();
+    core.init_from_snapshot(&mut cell_store, make_cf_snapshot())
         .unwrap();
     let rules = vec![
         CFRule {
@@ -764,7 +764,7 @@ fn test_cf_formula_mixed_with_value_rules() {
             },
         },
     ];
-    let results = core.eval_cf(&mirror, &sheet_id(), &rules);
+    let results = core.eval_cf(&cell_store, &sheet_id(), &rules);
     // A3=10: formula matches
     let a3 = results.iter().find(|r| r.row == 2).unwrap();
     assert_eq!(
@@ -782,13 +782,13 @@ fn cf_formula_uses_recalc_clock_context_for_today() {
 
     for date1904 in [false, true] {
         let mut core = ComputeCore::new();
-        let mut mirror = CellMirror::new();
-        core.init_from_snapshot(&mut mirror, make_cf_snapshot())
+        let mut cell_store = CellStore::new();
+        core.init_from_snapshot(&mut cell_store, make_cf_snapshot())
             .expect("CF snapshot should initialize");
-        mirror.date1904 = date1904;
+        cell_store.date1904 = date1904;
 
         core.full_recalc_with_options(
-            &mut mirror,
+            &mut cell_store,
             &RecalcOptions {
                 iterative: None,
                 max_iterations: None,
@@ -804,7 +804,7 @@ fn cf_formula_uses_recalc_clock_context_for_today() {
             "=TODAY()=46273"
         };
         let results = core.eval_cf(
-            &mirror,
+            &cell_store,
             &sheet_id(),
             &[make_formula_rule(expected_today, 1)],
         );

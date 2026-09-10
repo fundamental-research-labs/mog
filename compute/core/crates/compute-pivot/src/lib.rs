@@ -1,7 +1,7 @@
 //! Pivot table computation engine.
 //!
 //! Pure-function pivot: `(config, data, expansion_state) -> result`.
-//! No `CellMirror`, no document state — stateless computation only.
+//! No `CellStore`, no document state — stateless computation only.
 //!
 //! ## Modules
 //!

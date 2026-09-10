@@ -1,5 +1,5 @@
+use crate::cells::SheetStore;
 use cell_types::SheetId;
-use compute_document::identity::GridIndex;
 use compute_parser::{ASTNode, FormulaSource};
 use domain_types::domain::hyperlink::Hyperlink;
 
@@ -10,11 +10,11 @@ use crate::storage::WorkbookStorage;
 pub fn get_hyperlink(
     storage: &WorkbookStorage,
     sheet_id: &SheetId,
-    grid: &GridIndex,
+    grid: &SheetStore,
     row: u32,
     col: u32,
 ) -> Option<String> {
-    let id = grid.cell_id_at(row, col)?;
+    let id = grid.cell_id_at(cell_types::SheetPos::new(row, col))?;
     let link = &storage
         .sheet_metadata
         .get(sheet_id)?
@@ -32,7 +32,7 @@ pub fn get_hyperlink(
 pub fn get_all_hyperlinks(
     storage: &WorkbookStorage,
     sheet_id: &SheetId,
-    grid: &GridIndex,
+    grid: &SheetStore,
 ) -> Vec<Hyperlink> {
     let Some(metadata) = storage.sheet_metadata.get(sheet_id) else {
         return Vec::new();

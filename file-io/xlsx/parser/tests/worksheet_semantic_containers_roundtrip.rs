@@ -13,6 +13,7 @@ fn semantic_xml(raw_xml: &str) -> Option<WorksheetSemanticXml> {
 
 fn semantic_fixture() -> WorksheetSemanticContainers {
     WorksheetSemanticContainers {
+        custom_sheet_view_printer_settings: Default::default(),
         custom_sheet_views: semantic_xml(
             r#"<customSheetViews><customSheetView guid="{11111111-1111-1111-1111-111111111111}" scale="90"/></customSheetViews>"#,
         ),

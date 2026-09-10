@@ -1589,6 +1589,10 @@ impl WorksheetSemanticXml {
 pub struct WorksheetSemanticContainers {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_sheet_views: Option<WorksheetSemanticXml>,
+    /// Original relationship ID -> normalized printer-settings part path.
+    /// Kept with the views so sheet copies/reorders do not change their owner.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub custom_sheet_view_printer_settings: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ignored_errors: Option<WorksheetSemanticXml>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

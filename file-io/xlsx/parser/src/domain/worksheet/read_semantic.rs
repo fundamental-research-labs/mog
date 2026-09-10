@@ -3,6 +3,7 @@ use domain_types::{WorksheetSemanticContainers, WorksheetSemanticXml};
 pub fn parse_worksheet_semantic_containers(xml: &[u8]) -> WorksheetSemanticContainers {
     WorksheetSemanticContainers {
         custom_sheet_views: extract_semantic_xml(xml, b"customSheetViews"),
+        custom_sheet_view_printer_settings: Default::default(),
         ignored_errors: extract_semantic_xml(xml, b"ignoredErrors"),
         sheet_calc_pr: extract_semantic_xml(xml, b"sheetCalcPr"),
         protected_ranges: extract_semantic_xml(xml, b"protectedRanges"),

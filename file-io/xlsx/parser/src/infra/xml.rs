@@ -18,6 +18,7 @@ pub use attrs::{
 };
 pub use decode::{decode_xml_entities, decode_xml_entities_string};
 pub use direct_child::extract_direct_child_element_xml;
+pub(crate) use direct_child::find_direct_child_start;
 pub use mc::{
     MC_DRAWING_MARKUP_SUPPORTED_NAMESPACES, MC_RELATIONSHIPS_NAMESPACE, MC_SUPPORTED_NAMESPACES,
     MC_WORKSHEET_MARKUP_SUPPORTED_NAMESPACES, McAlternateContentOutcome, McBranch, McResolution,

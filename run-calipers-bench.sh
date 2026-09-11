@@ -11,6 +11,9 @@
 #   ./run-calipers-bench.sh --suite default         # extra calipers bench flags
 #   ./run-calipers-bench.sh --json out.json --report ./report
 #
+# The HTML includes Office.js Excel API coverage: Microsoft method catalog
+# vs Mog host vs verification scripts (also written as officejs-coverage.json).
+#
 # Env:
 #   MOG_BIN       built mog binary (default: <repo>/target-native/debug/mog)
 #   CALIPERS_BIN  calipers binary (default: build vendor/calipers/cmd/calipers)
@@ -40,7 +43,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --help|-h)
-      sed -n '2,18p' "$0"
+      sed -n '2,20p' "$0"
       exit 0
       ;;
     *)
@@ -69,11 +72,19 @@ fi
 
 mkdir -p "$(dirname "${json}")" "${report}"
 
+coverage_json="${report}/officejs-coverage.json"
+python3 "${root}/scripts/officejs-coverage/coverage.py" scan \
+  --catalog "${root}/scripts/officejs-coverage/excel-js-api.json" \
+  --officejs "${root}/compute/officejs/src" \
+  --cases "${root}/vendor/calipers/verification/cases" \
+  --out "${coverage_json}"
+
 args=(
   bench
   --engine "${mog_bin}"
   --json "${json}"
   --report "${report}"
+  --coverage "${coverage_json}"
   --cases-dir "${root}/vendor/calipers/verification/cases"
 )
 if [[ "${excel}" -eq 1 ]]; then
@@ -83,6 +94,7 @@ if [[ "${excel}" -eq 1 ]]; then
     --engine "${mog_bin}"
     --json "${json}"
     --report "${report}"
+    --coverage "${coverage_json}"
     --cases-dir "${root}/vendor/calipers/verification/cases"
   )
 fi

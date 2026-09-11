@@ -107,7 +107,7 @@ for grouping, error handling, and redo behavior.
 ./run-calipers-bench.sh
 ./run-calipers-bench.sh --suite default
 
-# Both series on one Windows machine (Excel COM, then Mog)
+# Both series on one Windows machine (build Mog, run Mog, then Excel COM)
 ./run-calipers-bench.sh --excel
 ```
 

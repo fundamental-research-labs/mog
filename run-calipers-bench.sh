@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Sequential verifier-corpus speed/memory benchmark: Mog save/run on any OS,
-# plus Excel COM on Windows when --excel is passed.
+# Sequential verifier-corpus speed/memory benchmark: compile Mog, run Mog,
+# then Excel COM on Windows when --excel is passed.
 #
 # Default is Mog-only so you can inspect JSON + HTML in this environment
 # before a colleague runs the Excel series on Windows.
 #
 # Usage:
-#   ./run-calipers-bench.sh                         # Mog-only → JSON + HTML
-#   ./run-calipers-bench.sh --excel                 # Excel then Mog (Windows)
+#   ./run-calipers-bench.sh                         # build Mog, run Mog → JSON + HTML
+#   ./run-calipers-bench.sh --excel                 # build Mog, run Mog, then Excel (Windows)
 #   ./run-calipers-bench.sh --suite default         # extra calipers bench flags
 #   ./run-calipers-bench.sh --json out.json --report ./report
 #
@@ -43,7 +43,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --help|-h)
-      sed -n '2,20p' "$0"
+      sed -n '2,19p' "$0"
       exit 0
       ;;
     *)
@@ -54,7 +54,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 mog_bin="${MOG_BIN:-${root}/target-native/debug/mog}"
-if [[ ! -x "${mog_bin}" ]]; then
+if [[ -z "${MOG_BIN:-}" ]]; then
   (cd "${root}" && cargo build -p mog --locked)
 fi
 if [[ ! -x "${mog_bin}" ]]; then
@@ -90,8 +90,8 @@ args=(
 if [[ "${excel}" -eq 1 ]]; then
   args=(
     bench
-    --engine excel
     --engine "${mog_bin}"
+    --engine excel
     --json "${json}"
     --report "${report}"
     --coverage "${coverage_json}"

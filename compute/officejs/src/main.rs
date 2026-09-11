@@ -11,6 +11,21 @@ fn usage() -> String {
 }
 
 fn main() -> ExitCode {
+    // Windows debug main-thread stack is 1 MiB; XLSX import needs the same
+    // 16 MiB budget as Dispatch::spawn before that actor exists.
+    match std::thread::Builder::new()
+        .name("mog-main".into())
+        .stack_size(16 * 1024 * 1024)
+        .spawn(run_cli)
+        .expect("failed to spawn mog-main")
+        .join()
+    {
+        Ok(code) => code,
+        Err(_) => ExitCode::FAILURE,
+    }
+}
+
+fn run_cli() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {

@@ -111,7 +111,7 @@ for grouping, error handling, and redo behavior.
 ./run-calipers-bench.sh --excel
 ```
 
-Excel is desktop `Excel.Application` via COM plus a sideloaded Office.js add-in (not AppSource / Office Scripts). Mog uses `save` / `run`. See `vendor/calipers` `bench` / `bench-report`.
+Excel is desktop `Excel.Application` via COM plus a sideloaded Office.js add-in (not AppSource / Office Scripts). Mog uses `save` / `run`. The HTML also reports Office.js Excel API coverage (Microsoft method catalog vs Mog host vs verification scripts). See `vendor/calipers` `bench` / `bench-report` and `scripts/officejs-coverage`.
 
 ## Tests
 

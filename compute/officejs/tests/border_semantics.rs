@@ -143,8 +143,10 @@ fn border_edges_interiors_and_diagonals_mutate_real_grid_state() {
             .expect("effective format at C3"),
     )
     .expect("format serializes");
-    assert_eq!(interior["borders"]["vertical"]["style"], "dashDot");
-    assert_eq!(interior["borders"]["horizontal"]["style"], "slantDashDot");
+    assert_eq!(interior["borders"]["left"]["style"], "dashDot");
+    assert_eq!(interior["borders"]["right"]["style"], "dashDot");
+    assert_eq!(interior["borders"]["top"]["style"], "slantDashDot");
+    assert_eq!(interior["borders"]["bottom"]["style"], "slantDashDot");
 }
 
 #[test]

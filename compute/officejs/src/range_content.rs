@@ -111,7 +111,7 @@ pub(crate) fn set(
             let row = start_row + row_offset as u32;
             let col = start_col + col_offset as u32;
             patches
-                .entry(format_code.to_owned())
+                .entry(canonicalize_excel_numfmt(format_code))
                 .or_default()
                 .push((row, col, row, col));
         }
@@ -130,6 +130,63 @@ pub(crate) fn set(
     }
 
     Ok(())
+}
+
+/// Match Excel's stored formatCode for Office.js-assigned formats.
+///
+/// Excel quotes currency `$` and escapes hyphens in date tokens when it
+/// writes `xl/styles.xml`. The script-visible `Range.numberFormat` value is
+/// the unquoted form; export comparison uses the stored code.
+fn canonicalize_excel_numfmt(code: &str) -> String {
+    let looks_like_date = is_date_number_format(code);
+    let mut out = String::with_capacity(code.len() + 8);
+    let chars: Vec<char> = code.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        match chars[i] {
+            '"' => {
+                out.push('"');
+                i += 1;
+                while i < chars.len() {
+                    out.push(chars[i]);
+                    if chars[i] == '"' {
+                        i += 1;
+                        break;
+                    }
+                    i += 1;
+                }
+            }
+            '\\' => {
+                out.push('\\');
+                i += 1;
+                if i < chars.len() {
+                    out.push(chars[i]);
+                    i += 1;
+                }
+            }
+            '$' => {
+                out.push_str("\"$\"");
+                i += 1;
+            }
+            '-' if looks_like_date => {
+                out.push_str("\\-");
+                i += 1;
+            }
+            _ => {
+                out.push(chars[i]);
+                i += 1;
+            }
+        }
+    }
+    out
+}
+
+fn is_date_number_format(code: &str) -> bool {
+    let lower = code.to_ascii_lowercase();
+    let has_y = lower.contains('y');
+    let has_d = lower.contains('d');
+    let has_m = lower.contains('m');
+    (has_y && has_m) || (has_y && has_d) || (has_m && has_d && !lower.contains('#'))
 }
 
 /// Clear a Range using an Office.js `ClearApplyTo` token.

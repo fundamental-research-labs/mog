@@ -148,6 +148,33 @@ impl SheetTables {
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
+    /// Set the totals-row function for a table column and persist it.
+    pub fn set_totals_function(
+        &self,
+        table_name: &str,
+        column_id: &str,
+        func: &str,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let name = table_name.to_string();
+        let column = column_id.to_string();
+        let func = match func {
+            "Sum" | "sum" => compute_core::table::types::TotalsFunction::Sum,
+            "Average" | "average" => compute_core::table::types::TotalsFunction::Average,
+            "Count" | "count" => compute_core::table::types::TotalsFunction::Count,
+            "CountNums" | "countNums" => compute_core::table::types::TotalsFunction::CountNums,
+            "Max" | "max" => compute_core::table::types::TotalsFunction::Max,
+            "Min" | "min" => compute_core::table::types::TotalsFunction::Min,
+            other => {
+                return Err(ComputeApiError::InvalidOperation(format!(
+                    "unsupported totals function '{other}'"
+                )));
+            }
+        };
+        self.dispatch
+            .call_engine(move |e| e.set_table_totals_function(&name, &column, func))
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
     /// Toggle the totals row on/off.
     pub fn toggle_totals_row(&self, table_name: &str) -> Result<MutationResult, ComputeApiError> {
         let name = table_name.to_string();

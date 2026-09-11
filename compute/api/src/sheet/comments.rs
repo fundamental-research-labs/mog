@@ -138,6 +138,30 @@ impl SheetComments {
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
+    /// Add a comment at a 0-based cell position.
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_at(
+        &self,
+        row: u32,
+        col: u32,
+        author: &str,
+        text: &str,
+        author_id: Option<&str>,
+        parent_id: Option<&str>,
+        comment_type: CommentType,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let sid = self.sheet_id;
+        let auth = author.to_string();
+        let txt = text.to_string();
+        let aid = author_id.map(|s| s.to_string());
+        let pid = parent_id.map(|s| s.to_string());
+        self.dispatch
+            .call_engine(move |e| {
+                e.add_comment_by_position(&sid, row, col, &txt, &auth, aid, pid, comment_type)
+            })
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
     /// Convert an existing note into a threaded comment. Returns
     /// `MutationResult` whose `data` contains the updated `Comment`.
     pub fn convert_note_to_thread(

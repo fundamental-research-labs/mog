@@ -2,13 +2,115 @@ use std::collections::BTreeMap;
 
 use cell_types::{SheetId, SheetPos};
 use domain_types::CellFormat;
-use domain_types::domain::pivot::{PivotTableConfig, ShowValuesAs, ShowValuesAsConfig};
-use value_types::ComputeError;
+use domain_types::domain::analytics::AggregateFunction;
+use domain_types::domain::pivot::{
+    LayoutForm, PivotFieldArea, PivotTableConfig, ShowValuesAs, ShowValuesAsConfig,
+};
+use value_types::{CellValue, ComputeError};
 
 use crate::cells::CellStore;
 use crate::storage::properties;
 
 use super::{ComputeEngine, services, stores::EngineStores};
+
+/// Extra header rows Excel compact layout inserts above the pivot body:
+/// one row per filter field plus a blank row, and one "Column Labels" /
+/// value-caption row when both row and column fields are present.
+pub(in crate::storage::engine) fn extra_compact_header_rows(config: &PivotTableConfig) -> u32 {
+    let filter_count = config
+        .get_placements_for_area(PivotFieldArea::Filter)
+        .len() as u32;
+    let filter_rows = if filter_count == 0 { 0 } else { filter_count + 1 };
+    filter_rows + u32::from(needs_column_caption_row(config))
+}
+
+fn needs_column_caption_row(config: &PivotTableConfig) -> bool {
+    let layout_form = config
+        .layout
+        .as_ref()
+        .and_then(|layout| layout.layout_form.clone());
+    !matches!(layout_form, Some(LayoutForm::Tabular) | Some(LayoutForm::Outline))
+        && !config.column_placements().is_empty()
+        && !config.row_placements().is_empty()
+}
+
+fn value_field_caption(config: &PivotTableConfig) -> String {
+    let placements = config.value_placements();
+    let Some(placement) = placements.first() else {
+        return String::new();
+    };
+    let name = config
+        .get_field(placement.field_id.as_str())
+        .map(|field| field.name.as_str())
+        .unwrap_or_else(|| placement.field_id.as_str());
+    match placement.aggregate_function {
+        Some(AggregateFunction::Count | AggregateFunction::CountA) => {
+            format!("Count of {name}")
+        }
+        Some(AggregateFunction::Average) => format!("Average of {name}"),
+        Some(AggregateFunction::Max) => format!("Max of {name}"),
+        Some(AggregateFunction::Min) => format!("Min of {name}"),
+        _ => format!("Sum of {name}"),
+    }
+}
+
+pub(in crate::storage::engine) fn write_compact_pivot_header_extras(
+    cell_store: &mut CellStore,
+    output_sheet_id: &SheetId,
+    anchor_row: u32,
+    anchor_col: u32,
+    first_data_col: u32,
+    config: &PivotTableConfig,
+) {
+    let mut row = anchor_row;
+    for filter in config.get_placements_for_area(PivotFieldArea::Filter) {
+        let name = config
+            .get_field(filter.field_id.as_str())
+            .map(|field| field.name.clone())
+            .unwrap_or_else(|| filter.field_id.to_string());
+        cell_store.write_generated_cell(
+            output_sheet_id,
+            row,
+            anchor_col,
+            CellValue::from(name.as_str()),
+        );
+        cell_store.write_generated_cell(
+            output_sheet_id,
+            row,
+            anchor_col + 1,
+            CellValue::from("(All)"),
+        );
+        row += 1;
+    }
+    if !config
+        .get_placements_for_area(PivotFieldArea::Filter)
+        .is_empty()
+    {
+        row += 1;
+    }
+    if needs_column_caption_row(config) {
+        let caption = value_field_caption(config);
+        if !caption.is_empty() {
+            cell_store.write_generated_cell(
+                output_sheet_id,
+                row,
+                anchor_col,
+                CellValue::from(caption.as_str()),
+            );
+        }
+        let col_caption = config
+            .layout
+            .as_ref()
+            .and_then(|layout| layout.col_header_caption.clone())
+            .unwrap_or_else(|| "Column Labels".to_string());
+        cell_store.write_generated_cell(
+            output_sheet_id,
+            row,
+            anchor_col + first_data_col,
+            CellValue::from(col_caption.as_str()),
+        );
+    }
+}
 
 fn is_percent_show_values_as(show_values_as: Option<&ShowValuesAsConfig>) -> bool {
     matches!(
@@ -133,6 +235,73 @@ pub(in crate::storage::engine) fn apply_pivot_value_number_formats(
             &format,
         );
     }
+}
+
+/// Drop generated pivot cell formats in a rectangle.
+///
+/// Compact extras (filter rows, Column Labels) shift item cells down on
+/// rematerialize. Identities stay put, so leftover left-align from the
+/// previous render would stick to header captions and blank spacer rows.
+pub(in crate::storage::engine) fn clear_pivot_output_formats(
+    stores: &mut EngineStores,
+    cell_store: &CellStore,
+    output_sheet_id: &SheetId,
+    anchor_row: u32,
+    anchor_col: u32,
+    total_rows: u32,
+    total_cols: u32,
+) {
+    if total_rows == 0 || total_cols == 0 {
+        return;
+    }
+    for row_offset in 0..total_rows {
+        for col_offset in 0..total_cols {
+            let Some(cell_id) = cell_store.resolve_cell_id(
+                output_sheet_id,
+                SheetPos::new(anchor_row + row_offset, anchor_col + col_offset),
+            ) else {
+                continue;
+            };
+            properties::clear_cell_format_by_id(&mut stores.storage, output_sheet_id, &cell_id);
+        }
+    }
+}
+
+/// Excel left-aligns compact pivot row-item labels (not the header caption).
+pub(in crate::storage::engine) fn apply_pivot_row_label_alignment(
+    stores: &mut EngineStores,
+    cell_store: &CellStore,
+    output_sheet_id: &SheetId,
+    anchor_row: u32,
+    anchor_col: u32,
+    result: &compute_pivot::PivotTableResult,
+) {
+    let bounds = &result.rendered_bounds;
+    if bounds.total_rows == 0 || bounds.first_data_col == 0 {
+        return;
+    }
+    let mut cell_ids = Vec::new();
+    for row_offset in bounds.first_data_row..bounds.total_rows {
+        for col_offset in 0..bounds.first_data_col {
+            let pos = SheetPos::new(anchor_row + row_offset, anchor_col + col_offset);
+            match cell_store.get_cell_value_at(output_sheet_id, pos) {
+                Some(CellValue::Text(text))
+                    if !text.is_empty() && text.as_ref() != "Row Labels" => {}
+                _ => continue,
+            }
+            if let Some(cell_id) = cell_store.resolve_cell_id(output_sheet_id, pos) {
+                cell_ids.push(cell_id);
+            }
+        }
+    }
+    if cell_ids.is_empty() {
+        return;
+    }
+    let Ok(format) = serde_json::from_value(serde_json::json!({ "horizontalAlign": "left" }))
+    else {
+        return;
+    };
+    properties::set_cell_formats_by_id(&mut stores.storage, output_sheet_id, &cell_ids, &format);
 }
 
 impl ComputeEngine {

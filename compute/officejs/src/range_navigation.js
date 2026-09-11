@@ -52,6 +52,20 @@
     return queueWorksheetRange(this, "worksheet.getCell", [row, column]);
   };
 
+  Excel.Worksheet.prototype.getRangeByIndexes = function (
+    startRow,
+    startColumn,
+    rowCount,
+    columnCount
+  ) {
+    return queueWorksheetRange(this, "worksheet.getRangeByIndexes", [
+      startRow,
+      startColumn,
+      rowCount,
+      columnCount,
+    ]);
+  };
+
   // Range methods that return another Range. The returned proxy is created
   // immediately, while all geometry and error handling stays deferred to the
   // host's rangeNavigation operation at context.sync().

@@ -158,9 +158,17 @@ impl CellStore {
                     }
                 };
 
-                // Write row field labels in the header row. Compact layout collapses
-                // multiple row fields into `first_data_col` visible header columns,
-                // so only write labels that fit before the data region.
+                // Compact Excel layout bottom-aligns row-field captions and
+                // column headers in the reserved header block so extra filter
+                // / "Column Labels" rows can sit above them.
+                let header_label_row = anchor_row + first_data_row.saturating_sub(1);
+                let column_header_start = first_data_row
+                    .saturating_sub(result.column_headers.len() as u32);
+
+                // Write row field labels in the last header row. Compact layout
+                // collapses multiple row fields into `first_data_col` visible
+                // header columns, so only write labels that fit before the data
+                // region.
                 for (h_idx, name) in row_field_names
                     .iter()
                     .take(first_data_col as usize)
@@ -169,7 +177,7 @@ impl CellStore {
                     if !name.is_empty() {
                         write_cell(
                             anchor_col + h_idx as u32,
-                            anchor_row,
+                            header_label_row,
                             CellValue::from(name.as_str()),
                         );
                     }
@@ -182,7 +190,7 @@ impl CellStore {
                     for header in &col_header.headers {
                         write_cell(
                             anchor_col + first_data_col + data_col_offset,
-                            anchor_row + level_idx,
+                            anchor_row + column_header_start + level_idx,
                             header.value.clone(),
                         );
                         data_col_offset += header.span as u32;
@@ -203,7 +211,7 @@ impl CellStore {
                     let gt_span = num_value_fields.max(1);
                     write_cell(
                         anchor_col + total_cols - gt_span,
-                        anchor_row,
+                        header_label_row,
                         CellValue::Text(gt_label.into()),
                     );
                 }
@@ -318,6 +326,28 @@ impl CellStore {
             self.bump_col_version(sheet, col);
             self.dense_cache.invalidate(sheet, col);
         }
+    }
+
+    /// Write one generated pivot/layout cell and bump its column caches.
+    pub fn write_generated_cell(
+        &mut self,
+        sheet: &SheetId,
+        row: u32,
+        col: u32,
+        value: CellValue,
+    ) {
+        if let Some(sheet_store) = self.sheets.get_mut(sheet) {
+            let pos = SheetPos::new(row, col);
+            if value.is_null() {
+                sheet_store.generated_values.remove(&pos);
+            } else {
+                sheet_store.generated_values.insert(pos, value);
+            }
+            sheet_store.note_column_position(pos);
+            sheet_store.expand_extent(pos);
+        }
+        self.bump_col_version(sheet, col);
+        self.dense_cache.invalidate(sheet, col);
     }
 
     /// Materialize a pivot and register every rendered cell as identity-backed.

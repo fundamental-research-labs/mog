@@ -9,13 +9,18 @@
 //! queued operations, successful earlier writes remain applied and undoable.
 
 mod borders;
+mod comments;
+mod conditional;
 mod dispatch;
 mod error;
 mod format;
+mod freeze;
 mod host;
 mod names;
+mod pivot;
 mod range_content;
 mod range_navigation;
+mod range_ops;
 mod runtime;
 mod sort_filter;
 mod table_collections;

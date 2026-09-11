@@ -1,21 +1,14 @@
-//! SheetPivots — Pivot table operations (stub).
-//!
-//! Pivot tables are managed through the stateless pure API (`compute_api::pure`),
-//! not through sheet-level state. This module is a placeholder for any future
-//! sheet-scoped pivot operations.
+//! SheetPivots — Pivot table create / update / materialize.
 
 use crate::dispatch::Dispatch;
+use crate::error::ComputeApiError;
 use cell_types::SheetId;
+use domain_types::domain::pivot::PivotTableConfig;
+use snapshot_types::MutationResult;
 
-/// Pivot table operations for a single sheet (stub).
-///
-/// Pivot table computation and configuration are handled through the
-/// stateless pure API. Sheet-level pivot CRUD may be added in the future
-/// if pivots gain per-sheet storage in the engine.
+/// Pivot table operations for a single sheet.
 pub struct SheetPivots {
-    #[allow(dead_code)]
     dispatch: Dispatch,
-    #[allow(dead_code)]
     sheet_id: SheetId,
 }
 
@@ -24,9 +17,40 @@ impl SheetPivots {
         Self { dispatch, sheet_id }
     }
 
-    // TODO: Add sheet-level pivot methods if engine storage is added:
-    // - create_pivot_table(config) -> Result<MutationResult, ComputeApiError>
-    // - refresh_pivot_table(pivot_id) -> Result<MutationResult, ComputeApiError>
-    // - delete_pivot_table(pivot_id) -> Result<MutationResult, ComputeApiError>
-    // - get_pivot_tables() -> Result<Vec<PivotTable>, ComputeApiError>
+    /// Create a pivot table from a typed config (JSON-validated by the engine).
+    pub fn create(&self, config: PivotTableConfig) -> Result<MutationResult, ComputeApiError> {
+        let config_json = serde_json::to_value(&config).map_err(|e| {
+            ComputeApiError::InvalidOperation(format!("failed to serialize PivotTableConfig: {e}"))
+        })?;
+        self.dispatch
+            .call_engine(move |e| e.pivot_create(config_json))
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
+    /// Replace a pivot config and write its computed cells in one mutation.
+    pub fn update_and_materialize(
+        &self,
+        pivot_id: &str,
+        config: PivotTableConfig,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let sid = self.sheet_id;
+        let owned_id = pivot_id.to_owned();
+        self.dispatch
+            .call_engine(move |e| e.pivot_update_and_materialize(&sid, &owned_id, config, None))
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
+    /// Load one stored pivot config.
+    pub fn get(&self, pivot_id: &str) -> Result<Option<PivotTableConfig>, ComputeApiError> {
+        let sid = self.sheet_id;
+        let owned_id = pivot_id.to_owned();
+        self.dispatch
+            .query_engine(move |e| e.pivot_get(&sid, &owned_id))
+    }
+
+    /// Load every stored pivot config on this sheet.
+    pub fn get_all(&self) -> Result<Vec<PivotTableConfig>, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch.query_engine(move |e| e.pivot_get_all(&sid))
+    }
 }

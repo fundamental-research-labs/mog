@@ -1,7 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
-use compute_api::{CellAddress, ComputeApiError, Sheet, Workbook, mutation::CellInput};
+use compute_api::{
+    CellAddress, ComputeApiError, DefinedNameInput, Sheet, Workbook, mutation::CellInput,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use value_types::CellValue;
@@ -519,7 +521,18 @@ struct ExtensionDispatch {
 
 impl Host {
     pub(crate) fn new(workbook: Workbook) -> Self {
-        Self::with_extensions(workbook, ExtensionRegistry::default())
+        Self::with_extensions(workbook, Self::default_extensions())
+    }
+
+    fn default_extensions() -> ExtensionRegistry {
+        let registry = ExtensionRegistry::default();
+        registry.register(crate::range_ops::RangeOpsHandler);
+        registry.register(crate::freeze::FreezeHandler);
+        registry.register(crate::worksheets::WorksheetOpsHandler);
+        registry.register(crate::comments::CommentsHandler);
+        registry.register(crate::conditional::ConditionalHandler);
+        registry.register(crate::pivot::PivotHandler);
+        registry
     }
 
     /// Construct a host with a preassembled family registry.  Runtime setup
@@ -1438,14 +1451,15 @@ impl Host {
                         .expect("auto filters lock")
                         .get(&id)
                         .cloned()
-                        .unwrap_or_else(|| AutoFilterRef::new(sheet));
+                        .unwrap_or_else(|| AutoFilterRef::new(sheet.clone()));
                     auto_filter
                         .apply(AutoFilterApplyRequest {
-                            range: address,
+                            range: address.clone(),
                             column_index,
                             criteria,
                         })
                         .map_err(sort_filter_error)?;
+                    ensure_filter_database_name(&self.workbook, &sheet, &address)?;
                     self.auto_filters
                         .lock()
                         .expect("auto filters lock")
@@ -2600,6 +2614,7 @@ impl Host {
             "title.text" => chart.title = Some(text),
             "axes.categoryAxis.title.text" => chart.category_title = Some(text),
             "axes.valueAxis.title.text" => chart.value_title = Some(text),
+            "title.visible" | "legend.visible" | "legend.position" => return Ok(()),
             other => {
                 return Err(BatchError {
                     code: "InvalidArgument",
@@ -2639,6 +2654,7 @@ fn map_chart_type(chart_type: &str) -> &'static str {
         "pie" => "pie",
         "area" => "area",
         "scatter" | "xyscatter" => "scatter",
+        "doughnut" => "doughnut",
         other if other.contains("column") => "column",
         _ => "column",
     }
@@ -2732,6 +2748,37 @@ fn qualified_sheet_name(sheet_name: &str) -> String {
     } else {
         format!("'{}'", sheet_name.replace('\'', "''"))
     }
+}
+
+fn ensure_filter_database_name(
+    workbook: &Workbook,
+    sheet: &Sheet,
+    address: &str,
+) -> Result<(), BatchError> {
+    let sheet_name = sheet.name().map_err(engine_error)?;
+    let qualified = dollar_qualify_range(address);
+    let refers_to = format!("={sheet_name}!{qualified}");
+    let _ = workbook.names().create_named_range(DefinedNameInput {
+        name: "_xlnm._FilterDatabase".to_string(),
+        refers_to,
+        scope: Some(sheet.id().to_uuid_string()),
+        comment: None,
+    });
+    Ok(())
+}
+
+fn dollar_qualify_range(address: &str) -> String {
+    address
+        .split(':')
+        .map(|part| {
+            let part = part.trim().trim_start_matches('$');
+            let idx = part
+                .find(|ch: char| ch.is_ascii_digit())
+                .unwrap_or(part.len());
+            format!("${}${}", &part[..idx], &part[idx..])
+        })
+        .collect::<Vec<_>>()
+        .join(":")
 }
 
 fn unique_sheet_name(workbook: &Workbook) -> Result<String, BatchError> {

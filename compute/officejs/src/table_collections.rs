@@ -173,6 +173,35 @@ impl TableColumnRef {
                     .rename_column(&table.name, column.index, name)
                     .map_err(engine)?;
             }
+            "totalsRowFunction" => {
+                let func = value.as_str().ok_or_else(|| {
+                    invalid("TableColumn.totalsRowFunction must be a string".to_string())
+                })?;
+                self.sheet()
+                    .tables()
+                    .set_totals_function(&table.name, &column.id, func)
+                    .map_err(engine)?;
+                let table = resolve_table(&self.table)?;
+                let totals_label = format_a1_cell(table.range.start_col, table.range.end_row);
+                self.sheet()
+                    .set_range_typed(
+                        totals_label.as_str(),
+                        &[vec![Some(CellInput::Literal {
+                            text: "Total".to_string(),
+                        })]],
+                    )
+                    .map_err(engine)?;
+                if let Some(formula) = totals_formula(func, &table.name, &column.name) {
+                    let address =
+                        format_a1_cell(table.range.start_col + column.index, table.range.end_row);
+                    self.sheet()
+                        .set_range_typed(
+                            address.as_str(),
+                            &[vec![Some(CellInput::formula(&formula))]],
+                        )
+                        .map_err(engine)?;
+                }
+            }
             "values" => {
                 let (row_count, _) = data_dimensions(&table);
                 let grid = table_value_grid(value, row_count as usize, 1, "TableColumn.values")?;
@@ -534,8 +563,40 @@ pub(crate) fn add_column(
 ) -> Result<TableColumnRef, TableCollectionError> {
     let table = resolve_table(table_ref)?;
     let position = insertion_index(index, table.columns.len(), "column")?;
+    let (row_count, _) = data_dimensions(&table);
+    let mut parsed_values = values
+        .filter(|value| !value.is_null())
+        .map(|value| {
+            // Office.js TableColumnCollection.add accepts either data-body
+            // rows or a header+body block. Prefer the documented body shape
+            // and fall back to header+body when the extra header row is present.
+            match table_value_grid(value, row_count as usize, 1, "TableColumn.values") {
+                Ok(grid) => Ok(grid),
+                Err(_) if table.has_header_row => {
+                    table_value_grid(value, row_count as usize + 1, 1, "TableColumn.values")
+                }
+                Err(error) => Err(error),
+            }
+        })
+        .transpose()?;
+    let header_name = if table.has_header_row
+        && parsed_values
+            .as_ref()
+            .is_some_and(|grid| grid.len() == row_count as usize + 1)
+    {
+        parsed_values.as_mut().and_then(|grid| {
+            let header = grid.first()?.first()?.clone();
+            grid.remove(0);
+            match header {
+                Some(CellInput::Literal { text }) | Some(CellInput::Parse { text }) => Some(text),
+                _ => None,
+            }
+        })
+    } else {
+        None
+    };
     let column_name = match name {
-        None | Some(Value::Null) => generated_column_name(&table),
+        None | Some(Value::Null) => header_name.unwrap_or_else(|| generated_column_name(&table)),
         Some(value) => required_name(value, "TableColumn.name")?.to_string(),
     };
     if table
@@ -547,12 +608,6 @@ pub(crate) fn add_column(
             "A table column named '{column_name}' already exists"
         )));
     }
-
-    let (row_count, _) = data_dimensions(&table);
-    let parsed_values = values
-        .filter(|value| !value.is_null())
-        .map(|value| table_value_grid(value, row_count as usize, 1, "TableColumn.values"))
-        .transpose()?;
 
     let sheet = table_ref.sheet();
     // A worksheet column insertion at the table's left edge is the only
@@ -1350,6 +1405,23 @@ fn decode_table(
 ) -> Result<TableCollectionState, TableCollectionError> {
     let value = serde_json::to_value(table).map_err(encoding)?;
     serde_json::from_value(value).map_err(encoding)
+}
+
+fn format_a1_cell(col: u32, row: u32) -> String {
+    a1_range(row, col, row, col)
+}
+
+fn totals_formula(func: &str, table_name: &str, column_name: &str) -> Option<String> {
+    let number = match func {
+        "Sum" | "sum" => 109,
+        "Average" | "average" => 101,
+        "Count" | "count" => 102,
+        "CountNums" | "countNums" => 103,
+        "Max" | "max" => 104,
+        "Min" | "min" => 105,
+        _ => return None,
+    };
+    Some(format!("=SUBTOTAL({number},{table_name}[{column_name}])"))
 }
 
 fn a1_range(start_row: u32, start_col: u32, end_row: u32, end_col: u32) -> String {

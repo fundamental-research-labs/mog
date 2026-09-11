@@ -1,21 +1,13 @@
-//! SheetHyperlinks — Hyperlink operations (stub).
-//!
-//! The engine does not have standalone hyperlink methods — hyperlinks are
-//! stored as cell properties and managed through the cell format system.
-//! This module is a placeholder for future dedicated hyperlink operations.
+//! SheetHyperlinks — Hyperlink operations.
 
 use crate::dispatch::Dispatch;
+use crate::error::ComputeApiError;
 use cell_types::SheetId;
+use snapshot_types::MutationResult;
 
-/// Hyperlink operations for a single sheet (stub).
-///
-/// Hyperlinks are currently managed as cell properties through the format
-/// system. Dedicated hyperlink CRUD methods may be added to the engine
-/// in the future.
+/// Hyperlink operations for a single sheet.
 pub struct SheetHyperlinks {
-    #[allow(dead_code)]
     dispatch: Dispatch,
-    #[allow(dead_code)]
     sheet_id: SheetId,
 }
 
@@ -24,9 +16,19 @@ impl SheetHyperlinks {
         Self { dispatch, sheet_id }
     }
 
-    // TODO: Add hyperlink-specific methods when engine support lands:
-    // - set_hyperlink(addr, url, display_text) -> Result<MutationResult, ComputeApiError>
-    // - get_hyperlink(addr) -> Result<Option<Hyperlink>, ComputeApiError>
-    // - remove_hyperlink(addr) -> Result<MutationResult, ComputeApiError>
-    // - get_all_hyperlinks() -> Result<Vec<Hyperlink>, ComputeApiError>
+    /// Set a hyperlink URL on the cell at `(row, col)`.
+    pub fn set(&self, row: u32, col: u32, url: &str) -> Result<MutationResult, ComputeApiError> {
+        let sid = self.sheet_id;
+        let owned = url.to_owned();
+        self.dispatch
+            .call_engine(move |e| e.set_hyperlink(&sid, row, col, &owned))
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
+    /// Read the hyperlink URL at `(row, col)`, if any.
+    pub fn get(&self, row: u32, col: u32) -> Result<Option<String>, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .query_engine(move |e| e.get_hyperlink(&sid, row, col))
+    }
 }

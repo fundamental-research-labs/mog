@@ -280,6 +280,13 @@ impl StylesWriter {
     /// # Returns
     /// The number format ID (>= 164 for custom formats)
     pub fn add_num_fmt(&mut self, format_code: &str) -> u32 {
+        // Excel stores locale short date as built-in 14. Calipers resolves that
+        // id to the ECMA token `mm-dd-yy`; mapping the locale form here keeps
+        // Office.js `m/d/yyyy` assignments on the same id.
+        if format_code == "m/d/yyyy" || format_code == "mm-dd-yy" {
+            return 14;
+        }
+
         // Check for duplicate
         for fmt in &self.num_fmts {
             if fmt.format_code == format_code {

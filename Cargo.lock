@@ -1262,6 +1262,7 @@ name = "mog"
 version = "0.1.0"
 dependencies = [
  "compute-api",
+ "domain-types",
  "rquickjs",
  "serde",
  "serde_json",

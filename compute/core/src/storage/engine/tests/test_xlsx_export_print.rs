@@ -37,7 +37,7 @@ fn sdk_print_area_and_titles_export_as_xlsx_defined_names() {
 
     let titles_name = find_named_range(&exported, "_xlnm.Print_Titles");
     assert_eq!(titles_name.local_sheet_id, Some(0));
-    assert_eq!(titles_name.refers_to, "Sheet1!$1:$2,Sheet1!$A:$A");
+    assert_eq!(titles_name.refers_to, "Sheet1!$A:$A,Sheet1!$1:$2");
 }
 
 #[test]
@@ -100,7 +100,7 @@ fn imported_print_defined_names_hydrate_domain_and_export_once() {
     assert_eq!(count_named_range(&exported, "_xlnm.Print_Titles"), 1);
     assert_eq!(
         find_named_range(&exported, "_xlnm.Print_Titles").refers_to,
-        "Sheet1!$1:$2,Sheet1!$A:$A"
+        "Sheet1!$A:$A,Sheet1!$1:$2"
     );
 }
 

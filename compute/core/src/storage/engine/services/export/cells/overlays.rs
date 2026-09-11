@@ -199,10 +199,18 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                     continue;
                 }
 
-                if let std::collections::hash_map::Entry::Vacant(entry) =
-                    cells_by_pos.entry((row, col))
-                {
-                    entry.insert(range_payload_cell(row, col, value.clone()));
+                match cells_by_pos.entry((row, col)) {
+                    std::collections::hash_map::Entry::Vacant(entry) => {
+                        entry.insert(range_payload_cell(row, col, value.clone()));
+                    }
+                    std::collections::hash_map::Entry::Occupied(mut entry) => {
+                        // Identity-only formatted cells (pivot labels with
+                        // alignment) must not hide generated overlay values.
+                        let existing = entry.get_mut();
+                        if existing.formula.is_none() && existing.value.is_null() {
+                            existing.value = value.clone();
+                        }
+                    }
                 }
             }
         }

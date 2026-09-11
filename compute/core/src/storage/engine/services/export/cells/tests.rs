@@ -986,6 +986,72 @@ fn export_cells_preserves_explicit_cell_over_pivot_overlay() {
 }
 
 #[test]
+fn export_cells_keeps_pivot_overlay_on_format_only_identity() {
+    let sheet_id = SheetId::from_raw(105);
+    let (mut engine, _) =
+        ComputeEngine::from_snapshot(workbook(&sheet_id, vec![])).expect("engine");
+    let result = one_value_pivot_result(number(10.0));
+    engine.cell_store.materialize_pivot_with_identities(
+        &sheet_id,
+        0,
+        0,
+        &result,
+        &["Region".to_string()],
+        true,
+        &engine.stores.grid_id_alloc,
+    );
+    engine.cell_store.upsert_pivot_table_def(PivotTableDef {
+        grand_total_cells: Vec::new(),
+        id: "pivot-format".to_string(),
+        name: "PivotFormat".to_string(),
+        sheet: sheet_id.to_uuid_string(),
+        start_row: 0,
+        start_col: 0,
+        end_row: 1,
+        end_col: 1,
+        rendered_rows: Some(2),
+        rendered_cols: Some(2),
+        first_data_row: 1,
+        first_data_col: 1,
+        data_field_names: vec!["Sum of Sales".to_string()],
+        cache_field_names: vec!["Region".to_string(), "Sales".to_string()],
+        row_field_indices: vec![0],
+        col_field_indices: vec![],
+        data_on_rows: false,
+        style: None,
+        show_row_grand_totals: None,
+        show_column_grand_totals: None,
+    });
+
+    let cell_id = engine
+        .cell_store
+        .resolve_cell_id(&sheet_id, SheetPos::new(1, 0))
+        .expect("row label identity");
+    let format = serde_json::from_value(serde_json::json!({ "horizontalAlign": "left" }))
+        .expect("left align format");
+    crate::storage::properties::set_cell_formats_by_id(
+        &mut engine.stores.storage,
+        &sheet_id,
+        &[cell_id],
+        &format,
+    );
+
+    let mut palette = Vec::new();
+    let palette = LocalPalette::from_vec(&mut palette);
+    let cells = export_cells_for_sheet(&engine.stores, &engine.cell_store, &sheet_id, &palette);
+    let exported = cells
+        .iter()
+        .find(|cell| cell.row == 1 && cell.col == 0)
+        .expect("formatted pivot label should export");
+
+    assert_eq!(exported.value, CellValue::Text("East".into()));
+    assert!(
+        exported.style_id.is_some(),
+        "format-only identity should still carry a style id"
+    );
+}
+
+#[test]
 fn export_cells_does_not_emit_empty_pivot_overlay_at_origin() {
     let sheet_id = SheetId::from_raw(102);
     let (mut engine, _) =

@@ -50,6 +50,15 @@ impl FormatRef {
         let (start_row, start_col, end_row, end_col) = self.bounds()?;
         let mut result = HashMap::new();
         for property in properties {
+            if self.kind == FormatKind::Format
+                && matches!(property.as_str(), "columnWidth" | "rowHeight")
+            {
+                result.insert(
+                    property.clone(),
+                    self.load_layout(property, start_row, start_col, end_row, end_col)?,
+                );
+                continue;
+            }
             let mut aggregate: Option<Value> = None;
             let mut mixed = false;
             'cells: for row in start_row..=end_row {
@@ -84,6 +93,9 @@ impl FormatRef {
     }
 
     pub(crate) fn set(&self, property: &str, value: &Value) -> Result<(), FormatError> {
+        if self.kind == FormatKind::Format && matches!(property, "columnWidth" | "rowHeight") {
+            return self.set_layout(property, value);
+        }
         if self.kind == FormatKind::Fill && property == "clear" {
             self.sheet
                 .formats()
@@ -122,6 +134,66 @@ impl FormatRef {
             .resolve()
             .map_err(|error| invalid(error.to_string()))
     }
+
+    fn load_layout(
+        &self,
+        property: &str,
+        start_row: u32,
+        start_col: u32,
+        end_row: u32,
+        end_col: u32,
+    ) -> Result<Value, FormatError> {
+        let layout = self.sheet.layout();
+        let mut aggregate: Option<f64> = None;
+        if property == "columnWidth" {
+            for col in start_col..=end_col {
+                let points = pixels_to_points(layout.get_col_width(col).map_err(engine)?);
+                match aggregate {
+                    None => aggregate = Some(points),
+                    Some(first) if (first - points).abs() < 1e-6 => {}
+                    Some(_) => return Ok(Value::Null),
+                }
+            }
+        } else {
+            for row in start_row..=end_row {
+                let points = pixels_to_points(layout.get_row_height(row).map_err(engine)?);
+                match aggregate {
+                    None => aggregate = Some(points),
+                    Some(first) if (first - points).abs() < 1e-6 => {}
+                    Some(_) => return Ok(Value::Null),
+                }
+            }
+        }
+        Ok(aggregate.map(Value::from).unwrap_or(Value::Null))
+    }
+
+    fn set_layout(&self, property: &str, value: &Value) -> Result<(), FormatError> {
+        let points = finite_number(value, property)?;
+        if points < 0.0 {
+            return Err(invalid(format!("{property} must be non-negative")));
+        }
+        let pixels = points_to_pixels(points);
+        let (start_row, start_col, end_row, end_col) = self.bounds()?;
+        let layout = self.sheet.layout();
+        if property == "columnWidth" {
+            for col in start_col..=end_col {
+                layout.set_col_width(col, pixels).map_err(engine)?;
+            }
+        } else {
+            for row in start_row..=end_row {
+                layout.set_row_height(row, pixels).map_err(engine)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+fn points_to_pixels(points: f64) -> f64 {
+    points * 96.0 / 72.0
+}
+
+fn pixels_to_points(pixels: f64) -> f64 {
+    pixels * 72.0 / 96.0
 }
 
 fn read_property(kind: FormatKind, property: &str, format: &Value) -> Result<Value, FormatError> {

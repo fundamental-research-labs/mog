@@ -886,6 +886,7 @@
     ClientObject.call(this, context);
     this.title = new ChartTitle(context, this._id);
     this.axes = new ChartAxes(context, this._id);
+    this.legend = new ChartLegend(context, this._id);
   }
   Chart.prototype = Object.create(ClientObject.prototype);
   Chart.prototype.constructor = Chart;
@@ -900,6 +901,41 @@
         op: "set",
         id: this._chartId,
         property: "title.text",
+        value: value,
+      });
+    },
+  });
+  Object.defineProperty(ChartTitle.prototype, "visible", {
+    set: function (value) {
+      this.context._queue.push({
+        op: "set",
+        id: this._chartId,
+        property: "title.visible",
+        value: value,
+      });
+    },
+  });
+
+  function ChartLegend(context, chartId) {
+    this.context = context;
+    this._chartId = chartId;
+  }
+  Object.defineProperty(ChartLegend.prototype, "visible", {
+    set: function (value) {
+      this.context._queue.push({
+        op: "set",
+        id: this._chartId,
+        property: "legend.visible",
+        value: value,
+      });
+    },
+  });
+  Object.defineProperty(ChartLegend.prototype, "position", {
+    set: function (value) {
+      this.context._queue.push({
+        op: "set",
+        id: this._chartId,
+        property: "legend.position",
         value: value,
       });
     },

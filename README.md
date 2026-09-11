@@ -100,7 +100,7 @@ for grouping, error handling, and redo behavior.
 
 ## Excel vs Mog speed/memory
 
-`./run-calipers-bench.sh` walks the calipers verify corpus **one case at a time** and writes wall time + peak working set to JSON, then a US Letter HTML/SVG report (browser Print-to-PDF).
+`./run-calipers-bench.sh` walks the calipers verify corpus **one case at a time** and writes wall time + peak working set to JSON, then a US Letter HTML/SVG report. Open the HTML and use **Export as PDF** (stacked 8.5×11in pages).
 
 ```bash
 # Mog-only (any OS) — inspect HTML before a Windows Excel run

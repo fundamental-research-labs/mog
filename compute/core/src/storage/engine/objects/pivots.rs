@@ -3,7 +3,10 @@ use crate::snapshot::{
     ChangeKind, MutationResult, PivotTableChange, SheetChange, SheetChangeField,
 };
 use crate::storage::engine::ComputeEngine;
-use crate::storage::engine::pivot_materialization::apply_pivot_value_number_formats;
+use crate::storage::engine::pivot_materialization::{
+    apply_pivot_row_label_alignment, apply_pivot_value_number_formats,
+    clear_pivot_output_formats, extra_compact_header_rows, write_compact_pivot_header_extras,
+};
 use crate::storage::engine::services;
 use crate::storage::sheet::order;
 use bridge_core as bridge;
@@ -94,6 +97,15 @@ impl ComputeEngine {
                 let old_rows = def.rendered_row_count();
                 let old_cols = def.rendered_col_count();
                 if old_rows > 0 && old_cols > 0 {
+                    clear_pivot_output_formats(
+                        &mut self.stores,
+                        &self.cell_store,
+                        &output_sheet_id,
+                        def.start_row,
+                        def.start_col,
+                        old_rows,
+                        old_cols,
+                    );
                     self.cell_store.clear_pivot_region(
                         &output_sheet_id,
                         def.start_row,
@@ -106,7 +118,7 @@ impl ComputeEngine {
         }
 
         // 4. Compute pivot result
-        let result = self.pivot_compute_from_source(sheet_id, pivot_id, expansion_state)?;
+        let mut result = self.pivot_compute_from_source(sheet_id, pivot_id, expansion_state)?;
         let engine_config =
             compute_pivot::PivotEngineConfig::try_from(config.clone()).map_err(|e| {
                 ComputeError::Eval {
@@ -114,24 +126,37 @@ impl ComputeEngine {
                 }
             })?;
 
+        let extra_top = extra_compact_header_rows(&config);
+        result.rendered_bounds.first_data_row += extra_top;
+        result.rendered_bounds.total_rows += extra_top;
+
         // 5. Write cells
-        // Collect row field display names for the header row.
-        let row_field_names: Vec<String> = engine_config
-            .row_placements()
-            .iter()
-            .map(|p| {
-                p.display_name()
-                    .map(String::from)
-                    .or_else(|| {
-                        engine_config
-                            .fields
-                            .iter()
-                            .find(|f| f.id == *p.field_id())
-                            .map(|f| f.name.clone())
-                    })
-                    .unwrap_or_else(|| p.field_id().to_string())
-            })
-            .collect();
+        // Compact Excel layout uses `rowHeaderCaption` (typically "Row Labels")
+        // instead of the source field name in the header cell.
+        let row_field_names: Vec<String> = if let Some(caption) = engine_config
+            .layout
+            .as_ref()
+            .and_then(|layout| layout.row_header_caption.clone())
+        {
+            vec![caption]
+        } else {
+            engine_config
+                .row_placements()
+                .iter()
+                .map(|p| {
+                    p.display_name()
+                        .map(String::from)
+                        .or_else(|| {
+                            engine_config
+                                .fields
+                                .iter()
+                                .find(|f| f.id == *p.field_id())
+                                .map(|f| f.name.clone())
+                        })
+                        .unwrap_or_else(|| p.field_id().to_string())
+                })
+                .collect()
+        };
         let repeat_row_labels = engine_config
             .layout
             .as_ref()
@@ -146,6 +171,23 @@ impl ComputeEngine {
             repeat_row_labels,
             &self.stores.grid_id_alloc,
         );
+        write_compact_pivot_header_extras(
+            &mut self.cell_store,
+            &output_sheet_id,
+            config.output_location.row,
+            config.output_location.col,
+            result.rendered_bounds.first_data_col,
+            &config,
+        );
+        clear_pivot_output_formats(
+            &mut self.stores,
+            &self.cell_store,
+            &output_sheet_id,
+            config.output_location.row,
+            config.output_location.col,
+            result.rendered_bounds.total_rows,
+            result.rendered_bounds.total_cols,
+        );
         apply_pivot_value_number_formats(
             &mut self.stores,
             &self.cell_store,
@@ -153,6 +195,14 @@ impl ComputeEngine {
             config.output_location.row,
             config.output_location.col,
             &config,
+            &result,
+        );
+        apply_pivot_row_label_alignment(
+            &mut self.stores,
+            &self.cell_store,
+            &output_sheet_id,
+            config.output_location.row,
+            config.output_location.col,
             &result,
         );
 

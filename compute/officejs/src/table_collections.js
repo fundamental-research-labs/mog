@@ -354,7 +354,7 @@
     this._table = table;
     this._tableId = table._id;
     this._key = key;
-    this._scalarProperties = ["id", "index", "name", "values"];
+    this._scalarProperties = ["id", "index", "name", "values", "totalsRowFunction"];
     if (bind) queueChildBinding(this, table, "column", key);
   }
   TableColumn.prototype = Object.create(ClientObject.prototype);
@@ -374,7 +374,7 @@
     },
   });
 
-  ["name", "values"].forEach(function (name) {
+  ["name", "values", "totalsRowFunction"].forEach(function (name) {
     Object.defineProperty(TableColumn.prototype, name, {
       get: function () {
         if (!this._loaded[name]) throw propertyNotLoaded(name);

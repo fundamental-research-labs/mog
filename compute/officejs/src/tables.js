@@ -357,6 +357,16 @@
     return tableRange(this, "total");
   };
 
+  Object.defineProperty(Table.prototype, "sort", {
+    configurable: true,
+    get: function () {
+      if (!this._sort) {
+        this._sort = this.getDataBodyRange().sort;
+      }
+      return this._sort;
+    },
+  });
+
   Table.prototype.delete = function () {
     this.context._queue.push({ op: "tableDelete", id: this._id });
   };

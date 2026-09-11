@@ -154,6 +154,15 @@ impl WorkbookSheets {
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
+    /// Get identity metadata for a sheet, including tab color and frozen panes.
+    pub fn get_sheet_meta(
+        &self,
+        sheet_id: &SheetId,
+    ) -> Result<Option<domain_types::SheetMeta>, ComputeApiError> {
+        let sid = *sheet_id;
+        self.dispatch.query_engine(move |e| e.get_sheet_meta(&sid))
+    }
+
     /// Get all settings for a sheet.
     pub fn get_sheet_settings(
         &self,

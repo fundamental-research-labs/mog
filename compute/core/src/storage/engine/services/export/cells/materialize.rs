@@ -132,28 +132,29 @@ pub(super) fn build_cell_data_for_cell_id(
         };
     let array_ref = if dynamic {
         let origin = cell_types::SheetPos::new(row, col).to_string();
-        Some(
-            if let Some(projection) = cell_store.projection_registry.get(cell_id) {
-                let end =
-                    cell_types::SheetPos::new(row + projection.rows - 1, col + projection.cols - 1);
-                if projection.rows == 1 && projection.cols == 1 {
-                    origin
-                } else {
-                    format!("{origin}:{end}")
-                }
-            } else if matches!(value, CellValue::Error(value_types::CellError::Spill, _)) {
-                origin
+        if let Some(projection) = cell_store.projection_registry.get(cell_id) {
+            let end =
+                cell_types::SheetPos::new(row + projection.rows - 1, col + projection.cols - 1);
+            // Excel stores a 1x1 dynamic array (XLOOKUP, XMATCH, ...) as an
+            // ordinary formula, not `t="array"`. Keep array metadata only
+            // when the spill occupies more than one cell.
+            if projection.rows == 1 && projection.cols == 1 {
+                None
             } else {
-                array_refs.get(cell_id).cloned().unwrap_or(origin)
-            },
-        )
+                Some(format!("{origin}:{end}"))
+            }
+        } else if matches!(value, CellValue::Error(value_types::CellError::Spill, _)) {
+            Some(origin)
+        } else {
+            array_refs.get(cell_id).cloned()
+        }
     } else {
         array_refs.get(cell_id).cloned()
     };
     // Authored CSE declarations store the native range without an imported
-    // OOXML formula record. Reconstruct the array element for both CSE and
-    // dynamic sources so saving preserves their result mode and extent.
-    let cell_formula = if dynamic || array_ref.is_some() {
+    // OOXML formula record. Reconstruct the array element for CSE and for
+    // multi-cell dynamic spills so saving preserves result mode and extent.
+    let cell_formula = if array_ref.is_some() {
         let mut metadata = formula_metadata
             .get(cell_id)
             .map(|metadata| metadata.to_ooxml(formula.as_deref().unwrap_or("")))

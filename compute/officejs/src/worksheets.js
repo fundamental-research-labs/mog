@@ -7,7 +7,12 @@
   var WorksheetCollection = Excel.WorksheetCollection;
   var officeJs = global.__mogOfficeJs;
 
-  officeJs.addScalarProperties(Worksheet.prototype, ["position", "visibility"]);
+  officeJs.addScalarProperties(Worksheet.prototype, [
+    "position",
+    "visibility",
+    "tabColor",
+    "showGridlines",
+  ]);
 
   function ensureCollection(collection) {
     if (collection._worksheetCollectionConfigured) return;
@@ -128,14 +133,27 @@
 
   scalarProperty("position");
   scalarProperty("visibility");
+  scalarProperty("tabColor");
+  scalarProperty("showGridlines");
 
   Worksheet.prototype.toJSON = function () {
     var data = {};
-    ["id", "name", "position", "visibility"].forEach(function (name) {
+    ["id", "name", "position", "visibility", "tabColor", "showGridlines"].forEach(function (name) {
       if (!this._loaded[name]) return;
       data[name] = name === "id" ? this._idValue : this["_" + name];
     }, this);
     return data;
+  };
+
+  Worksheet.prototype.copy = function (positionType) {
+    var worksheet = newWorksheet(this.context);
+    this.context._queue.push({
+      op: "worksheetCopy",
+      id: worksheet._id,
+      worksheetId: this._id,
+      positionType: positionType == null ? "End" : String(positionType),
+    });
+    return worksheet;
   };
 
   Worksheet.prototype.activate = function () {

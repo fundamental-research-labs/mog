@@ -89,6 +89,8 @@ fn format_font_fill_and_protection_round_trip_all_exposed_fields() {
                 "shrinkToFit": false,
                 "textOrientation": -45,
                 "readingOrder": "RightToLeft",
+                "columnWidth": 48,
+                "rowHeight": 15,
                 "font": {
                     "bold": true,
                     "color": "#123456",

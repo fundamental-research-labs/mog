@@ -3,6 +3,7 @@
 use crate::dispatch::Dispatch;
 use crate::error::ComputeApiError;
 use cell_types::SheetId;
+use domain_types::domain::copy::CopyType;
 use formula_types::StructureChange;
 use snapshot_types::MutationResult;
 
@@ -151,6 +152,41 @@ impl SheetStructure {
         let sid = self.sheet_id;
         self.dispatch
             .call_engine(move |e| e.clear_all_merges(&sid))
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
+    /// Copy a rectangular range onto a target sheet, matching Office.js `Range.copyFrom`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn copy_range(
+        &self,
+        src_start_row: u32,
+        src_start_col: u32,
+        src_end_row: u32,
+        src_end_col: u32,
+        target_sheet_id: SheetId,
+        target_row: u32,
+        target_col: u32,
+        copy_type: CopyType,
+        skip_blanks: bool,
+        transpose: bool,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .call_engine(move |e| {
+                e.copy_range(
+                    &sid,
+                    src_start_row,
+                    src_start_col,
+                    src_end_row,
+                    src_end_col,
+                    &target_sheet_id,
+                    target_row,
+                    target_col,
+                    copy_type,
+                    skip_blanks,
+                    transpose,
+                )
+            })
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 

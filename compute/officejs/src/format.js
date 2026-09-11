@@ -191,6 +191,8 @@
       "shrinkToFit",
       "textOrientation",
       "readingOrder",
+      "columnWidth",
+      "rowHeight",
     ];
     this._navigationProperties = ["font", "fill", "protection"];
     queueProxy(this, range, "format");
@@ -199,7 +201,7 @@
   RangeFormat.prototype.constructor = RangeFormat;
   RangeFormat.prototype.set = setProperties;
   RangeFormat.prototype.toJSON = toJSON;
-  defineScalars(RangeFormat, RangeFormat.prototype._scalarProperties || [
+  defineScalars(RangeFormat, [
     "horizontalAlignment",
     "verticalAlignment",
     "wrapText",
@@ -208,6 +210,8 @@
     "shrinkToFit",
     "textOrientation",
     "readingOrder",
+    "columnWidth",
+    "rowHeight",
   ]);
 
   function RangeFont(context, range) {

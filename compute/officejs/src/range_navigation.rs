@@ -201,6 +201,25 @@ pub(crate) fn navigate_range(
             let column = number_arg(args, 1, method)?;
             make_cells(row, column, row, column, method)?
         }
+        "worksheet.getRangeByIndexes" => {
+            expect_arg_count(method, args, 4)?;
+            let start_row = number_arg(args, 0, method)?;
+            let start_column = number_arg(args, 1, method)?;
+            let row_count = number_arg(args, 2, method)?;
+            let column_count = number_arg(args, 3, method)?;
+            if row_count == 0 || column_count == 0 {
+                return Err(invalid(format!(
+                    "{method} requires a positive rowCount and columnCount"
+                )));
+            }
+            let end_row = start_row
+                .checked_add(row_count - 1)
+                .ok_or_else(|| invalid(format!("{method} rowCount exceeds the worksheet grid")))?;
+            let end_column = start_column.checked_add(column_count - 1).ok_or_else(|| {
+                invalid(format!("{method} columnCount exceeds the worksheet grid"))
+            })?;
+            make_cells(start_row, start_column, end_row, end_column, method)?
+        }
         "getCell" => {
             expect_arg_count(method, args, 2)?;
             let row_offset = number_arg(args, 0, method)?;

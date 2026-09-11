@@ -12,6 +12,9 @@ use compute_api::{ComputeApiError, Sheet, SheetId, Workbook};
 use serde::Serialize;
 use serde_json::{Value, json};
 
+use crate::dispatch::{ExtensionHandler, HostDispatchContext};
+use crate::host::BatchError;
+
 /// Error returned by a worksheet host operation.
 ///
 /// `code` contains the Office.js error code expected by the JavaScript
@@ -71,6 +74,8 @@ impl WorksheetRef {
                 "name" => Value::String(self.name()?),
                 "position" => json!(self.position()?),
                 "visibility" => Value::String(visibility_token(&self.visibility()?).to_string()),
+                "tabColor" => self.tab_color()?,
+                "showGridlines" => Value::Bool(self.show_gridlines()?),
                 "isNullObject" => Value::Bool(false),
                 other => {
                     return Err(unsupported_load_property("Worksheet", other));
@@ -87,6 +92,8 @@ impl WorksheetRef {
             "name" => self.set_name(value),
             "position" => self.set_position(value),
             "visibility" => self.set_visibility(value),
+            "tabColor" => self.set_tab_color(value),
+            "showGridlines" => self.set_show_gridlines(value),
             other => Err(WorksheetError {
                 code: "InvalidArgument",
                 message: format!("Worksheet.{other} is read-only or unsupported"),
@@ -259,6 +266,93 @@ impl WorksheetRef {
         {
             persist_active_view_position(&active_worksheet)?;
         }
+        Ok(())
+    }
+
+    /// Copy this worksheet. `position` is an Office.js `WorksheetPositionType`
+    /// token (`Beginning`, `End`, `Before`, `After`); omitted means End.
+    pub(crate) fn copy(&self, position: Option<&str>) -> Result<Self, WorksheetError> {
+        let source_name = self.name()?;
+        let new_name = unique_copy_name(&self.workbook, &source_name)?;
+        self.workbook
+            .sheets()
+            .copy_sheet(self.sheet.id(), &new_name)
+            .map_err(compute_error)?;
+        let copied = self
+            .workbook
+            .sheet_by_name(&new_name)
+            .map_err(compute_error)?;
+        let copied = Self::new(self.workbook.clone(), copied);
+        match position.unwrap_or("End") {
+            "Beginning" | "beginning" => {
+                copied.set_position(&json!(0))?;
+            }
+            "Before" | "before" => {
+                copied.set_position(&json!(self.position()? as u32))?;
+            }
+            "After" | "after" => {
+                copied.set_position(&json!(self.position()? as u32 + 1))?;
+            }
+            "End" | "end" => {}
+            other => {
+                return Err(WorksheetError {
+                    code: "InvalidArgument",
+                    message: format!("Unsupported WorksheetPositionType '{other}'"),
+                });
+            }
+        }
+        Ok(copied)
+    }
+
+    fn tab_color(&self) -> Result<Value, WorksheetError> {
+        let meta = self
+            .workbook
+            .sheets()
+            .get_sheet_meta(self.sheet.id())
+            .map_err(compute_error)?;
+        Ok(meta
+            .and_then(|meta| meta.tab_color)
+            .map(Value::String)
+            .unwrap_or(Value::Null))
+    }
+
+    fn show_gridlines(&self) -> Result<bool, WorksheetError> {
+        Ok(self
+            .workbook
+            .sheets()
+            .get_sheet_settings(self.sheet.id())
+            .map_err(compute_error)?
+            .show_gridlines)
+    }
+
+    fn set_tab_color(&self, value: &Value) -> Result<(), WorksheetError> {
+        let color = match value {
+            Value::Null => None,
+            Value::String(color) if color.is_empty() => None,
+            Value::String(color) => Some(color.as_str()),
+            _ => {
+                return Err(WorksheetError {
+                    code: "InvalidArgument",
+                    message: "Worksheet.tabColor must be a string or null".to_string(),
+                });
+            }
+        };
+        self.workbook
+            .sheets()
+            .set_tab_color(self.sheet.id(), color)
+            .map_err(compute_error)?;
+        Ok(())
+    }
+
+    fn set_show_gridlines(&self, value: &Value) -> Result<(), WorksheetError> {
+        let show = value.as_bool().ok_or_else(|| WorksheetError {
+            code: "InvalidArgument",
+            message: "Worksheet.showGridlines must be a boolean".to_string(),
+        })?;
+        self.workbook
+            .sheets()
+            .set_sheet_setting(self.sheet.id(), "showGridlines", &show.to_string())
+            .map_err(compute_error)?;
         Ok(())
     }
 
@@ -503,6 +597,23 @@ fn find_by_id(workbook: &Workbook, id: &str) -> Result<Option<WorksheetRef>, Wor
     Ok(None)
 }
 
+fn unique_copy_name(workbook: &Workbook, source_name: &str) -> Result<String, WorksheetError> {
+    let names = workbook.sheet_names().map_err(compute_error)?;
+    for index in 2..10_000 {
+        let candidate = format!("{source_name} ({index})");
+        if !names
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(&candidate))
+        {
+            return Ok(candidate);
+        }
+    }
+    Err(WorksheetError {
+        code: "GeneralException",
+        message: "Unable to generate a unique worksheet copy name".to_string(),
+    })
+}
+
 fn validate_sheet_name(
     workbook: &Workbook,
     sheet_id: &SheetId,
@@ -596,6 +707,42 @@ fn item_not_found(key: &str) -> WorksheetError {
         code: "ItemNotFound",
         message: format!("The requested worksheet doesn't exist. Name or ID: {key}"),
     }
+}
+
+/// Host adapter for worksheet operations that are not in the core `Op` enum.
+pub(crate) struct WorksheetOpsHandler;
+
+impl ExtensionHandler for WorksheetOpsHandler {
+    fn can_handle(&self, operation: &str) -> bool {
+        operation == "worksheetCopy"
+    }
+
+    fn handle(
+        &self,
+        operation: &Value,
+        context: &mut HostDispatchContext<'_>,
+    ) -> Result<bool, BatchError> {
+        let id = string_field(operation, "id")?;
+        let worksheet_id = string_field(operation, "worksheetId")?;
+        let position = operation.get("positionType").and_then(Value::as_str);
+        let source = context.worksheet(worksheet_id)?;
+        let copied = source.copy(position).map_err(|error| BatchError {
+            code: error.code,
+            message: error.message,
+        })?;
+        context.bind_worksheet(id, copied);
+        Ok(true)
+    }
+}
+
+fn string_field<'a>(operation: &'a Value, field: &str) -> Result<&'a str, BatchError> {
+    operation
+        .get(field)
+        .and_then(Value::as_str)
+        .ok_or_else(|| BatchError {
+            code: "InvalidArgument",
+            message: format!("worksheetCopy requires {field}"),
+        })
 }
 
 fn compute_error(error: ComputeApiError) -> WorksheetError {

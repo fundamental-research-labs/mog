@@ -268,7 +268,7 @@ impl BorderCollectionRef {
         let mut operations = Vec::with_capacity(BorderIndex::ALL.len());
         for index in BorderIndex::ALL {
             let border = self.get_item(index.as_str())?;
-            operations.push(border.set("tintAndShade", value)?);
+            operations.extend(border.set("tintAndShade", value)?);
         }
 
         // Keep production deserialization here, beside the collection-level
@@ -318,7 +318,16 @@ impl BorderRef {
     /// `SheetFormats::patch_borders`. Keeping the conversion here means all
     /// geometry, enum, and mixed-range rules are shared by direct and
     /// collection-created border proxies.
-    pub(crate) fn set(&self, property: &str, value: &Value) -> Result<Value, BorderError> {
+    ///
+    /// InsideHorizontal/InsideVertical expand to the per-cell left/right or
+    /// top/bottom edges Excel stores. A 1×N or N×1 range has no interior, so
+    /// those selectors are no-ops.
+    pub(crate) fn set(&self, property: &str, value: &Value) -> Result<Vec<Value>, BorderError> {
+        let patches = border_targets(self.index, self.bounds()?);
+        if patches.is_empty() {
+            return Ok(Vec::new());
+        }
+
         // DiagonalDown and DiagonalUp share one CellBorders.diagonal side but
         // carry independent direction flags.  A mutation must inspect that
         // shared side even when the selected direction is currently disabled;
@@ -446,28 +455,36 @@ impl BorderRef {
         // Setting style None on a diagonal side turns off that direction while
         // retaining the other diagonal direction.  For all other sides the
         // side value itself is enough to represent the operation.
-        let mut borders = Map::new();
-        if !(self.index.diagonal_flag().is_some()
-            && property == "style"
-            && value.as_str() == Some("None"))
-        {
-            borders.insert(self.index.field().to_string(), Value::Object(side));
+        let mut operations = Vec::with_capacity(patches.len());
+        for (field, (start_row, start_col, end_row, end_col)) in patches {
+            let mut borders = Map::new();
+            if !(self.index.diagonal_flag().is_some()
+                && property == "style"
+                && value.as_str() == Some("None"))
+            {
+                borders.insert(field.to_string(), Value::Object(side.clone()));
+            }
+            if let Some(flag) = self.index.diagonal_flag() {
+                let enable = if property == "style" {
+                    value.as_str() != Some("None")
+                } else {
+                    true
+                };
+                borders.insert(flag.to_string(), json!(enable));
+            }
+            operations.push(json!({
+                "target": {
+                    "kind": "cells",
+                    "startRow": start_row,
+                    "startCol": start_col,
+                    "endRow": end_row,
+                    "endCol": end_col,
+                },
+                "borders": borders,
+                "clearFields": [],
+            }));
         }
-        if let Some(flag) = self.index.diagonal_flag() {
-            let enable = if property == "style" {
-                value.as_str() != Some("None")
-            } else {
-                true
-            };
-            borders.insert(flag.to_string(), json!(enable));
-        }
-
-        let target = target_for(self.index, self.bounds()?);
-        Ok(json!({
-            "target": target,
-            "borders": borders,
-            "clearFields": [],
-        }))
+        Ok(operations)
     }
 
     /// Apply one border property through the production border mutation API.
@@ -479,12 +496,18 @@ impl BorderRef {
     /// `SheetFormats::patch_borders` without adding a private crate dependency
     /// to the Office.js adapter.
     pub(crate) fn apply_set(&self, property: &str, value: &Value) -> Result<(), BorderError> {
-        let operation = self.set(property, value)?;
-        let operation = serde_json::from_value(operation).map_err(BorderError::engine)?;
+        let operations = self.set(property, value)?;
+        if operations.is_empty() {
+            return Ok(());
+        }
+        let operations = operations
+            .into_iter()
+            .map(|operation| serde_json::from_value(operation).map_err(BorderError::engine))
+            .collect::<Result<Vec<_>, _>>()?;
         self.collection
             .sheet
             .formats()
-            .patch_borders(vec![operation])
+            .patch_borders(operations)
             .map_err(BorderError::engine)?;
         Ok(())
     }
@@ -496,7 +519,7 @@ impl BorderRef {
     fn projection(&self, include_disabled_diagonal: bool) -> Result<BorderProjection, BorderError> {
         let bounds = self.bounds()?;
         let mut projection = BorderProjection::default();
-        for_each_sample(bounds, self.index, |row, col| {
+        for_each_sample(bounds, self.index, |row, col, field| {
             let format = self
                 .collection
                 .sheet
@@ -504,7 +527,12 @@ impl BorderRef {
                 .get_cell_format(row, col)
                 .map_err(BorderError::engine)?;
             let value = serde_json::to_value(format).map_err(BorderError::engine)?;
-            projection.observe(sample_side(&value, self.index, include_disabled_diagonal)?);
+            projection.observe(sample_side(
+                &value,
+                field,
+                self.index.diagonal_flag(),
+                include_disabled_diagonal,
+            )?);
             Ok::<(), BorderError>(())
         })?;
         Ok(projection)
@@ -534,45 +562,64 @@ fn parse_bounds(address: &str) -> Result<(u32, u32, u32, u32), BorderError> {
 }
 
 /// Run a sample over the cells whose effective border contributes to one
-/// range-level Office.js side.
+/// range-level Office.js side. The visitor also receives the stored
+/// `CellBorders` field for that sample so Inside* selectors read the
+/// interior left/right or top/bottom edges Excel writes.
 fn for_each_sample(
     bounds: (u32, u32, u32, u32),
     index: BorderIndex,
-    mut visit: impl FnMut(u32, u32) -> Result<(), BorderError>,
+    mut visit: impl FnMut(u32, u32, &'static str) -> Result<(), BorderError>,
 ) -> Result<(), BorderError> {
     let (start_row, start_col, end_row, end_col) = bounds;
     match index {
         BorderIndex::EdgeTop => {
             for col in start_col..=end_col {
-                visit(start_row, col)?;
+                visit(start_row, col, "top")?;
             }
         }
         BorderIndex::EdgeBottom => {
             for col in start_col..=end_col {
-                visit(end_row, col)?;
+                visit(end_row, col, "bottom")?;
             }
         }
         BorderIndex::EdgeLeft => {
             for row in start_row..=end_row {
-                visit(row, start_col)?;
+                visit(row, start_col, "left")?;
             }
         }
         BorderIndex::EdgeRight => {
             for row in start_row..=end_row {
-                visit(row, end_col)?;
+                visit(row, end_col, "right")?;
             }
         }
-        BorderIndex::InsideVertical | BorderIndex::InsideHorizontal => {
-            for row in start_row..=end_row {
+        BorderIndex::InsideVertical => {
+            if start_col < end_col {
+                for row in start_row..=end_row {
+                    for col in start_col..end_col {
+                        visit(row, col, "right")?;
+                    }
+                    for col in (start_col + 1)..=end_col {
+                        visit(row, col, "left")?;
+                    }
+                }
+            }
+        }
+        BorderIndex::InsideHorizontal => {
+            if start_row < end_row {
                 for col in start_col..=end_col {
-                    visit(row, col)?;
+                    for row in start_row..end_row {
+                        visit(row, col, "bottom")?;
+                    }
+                    for row in (start_row + 1)..=end_row {
+                        visit(row, col, "top")?;
+                    }
                 }
             }
         }
         BorderIndex::DiagonalDown | BorderIndex::DiagonalUp => {
             for row in start_row..=end_row {
                 for col in start_col..=end_col {
-                    visit(row, col)?;
+                    visit(row, col, "diagonal")?;
                 }
             }
         }
@@ -580,25 +627,34 @@ fn for_each_sample(
     Ok(())
 }
 
-fn target_for(index: BorderIndex, bounds: (u32, u32, u32, u32)) -> Value {
+/// Patch targets for one Office.js border selector.
+///
+/// InsideVertical/InsideHorizontal expand to the interior left/right or
+/// top/bottom edges of the range. A single-row or single-column range has
+/// no interior, so those selectors yield no targets.
+fn border_targets(
+    index: BorderIndex,
+    bounds: (u32, u32, u32, u32),
+) -> Vec<(&'static str, (u32, u32, u32, u32))> {
     let (start_row, start_col, end_row, end_col) = bounds;
-    let (start_row, start_col, end_row, end_col) = match index {
-        BorderIndex::EdgeTop => (start_row, start_col, start_row, end_col),
-        BorderIndex::EdgeBottom => (end_row, start_col, end_row, end_col),
-        BorderIndex::EdgeLeft => (start_row, start_col, end_row, start_col),
-        BorderIndex::EdgeRight => (start_row, end_col, end_row, end_col),
-        BorderIndex::InsideVertical
-        | BorderIndex::InsideHorizontal
-        | BorderIndex::DiagonalDown
-        | BorderIndex::DiagonalUp => (start_row, start_col, end_row, end_col),
-    };
-    json!({
-        "kind": "cells",
-        "startRow": start_row,
-        "startCol": start_col,
-        "endRow": end_row,
-        "endCol": end_col,
-    })
+    match index {
+        BorderIndex::EdgeTop => vec![("top", (start_row, start_col, start_row, end_col))],
+        BorderIndex::EdgeBottom => vec![("bottom", (end_row, start_col, end_row, end_col))],
+        BorderIndex::EdgeLeft => vec![("left", (start_row, start_col, end_row, start_col))],
+        BorderIndex::EdgeRight => vec![("right", (start_row, end_col, end_row, end_col))],
+        BorderIndex::InsideVertical if start_col < end_col => vec![
+            ("right", (start_row, start_col, end_row, end_col - 1)),
+            ("left", (start_row, start_col + 1, end_row, end_col)),
+        ],
+        BorderIndex::InsideHorizontal if start_row < end_row => vec![
+            ("bottom", (start_row, start_col, end_row - 1, end_col)),
+            ("top", (start_row + 1, start_col, end_row, end_col)),
+        ],
+        BorderIndex::InsideVertical | BorderIndex::InsideHorizontal => Vec::new(),
+        BorderIndex::DiagonalDown | BorderIndex::DiagonalUp => {
+            vec![(index.field(), bounds)]
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -671,12 +727,12 @@ impl<T: PartialEq + Clone> Uniform<T> {
 
 fn sample_side(
     format: &Value,
-    index: BorderIndex,
+    field: &str,
+    diagonal_flag: Option<&str>,
     include_disabled_diagonal: bool,
 ) -> Result<BorderSample, BorderError> {
     let borders = format.get("borders").and_then(Value::as_object);
-    let directional = index.diagonal_flag();
-    let direction_enabled = directional
+    let direction_enabled = diagonal_flag
         .map(|flag| {
             include_disabled_diagonal
                 || borders
@@ -687,7 +743,7 @@ fn sample_side(
         .unwrap_or(true);
     let side = if direction_enabled {
         borders
-            .and_then(|borders| borders.get(index.field()))
+            .and_then(|borders| borders.get(field))
             .and_then(Value::as_object)
     } else {
         None

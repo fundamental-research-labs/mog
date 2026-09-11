@@ -21,6 +21,11 @@ const WORKSHEETS_BOOTSTRAP: &str = include_str!("worksheets.js");
 const BORDERS_BOOTSTRAP: &str = include_str!("borders.js");
 const NAMES_BOOTSTRAP: &str = include_str!("names.js");
 const TABLE_COLLECTIONS_BOOTSTRAP: &str = include_str!("table_collections.js");
+const RANGE_OPS_BOOTSTRAP: &str = include_str!("range_ops.js");
+const FREEZE_BOOTSTRAP: &str = include_str!("freeze.js");
+const COMMENTS_BOOTSTRAP: &str = include_str!("comments.js");
+const CONDITIONAL_BOOTSTRAP: &str = include_str!("conditional.js");
+const PIVOT_BOOTSTRAP: &str = include_str!("pivot.js");
 
 const RUNNER: &str = r#"
 (async () => {
@@ -182,6 +187,29 @@ async fn eval_in_ctx(
         .map_err(|e| {
             OfficeJsError::runtime(format!("failed to load Office.js table collections: {e}"))
         })?;
+
+    let _: () = ctx.eval(RANGE_OPS_BOOTSTRAP).catch(&ctx).map_err(|e| {
+        OfficeJsError::runtime(format!("failed to load Office.js range operations: {e}"))
+    })?;
+
+    let _: () = ctx.eval(FREEZE_BOOTSTRAP).catch(&ctx).map_err(|e| {
+        OfficeJsError::runtime(format!("failed to load Office.js freeze panes: {e}"))
+    })?;
+
+    let _: () = ctx
+        .eval(COMMENTS_BOOTSTRAP)
+        .catch(&ctx)
+        .map_err(|e| OfficeJsError::runtime(format!("failed to load Office.js comments: {e}")))?;
+
+    let _: () = ctx.eval(CONDITIONAL_BOOTSTRAP).catch(&ctx).map_err(|e| {
+        OfficeJsError::runtime(format!(
+            "failed to load Office.js conditional formatting: {e}"
+        ))
+    })?;
+
+    let _: () = ctx.eval(PIVOT_BOOTSTRAP).catch(&ctx).map_err(|e| {
+        OfficeJsError::runtime(format!("failed to load Office.js pivot tables: {e}"))
+    })?;
 
     let console_src = r#"
       globalThis.console = {

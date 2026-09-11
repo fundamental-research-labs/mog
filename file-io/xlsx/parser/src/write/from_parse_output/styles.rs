@@ -146,7 +146,11 @@ fn add_style_components(writer: &mut StylesWriter, doc_fmt: &DocumentFormat) -> 
         fill_id,
         border_id,
         num_fmt_id,
-        alignment: doc_fmt.alignment.as_ref().map(convert_alignment),
+        alignment: doc_fmt
+            .alignment
+            .as_ref()
+            .filter(|alignment| !is_default_alignment(alignment))
+            .map(convert_alignment),
         protection: doc_fmt.protection.as_ref().map(convert_protection),
     }
 }
@@ -315,6 +319,34 @@ fn convert_border(border: &BorderFormat) -> BorderDef {
     }
 }
 
+fn is_default_alignment(alignment: &AlignmentFormat) -> bool {
+    let horizontal_default = alignment
+        .horizontal
+        .as_deref()
+        .is_none_or(|value| value == "general");
+    let vertical_default = alignment
+        .vertical
+        .as_deref()
+        .is_none_or(|value| value == "bottom");
+    let wrap_default = alignment.wrap_text.is_none_or(|value| !value);
+    let rotation_default = alignment.rotation.is_none_or(|value| value == 0);
+    let indent_default = alignment.indent.is_none_or(|value| value == 0);
+    let shrink_default = alignment.shrink_to_fit.is_none_or(|value| !value);
+    let auto_indent_default = alignment.auto_indent.is_none_or(|value| !value);
+    let reading_default = alignment
+        .reading_order
+        .as_deref()
+        .is_none_or(|value| value == "context");
+    horizontal_default
+        && vertical_default
+        && wrap_default
+        && rotation_default
+        && indent_default
+        && shrink_default
+        && auto_indent_default
+        && reading_default
+}
+
 /// Convert an `AlignmentFormat` to an `AlignmentDef`.
 fn convert_alignment(alignment: &AlignmentFormat) -> AlignmentDef {
     // Map the AlignmentFormat reading-order token ("context" / "ltr" / "rtl" /
@@ -335,13 +367,15 @@ fn convert_alignment(alignment: &AlignmentFormat) -> AlignmentDef {
             "justify" => Some(HorizontalAlign::Justify),
             "centerContinuous" => Some(HorizontalAlign::CenterContinuous),
             "distributed" => Some(HorizontalAlign::Distributed),
-            "general" => Some(HorizontalAlign::General),
+            // Excel omits the default general horizontal alignment.
+            "general" => None,
             _ => None,
         }),
         vertical: alignment.vertical.as_deref().and_then(|s| match s {
             "top" => Some(VerticalAlign::Top),
             "middle" => Some(VerticalAlign::Center),
-            "bottom" => Some(VerticalAlign::Bottom),
+            // Excel omits the default bottom vertical alignment.
+            "bottom" => None,
             "justify" => Some(VerticalAlign::Justify),
             "distributed" => Some(VerticalAlign::Distributed),
             _ => None,

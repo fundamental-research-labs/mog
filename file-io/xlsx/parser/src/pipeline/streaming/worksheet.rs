@@ -16,10 +16,42 @@ use super::cell_xml::matches_tag;
 use super::deflate::{DEFAULT_BUFFER_SIZE, StreamingDeflate};
 use ooxml_types::worksheet::RowHeight;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 thread_local! {
     static LAST_STREAM_STATS: RefCell<StreamLoadStats> = RefCell::new(StreamLoadStats::default());
+    static STREAM_CELL_HOOK: RefCell<Option<StreamCellHook>> = RefCell::new(None);
+    static CURRENT_STREAM_SHEET: Cell<usize> = const { Cell::new(0) };
+}
+
+type StreamCellHook = Box<dyn FnMut(usize, &CellData, &[u8], &StreamLoadStats)>;
+
+/// Install a cell observer for the duration of `f`.
+///
+/// The observer is invoked from `stream_parse_worksheet` as each cell is
+/// parsed from an inflate chunk, with the current worksheet index.
+pub fn with_stream_cell_hook<R>(
+    hook: impl FnMut(usize, &CellData, &[u8], &StreamLoadStats) + 'static,
+    f: impl FnOnce() -> R,
+) -> R {
+    STREAM_CELL_HOOK.with(|slot| *slot.borrow_mut() = Some(Box::new(hook)));
+    CURRENT_STREAM_SHEET.with(|idx| idx.set(0));
+    let result = f();
+    STREAM_CELL_HOOK.with(|slot| *slot.borrow_mut() = None);
+    result
+}
+
+pub(crate) fn set_current_stream_sheet(sheet_idx: usize) {
+    CURRENT_STREAM_SHEET.with(|idx| idx.set(sheet_idx));
+}
+
+pub(crate) fn notify_stream_cell(cell: &CellData, strings: &[u8], stats: &StreamLoadStats) {
+    STREAM_CELL_HOOK.with(|slot| {
+        if let Some(hook) = slot.borrow_mut().as_mut() {
+            let sheet_idx = CURRENT_STREAM_SHEET.with(|idx| idx.get());
+            hook(sheet_idx, cell, strings, stats);
+        }
+    });
 }
 
 /// Observed inflate/parse counters for a single worksheet stream.
@@ -364,9 +396,14 @@ fn has_attr(tag: &[u8], name: &[u8]) -> bool {
 }
 
 /// Inflate a worksheet ZIP entry in bounded chunks and parse cells as bytes arrive.
+///
+/// `on_cell` fires for each cell as soon as its XML is parsed from an inflate
+/// chunk — before the rest of the sheet (or workbook) is materialized.
+/// `on_chunk` fires after each inflate/copy chunk is consumed.
 pub fn stream_parse_worksheet(
     entry: &CompressedEntry<'_>,
     shared_strings: &[&str],
+    mut on_cell: impl FnMut(&CellData, &[u8], &StreamLoadStats),
     mut on_chunk: impl FnMut(&StreamLoadStats),
 ) -> Result<StreamedWorksheet, String> {
     let cell_hint = (entry.uncompressed_size / 50).max(64);
@@ -378,9 +415,21 @@ pub fn stream_parse_worksheet(
     };
 
     if entry.is_stored() {
-        stream_stored(entry, &mut parser, &mut stats, &mut on_chunk)?;
+        stream_stored(
+            entry,
+            &mut parser,
+            &mut stats,
+            &mut on_cell,
+            &mut on_chunk,
+        )?;
     } else if entry.is_deflate() {
-        stream_deflate(entry, &mut parser, &mut stats, &mut on_chunk)?;
+        stream_deflate(
+            entry,
+            &mut parser,
+            &mut stats,
+            &mut on_cell,
+            &mut on_chunk,
+        )?;
     } else {
         return Err(format!(
             "Unsupported compression method: {}",
@@ -402,6 +451,7 @@ fn stream_deflate(
     entry: &CompressedEntry<'_>,
     parser: &mut WorksheetStreamParser<'_>,
     stats: &mut StreamLoadStats,
+    on_cell: &mut impl FnMut(&CellData, &[u8], &StreamLoadStats),
     on_chunk: &mut impl FnMut(&StreamLoadStats),
 ) -> Result<(), String> {
     let mut deflate = StreamingDeflate::new(
@@ -423,19 +473,33 @@ fn stream_deflate(
         stats.max_inflate_buffer = stats.max_inflate_buffer.max(chunk.len());
         parser.push_chunk(&chunk)?;
         stats.bytes_decompressed = deflate.bytes_decompressed();
+        stats.cells_parsed = parser.cells.len();
         if !deflate.is_finished() {
             stats.cells_emitted_before_last_chunk = parser.cells.len().max(cells_before);
         }
+        emit_new_cells(parser, cells_before, stats, on_cell);
         on_chunk(stats);
     }
     stats.bytes_decompressed = deflate.bytes_decompressed();
     Ok(())
 }
 
+fn emit_new_cells(
+    parser: &WorksheetStreamParser<'_>,
+    cells_before: usize,
+    stats: &StreamLoadStats,
+    on_cell: &mut impl FnMut(&CellData, &[u8], &StreamLoadStats),
+) {
+    for cell in &parser.cells[cells_before..] {
+        on_cell(cell, &parser.strings, stats);
+    }
+}
+
 fn stream_stored(
     entry: &CompressedEntry<'_>,
     parser: &mut WorksheetStreamParser<'_>,
     stats: &mut StreamLoadStats,
+    on_cell: &mut impl FnMut(&CellData, &[u8], &StreamLoadStats),
     on_chunk: &mut impl FnMut(&StreamLoadStats),
 ) -> Result<(), String> {
     if entry.data.len() != entry.uncompressed_size {
@@ -457,10 +521,13 @@ fn stream_stored(
         stats.bytes_decompressed = end;
         stats.max_inflate_buffer = stats.max_inflate_buffer.max(chunk.len());
         let last = end == entry.data.len();
+        let cells_before = parser.cells.len();
         parser.push_chunk(chunk)?;
+        stats.cells_parsed = parser.cells.len();
         if !last {
             stats.cells_emitted_before_last_chunk = parser.cells.len();
         }
+        emit_new_cells(parser, cells_before, stats, on_cell);
         on_chunk(stats);
         offset = end;
     }

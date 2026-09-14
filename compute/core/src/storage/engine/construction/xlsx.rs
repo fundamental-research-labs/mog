@@ -99,12 +99,32 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
 ) -> Result<XlsxStreamHydrateResult, ComputeError> {
     use crate::import;
     use crate::storage::infra::hydration::{allocate_sheet_ids, DefaultIdAllocator};
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
+    let live_store = Rc::new(RefCell::new(CellStore::new()));
+    let stream_sheet_ids = Rc::new(RefCell::new(Vec::<SheetId>::new()));
     let parsed = {
         let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "parse");
-        let parsed = xlsx_api::parse(xlsx_data).map_err(|e| ComputeError::Deserialize {
-            message: format!("XLSX parse error: {}", e),
-        })?;
+        let store = live_store.clone();
+        let ids = stream_sheet_ids.clone();
+        let parsed = xlsx_parser::with_stream_cell_hook(
+            move |sheet_idx, cell, strings, _stats| {
+                let mut store = store.borrow_mut();
+                let mut ids = ids.borrow_mut();
+                while ids.len() <= sheet_idx {
+                    let name = format!("__stream{}", ids.len());
+                    let sheet_id = store.open_stream_sheet(&name);
+                    ids.push(sheet_id);
+                }
+                store.ingest_streamed_xlsx_cell(&ids[sheet_idx], cell, strings);
+            },
+            || {
+                xlsx_api::parse(xlsx_data).map_err(|e| ComputeError::Deserialize {
+                    message: format!("XLSX parse error: {}", e),
+                })
+            },
+        )?;
         profile.counter("sheets", parsed.output.sheets.len() as u64);
         profile.counter(
             "cells",
@@ -117,6 +137,17 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         );
         parsed
     };
+    let mut cell_store = match Rc::try_unwrap(live_store) {
+        Ok(cell) => cell.into_inner(),
+        Err(rc) => rc.borrow().clone(),
+    };
+    let stream_sheet_ids = match Rc::try_unwrap(stream_sheet_ids) {
+        Ok(cell) => cell.into_inner(),
+        Err(rc) => rc.borrow().clone(),
+    };
+    for sheet_id in &stream_sheet_ids {
+        cell_store.remove_sheet(sheet_id);
+    }
     let import_report = parsed.import_report;
     let mut parse_output = parsed.output;
     let diagnostics = parsed.diagnostics;
@@ -153,11 +184,96 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         allocations
     };
 
-    // ── Pass 2: Hydrate native metadata while sheet cells still exist ─
-    let empty_ranged: Vec<std::collections::HashSet<(u32, u32)>> =
-        vec![std::collections::HashSet::new(); parse_output.sheets.len()];
-    let empty_range_styles: Vec<Vec<crate::storage::infra::hydration::ImportedRangeStyle>> =
-        vec![Vec::new(); parse_output.sheets.len()];
+    // ── Pass 2: Classify each sheet, compact ranges, install the live store ─
+    let mut formula_cells = Vec::new();
+    let mut ranged_positions: Vec<std::collections::HashSet<(u32, u32)>> =
+        Vec::with_capacity(parse_output.sheets.len());
+    let mut range_style_positions: Vec<std::collections::HashSet<(u32, u32)>> =
+        Vec::with_capacity(parse_output.sheets.len());
+    let mut range_styles_per_sheet: Vec<Vec<crate::storage::infra::hydration::ImportedRangeStyle>> =
+        Vec::with_capacity(parse_output.sheets.len());
+    let range_style_formats_enabled = range_style_formats_enabled();
+    {
+        let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "stream_cells_into_store");
+        for (sheet_idx, sheet) in parse_output.sheets.iter_mut().enumerate() {
+            let mut sheet_id_map = crate::storage::infra::hydration::HydrationIdMap::default();
+            sheet_id_map.sheet_ids.push(allocations[sheet_idx].sheet_id);
+            sheet_id_map
+                .cell_ids
+                .push(allocations[sheet_idx].cell_ids.clone());
+            sheet_id_map
+                .row_axes
+                .push(allocations[sheet_idx].row_axis.clone());
+            sheet_id_map
+                .col_axes
+                .push(allocations[sheet_idx].col_axis.clone());
+            for identity in &allocations[sheet_idx].identity_only_cells {
+                sheet_id_map.identities.push((
+                    allocations[sheet_idx].sheet_id,
+                    identity.cell_id,
+                    identity.row,
+                    identity.col,
+                ));
+            }
+            let mut snap_sheets = import::parse_output_to_snapshot::sheet_lowering::convert_sheets(
+                std::slice::from_ref(sheet),
+                Some(&sheet_id_map),
+            );
+            let mut snap_sheet = snap_sheets.remove(0);
+            import::parse_output_to_snapshot::classifier::classify_sheet_ranges(
+                &mut snap_sheet,
+                sheet,
+                &WorkbookSnapshot::default(),
+                None,
+                &allocations[sheet_idx].row_axis,
+                &allocations[sheet_idx].col_axis,
+                &mut allocator,
+            );
+            let snap_positions: std::collections::HashSet<(u32, u32)> =
+                snap_sheet.cells.iter().map(|c| (c.row, c.col)).collect();
+            let ranged: std::collections::HashSet<(u32, u32)> = sheet
+                .cells
+                .iter()
+                .filter(|c| c.formula.is_some() || !c.value.is_null())
+                .map(|c| (c.row, c.col))
+                .filter(|pos| !snap_positions.contains(pos))
+                .collect();
+            if range_style_formats_enabled {
+                let (style_positions, range_styles) = build_imported_range_style_plan(
+                    sheet,
+                    &allocations[sheet_idx],
+                    &snap_sheet.ranges,
+                    &mut allocator,
+                );
+                range_style_positions.push(style_positions);
+                range_styles_per_sheet.push(range_styles);
+            } else {
+                range_style_positions.push(std::collections::HashSet::new());
+                range_styles_per_sheet.push(Vec::new());
+            }
+            ranged_positions.push(ranged);
+            for cell in &snap_sheet.cells {
+                if let Some(formula) = &cell.formula {
+                    let cell_id =
+                        cell_types::CellId::from_uuid_str(&cell.cell_id).map_err(|e| {
+                            ComputeError::Deserialize {
+                                message: format!("imported cell id: {e}"),
+                            }
+                        })?;
+                    formula_cells.push((
+                        cell_id,
+                        allocations[sheet_idx].sheet_id,
+                        compute_parser::normalize_xlsx_formula(formula),
+                    ));
+                }
+            }
+            cell_store.add_sheet(snap_sheet)?;
+        }
+        profile.counter("sheets", allocations.len() as u64);
+        profile.counter("formulas", formula_cells.len() as u64);
+    }
+
+    // ── Pass 3: Hydrate native metadata while sheet cells still exist ─
     let (storage, id_map) = {
         let mut profile =
             crate::xlsx_profile::PhaseTimer::new("import", "hydrate_from_parse_output_with_ranges");
@@ -165,8 +281,8 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         let id_map = storage.hydrate_from_parse_output_with_ranges(
             &parse_output,
             &allocations,
-            &empty_ranged,
-            &empty_ranged,
+            &ranged_positions,
+            &range_style_positions,
             &mut allocator,
         )?;
         storage
@@ -178,66 +294,9 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
     };
 
     let imported_formats =
-        collect_imported_formats(&parse_output, &id_map.sheet_ids, &empty_range_styles);
-
-    // ── Pass 3: Write each sheet into the live store, then drop its IR ─
-    let mut cell_store = CellStore::new();
-    let mut formula_cells = Vec::new();
-    {
-        let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "stream_cells_into_store");
-        for (sheet_idx, sheet) in parse_output.sheets.iter_mut().enumerate() {
-            let mut sheet_id_map = crate::storage::infra::hydration::HydrationIdMap::default();
-            sheet_id_map.sheet_ids.push(id_map.sheet_ids[sheet_idx]);
-            sheet_id_map
-                .cell_ids
-                .push(id_map.cell_ids[sheet_idx].clone());
-            sheet_id_map
-                .row_axes
-                .push(id_map.row_axes[sheet_idx].clone());
-            sheet_id_map
-                .col_axes
-                .push(id_map.col_axes[sheet_idx].clone());
-            sheet_id_map.identities.extend(
-                id_map
-                    .identities
-                    .iter()
-                    .filter(|(sid, _, _, _)| *sid == id_map.sheet_ids[sheet_idx])
-                    .copied(),
-            );
-            let mut snap_sheets = import::parse_output_to_snapshot::sheet_lowering::convert_sheets(
-                std::slice::from_ref(sheet),
-                Some(&sheet_id_map),
-            );
-            let mut snap_sheet = snap_sheets.remove(0);
-            import::parse_output_to_snapshot::classifier::classify_sheet_ranges(
-                &mut snap_sheet,
-                sheet,
-                &WorkbookSnapshot::default(),
-                None,
-                &id_map.row_axes[sheet_idx],
-                &id_map.col_axes[sheet_idx],
-                &mut allocator,
-            );
-            for cell in &snap_sheet.cells {
-                if let Some(formula) = &cell.formula {
-                    let cell_id =
-                        cell_types::CellId::from_uuid_str(&cell.cell_id).map_err(|e| {
-                            ComputeError::Deserialize {
-                                message: format!("imported cell id: {e}"),
-                            }
-                        })?;
-                    formula_cells.push((
-                        cell_id,
-                        id_map.sheet_ids[sheet_idx],
-                        compute_parser::normalize_xlsx_formula(formula),
-                    ));
-                }
-            }
-            cell_store.add_sheet(snap_sheet)?;
-            sheet.cells.clear();
-        }
-        profile.counter("sheets", id_map.sheet_ids.len() as u64);
-        profile.counter("formulas", formula_cells.len() as u64);
+        collect_imported_formats(&parse_output, &id_map.sheet_ids, &range_styles_per_sheet);
+    for sheet in &mut parse_output.sheets {
+        sheet.cells.clear();
     }
 
     // Slim snapshot: sheet identities and workbook metadata, no cell grid IR.

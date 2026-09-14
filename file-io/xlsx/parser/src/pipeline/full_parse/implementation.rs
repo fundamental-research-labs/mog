@@ -1037,9 +1037,11 @@ fn parse_sheets_sequential(
             .charge_uncompressed(compressed.uncompressed_size)
             .map_err(|e| e.to_string())?;
         let shared_string_refs: Vec<&str> = shared_strings.iter().map(|s| s.as_str()).collect();
+        crate::pipeline::streaming::set_current_stream_sheet(sheet_idx);
         let streamed = crate::pipeline::streaming::stream_parse_worksheet(
             &compressed,
             &shared_string_refs,
+            crate::pipeline::streaming::notify_stream_cell,
             |_| {},
         )?;
         crate::pipeline::streaming::record_stream_load_stats(&streamed.stats);

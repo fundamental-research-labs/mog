@@ -84,6 +84,47 @@ impl CellStore {
         self.insert_cell_with_formula(sheet, cell_id, pos, entry, None);
     }
 
+    /// Create an empty sheet used while XLSX cells stream in during inflate.
+    pub fn open_stream_sheet(&mut self, name: &str) -> SheetId {
+        let sheet_id = self.id_alloc.next_sheet_id();
+        let snap = snapshot_types::SheetSnapshot {
+            id: format!("{:032x}", sheet_id.as_u128()),
+            name: name.to_string(),
+            rows: 1,
+            cols: 1,
+            cells: Vec::new(),
+            ranges: Vec::new(),
+            identities: Vec::new(),
+            row_axis: None,
+            col_axis: None,
+        };
+        let _ = self.add_sheet(snap);
+        sheet_id
+    }
+
+    /// Write a packed worksheet cell into the live store as it is parsed.
+    ///
+    /// Used by XLSX stream load so cells land in `CellStore` during inflate,
+    /// before the rest of the sheet XML is consumed.
+    pub fn ingest_streamed_xlsx_cell(
+        &mut self,
+        sheet: &SheetId,
+        cell: &xlsx_parser::domain::cells::CellData,
+        strings: &[u8],
+    ) {
+        if !self.sheets.contains_key(sheet) {
+            return;
+        }
+        let value = packed_xlsx_cell_value(cell, strings);
+        let cell_id = self.id_alloc.next_cell_id();
+        self.insert_cell(
+            sheet,
+            cell_id,
+            SheetPos::new(cell.row, cell.col),
+            CellEntry { value },
+        );
+    }
+
     fn insert_cell_with_formula(
         &mut self,
         sheet: &SheetId,
@@ -264,5 +305,46 @@ impl CellStore {
                 edit.formula.clone(),
             );
         }
+    }
+}
+
+fn packed_xlsx_cell_value(
+    cell: &xlsx_parser::domain::cells::CellData,
+    strings: &[u8],
+) -> CellValue {
+    use xlsx_parser::domain::cells::{
+        CELL_TYPE_BOOL, CELL_TYPE_NUMBER, CELL_TYPE_STRING, VALUE_TYPE_FORMULA,
+    };
+
+    let text = if cell.value_len > 0 {
+        let start = cell.value_offset as usize;
+        let end = start
+            .saturating_add(cell.value_len as usize)
+            .min(strings.len());
+        std::str::from_utf8(&strings[start..end]).ok()
+    } else {
+        None
+    };
+    if cell.value_type == VALUE_TYPE_FORMULA {
+        return CellValue::Null;
+    }
+    match cell.cell_type {
+        CELL_TYPE_NUMBER => text
+            .and_then(|s| s.parse::<f64>().ok())
+            .map(CellValue::number)
+            .unwrap_or(CellValue::Null),
+        CELL_TYPE_BOOL => match text {
+            Some("1") | Some("TRUE") | Some("true") => CellValue::Boolean(true),
+            Some("0") | Some("FALSE") | Some("false") => CellValue::Boolean(false),
+            _ => CellValue::Null,
+        },
+        CELL_TYPE_STRING => text
+            .map(|s| CellValue::from(s.to_string()))
+            .unwrap_or(CellValue::Null),
+        _ => text
+            .and_then(|s| s.parse::<f64>().ok())
+            .map(CellValue::number)
+            .or_else(|| text.map(|s| CellValue::from(s.to_string())))
+            .unwrap_or(CellValue::Null),
     }
 }

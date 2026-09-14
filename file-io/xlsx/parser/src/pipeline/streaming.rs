@@ -24,5 +24,6 @@ pub use deflate::{DEFAULT_BUFFER_SIZE, StreamingDeflate};
 pub use state::ParseState;
 pub use worksheet::{
     StreamLoadStats, StreamedWorksheet, last_stream_load_stats, record_stream_load_stats,
-    reset_stream_load_stats, stream_parse_worksheet,
+    reset_stream_load_stats, stream_parse_worksheet, with_stream_cell_hook,
 };
+pub(crate) use worksheet::{notify_stream_cell, set_current_stream_sheet};

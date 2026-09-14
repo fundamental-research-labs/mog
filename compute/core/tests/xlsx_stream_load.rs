@@ -1,10 +1,13 @@
 //! Stream-inflate XLSX load: cells land in the live store from the shipped
 //! engine entry, without materializing a full worksheet XML document.
 
+use std::cell::RefCell;
+
 use cell_types::SheetPos;
+use compute_core::cells::CellStore;
 use compute_core::storage::engine::ComputeEngine;
 use value_types::{CellValue, FiniteF64};
-use xlsx_parser::ZipWriter;
+use xlsx_parser::{stream_parse_worksheet, XlsxArchive, ZipWriter};
 
 fn large_worksheet_xlsx() -> Vec<u8> {
     let mut sheet = String::from(
@@ -124,5 +127,59 @@ fn from_xlsx_bytes_streams_large_sheet_into_live_store() {
         stats.cells_parsed >= 8000,
         "expected 8000 authored cells, parsed {}",
         stats.cells_parsed
+    );
+}
+
+#[test]
+fn cells_land_in_live_store_before_last_inflate_chunk() {
+    let bytes = large_worksheet_xlsx();
+    let archive = XlsxArchive::new(&bytes).expect("open fixture zip");
+    let entry = archive
+        .get_compressed_data("xl/worksheets/sheet1.xml")
+        .expect("worksheet entry");
+    assert!(
+        entry.uncompressed_size > 128 * 1024,
+        "fixture must span multiple inflate chunks"
+    );
+
+    let store = RefCell::new(CellStore::new());
+    let sheet_id = store.borrow_mut().open_stream_sheet("Data");
+    let mut saw_cell_before_last_chunk = false;
+    let streamed = stream_parse_worksheet(
+        &entry,
+        &[],
+        |cell, strings, _stats| {
+            store
+                .borrow_mut()
+                .ingest_streamed_xlsx_cell(&sheet_id, cell, strings);
+        },
+        |stats| {
+            if stats.bytes_decompressed < stats.uncompressed_size
+                && store
+                    .borrow()
+                    .get_cell_value_at(&sheet_id, SheetPos::new(0, 0))
+                    .is_some()
+            {
+                saw_cell_before_last_chunk = true;
+            }
+        },
+    )
+    .expect("stream parse worksheet");
+
+    assert!(
+        streamed.stats.chunks_processed > 1,
+        "expected multiple inflate chunks, got {}",
+        streamed.stats.chunks_processed
+    );
+    assert!(
+        saw_cell_before_last_chunk,
+        "authored cells must exist on the live CellStore before the last inflate chunk"
+    );
+    assert_eq!(
+        store
+            .borrow()
+            .get_cell_value_at(&sheet_id, SheetPos::new(0, 0))
+            .cloned(),
+        Some(CellValue::Number(FiniteF64::must(1.0)))
     );
 }

@@ -233,12 +233,7 @@ pub use infra::arena::ParseArena;
 
 pub use pipeline::streaming::{
     DEFAULT_BUFFER_SIZE, ParseState, StreamLoadStats, StreamingCellParser, StreamingDeflate,
-    last_stream_load_stats, reset_stream_load_stats, stream_parse_worksheet,
-};
-
-#[cfg(all(not(target_arch = "wasm32"), feature = "parallel"))]
-pub use pipeline::parallel::{
-    ParallelParseError, ParallelParseResult, SheetCells, parse_xlsx_parallel,
+    last_stream_load_stats, reset_stream_load_stats, stream_parse_worksheet, with_stream_cell_hook,
 };
 
 // === Utilities ===

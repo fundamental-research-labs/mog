@@ -51,7 +51,7 @@ mod xlsx;
 
 pub(super) use assembly::{
     assemble_engine, from_snapshot, from_snapshot_with_layout_metrics,
-    rebuild_engine_from_snapshot, snapshot_id_high_water_mark,
+    rebuild_engine_from_snapshot,
 };
 pub(super) use csv::{from_csv_bytes, import_from_csv_bytes};
 pub(super) use deferred::{commit_deferred_hydration, stage_deferred_hydration};

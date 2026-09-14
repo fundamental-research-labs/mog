@@ -14,7 +14,3 @@ pub mod streaming;
 // Memory-mapped I/O module (native only)
 #[cfg(all(not(target_arch = "wasm32"), feature = "native"))]
 pub mod mmap;
-
-// Parallel sheet parsing module (native only)
-#[cfg(all(not(target_arch = "wasm32"), feature = "parallel"))]
-pub mod parallel;

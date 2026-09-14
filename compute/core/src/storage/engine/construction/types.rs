@@ -16,12 +16,8 @@ pub(in crate::storage::engine) type XlsxStreamHydrateResult = (
     Vec<(CellId, SheetId, String)>,
 );
 
-/// Pending worksheet load. Values and metadata already loaded live only in the
-/// native stores; completion needs the archive and the loaded sheet's index.
-pub struct DeferredHydrationData {
-    pub(in crate::storage::engine) loaded_sheet_index: usize,
-    pub(in crate::storage::engine) raw_xlsx_bytes: Vec<u8>,
-}
+/// Marker kept so `ComputeEngine::deferred_hydration` stays `None` after stream load.
+pub struct DeferredHydrationData;
 
 /// Fully staged deferred XLSX completion. This owns every component needed to
 /// replace the live engine after any fallible import-open recalculation has

@@ -196,6 +196,16 @@ enum Op {
         #[serde(rename = "rangeId")]
         range_id: String,
     },
+    #[serde(rename = "dataValidationGetInvalidCells")]
+    DataValidationGetInvalidCells {
+        id: String,
+        #[serde(rename = "validationId")]
+        validation_id: String,
+        #[serde(rename = "rangeId")]
+        range_id: String,
+        #[serde(rename = "orNullObject")]
+        or_null_object: bool,
+    },
     #[serde(rename = "rangeClear")]
     RangeClear {
         id: String,
@@ -1300,6 +1310,72 @@ impl Host {
                         .expect("validations lock")
                         .insert(id.clone(), validation);
                     mark_object(&mut loaded, &id, false);
+                }
+                Op::DataValidationGetInvalidCells {
+                    id,
+                    validation_id,
+                    range_id,
+                    or_null_object,
+                } => {
+                    let validation = self
+                        .validations
+                        .lock()
+                        .expect("validations lock")
+                        .get(&validation_id)
+                        .cloned()
+                        .ok_or_else(|| BatchError {
+                            code: "InvalidObjectPath",
+                            message: "The data validation object is not available.".to_string(),
+                        })?;
+                    let range = self
+                        .ranges
+                        .lock()
+                        .expect("ranges lock")
+                        .get(&range_id)
+                        .cloned()
+                        .ok_or_else(|| BatchError {
+                            code: "InvalidObjectPath",
+                            message: "The range object is not available.".to_string(),
+                        })?;
+                    let cells = validation.invalid_cells().map_err(validation_error)?;
+                    if cells.is_empty() {
+                        if !or_null_object {
+                            return Err(BatchError {
+                                code: "ItemNotFound",
+                                message: "No cells fail data validation.".to_string(),
+                            });
+                        }
+                        mark_object(&mut loaded, &id, true);
+                        self.ranges.lock().expect("ranges lock").insert(
+                            id,
+                            RangeRef {
+                                sheet: range.sheet,
+                                is_null_object: true,
+                                address: None,
+                            },
+                        );
+                    } else {
+                        let min_row = cells.iter().map(|(row, _)| *row).min().unwrap();
+                        let max_row = cells.iter().map(|(row, _)| *row).max().unwrap();
+                        let min_col = cells.iter().map(|(_, col)| *col).min().unwrap();
+                        let max_col = cells.iter().map(|(_, col)| *col).max().unwrap();
+                        let address = RangeAddress::Cells {
+                            start_row: min_row,
+                            start_column: min_col,
+                            end_row: max_row,
+                            end_column: max_col,
+                        }
+                        .to_a1();
+                        mark_object(&mut loaded, &id, false);
+                        self.ranges.lock().expect("ranges lock").insert(
+                            id,
+                            RangeRef {
+                                sheet: range.sheet,
+                                is_null_object: false,
+                                address: Some(address),
+                            },
+                        );
+                    }
                 }
                 Op::RangeClear { id, apply_to } => {
                     let range = self

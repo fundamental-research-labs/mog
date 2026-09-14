@@ -35,20 +35,16 @@
     );
   }
 
-  function unsupported(message) {
-    return richApiError("ApiNotFound", message);
-  }
-
   function createRangeAreas(context, worksheet) {
     if (officeJs && typeof officeJs.createRangeAreas === "function") {
       return officeJs.createRangeAreas(context, worksheet || null);
     }
-    if (typeof Excel.RangeAreas !== "function") {
-      throw unsupported(
-        "DataValidation.getInvalidCells requires the RangeAreas adapter"
-      );
+    if (typeof Excel.RangeAreas === "function") {
+      return new Excel.RangeAreas(context, worksheet || null);
     }
-    return new Excel.RangeAreas(context, worksheet || null);
+    // Office returns RangeAreas. Until that adapter is wired, bind a Range so
+    // getInvalidCells / getInvalidCellsOrNullObject can still resolve cells.
+    return new Excel.Range(context, worksheet || null, null);
   }
 
   function queueRangeAreasOperation(result, operation) {

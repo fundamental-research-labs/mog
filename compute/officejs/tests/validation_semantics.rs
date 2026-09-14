@@ -348,6 +348,37 @@ fn data_validation_valid_reports_mixed_cells() {
 }
 
 #[test]
+fn data_validation_get_invalid_cells_returns_null_object_or_writable_range() {
+    let output = run_office_js(
+        r#"
+        return await Excel.run(async context => {
+          const sheet = context.workbook.worksheets.getItem("Sheet1");
+          const range = sheet.getRange("A1");
+          range.dataValidation.rule = {
+            list: { inCellDropDown: true, source: "Yes,No" }
+          };
+          range.values = [["Yes"]];
+          const none = range.dataValidation.getInvalidCellsOrNullObject();
+          await context.sync();
+          const noneIsNull = none.isNullObject;
+          range.values = [["Nope"]];
+          const invalid = range.dataValidation.getInvalidCells();
+          invalid.values = [["Yes"]];
+          await context.sync();
+          const a1 = sheet.getRange("A1");
+          a1.load("values");
+          await context.sync();
+          return { noneIsNull, a1: a1.values };
+        });
+        "#,
+    )
+    .expect("getInvalidCells should resolve through the shipped runtime");
+
+    assert_eq!(output.value["noneIsNull"], json!(true));
+    assert_eq!(output.value["a1"], json!([["Yes"]]));
+}
+
+#[test]
 fn data_validation_rejects_unknown_rule_members() {
     let output = run_office_js(
         r#"

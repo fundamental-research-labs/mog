@@ -250,14 +250,6 @@ impl CellStore {
         }
     }
 
-    /// Clear imported package caches after a live edit or successful recalc.
-    pub(crate) fn clear_imported_array_caches(&mut self) {
-        self.imported_array_cache_invalidations.clear();
-        for sheet in self.sheets.values_mut() {
-            sheet.clear_imported_array_cache(&self.cells, &self.formulas);
-        }
-    }
-
     /// Invalidate only imported spill caches touched by the supplied changes.
     pub(crate) fn invalidate_imported_array_caches_at(
         &mut self,

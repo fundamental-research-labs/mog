@@ -98,7 +98,7 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
     xlsx_data: &[u8],
 ) -> Result<XlsxStreamHydrateResult, ComputeError> {
     use crate::import;
-    use crate::storage::infra::hydration::{DefaultIdAllocator, allocate_sheet_ids};
+    use crate::storage::infra::hydration::{allocate_sheet_ids, DefaultIdAllocator};
 
     let parsed = {
         let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "parse");
@@ -188,9 +188,15 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         for (sheet_idx, sheet) in parse_output.sheets.iter_mut().enumerate() {
             let mut sheet_id_map = crate::storage::infra::hydration::HydrationIdMap::default();
             sheet_id_map.sheet_ids.push(id_map.sheet_ids[sheet_idx]);
-            sheet_id_map.cell_ids.push(id_map.cell_ids[sheet_idx].clone());
-            sheet_id_map.row_axes.push(id_map.row_axes[sheet_idx].clone());
-            sheet_id_map.col_axes.push(id_map.col_axes[sheet_idx].clone());
+            sheet_id_map
+                .cell_ids
+                .push(id_map.cell_ids[sheet_idx].clone());
+            sheet_id_map
+                .row_axes
+                .push(id_map.row_axes[sheet_idx].clone());
+            sheet_id_map
+                .col_axes
+                .push(id_map.col_axes[sheet_idx].clone());
             sheet_id_map.identities.extend(
                 id_map
                     .identities
@@ -198,11 +204,10 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
                     .filter(|(sid, _, _, _)| *sid == id_map.sheet_ids[sheet_idx])
                     .copied(),
             );
-            let mut snap_sheets =
-                import::parse_output_to_snapshot::sheet_lowering::convert_sheets(
-                    std::slice::from_ref(sheet),
-                    Some(&sheet_id_map),
-                );
+            let mut snap_sheets = import::parse_output_to_snapshot::sheet_lowering::convert_sheets(
+                std::slice::from_ref(sheet),
+                Some(&sheet_id_map),
+            );
             let mut snap_sheet = snap_sheets.remove(0);
             import::parse_output_to_snapshot::classifier::classify_sheet_ranges(
                 &mut snap_sheet,
@@ -215,11 +220,12 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
             );
             for cell in &snap_sheet.cells {
                 if let Some(formula) = &cell.formula {
-                    let cell_id = cell_types::CellId::from_uuid_str(&cell.cell_id).map_err(|e| {
-                        ComputeError::Deserialize {
-                            message: format!("imported cell id: {e}"),
-                        }
-                    })?;
+                    let cell_id =
+                        cell_types::CellId::from_uuid_str(&cell.cell_id).map_err(|e| {
+                            ComputeError::Deserialize {
+                                message: format!("imported cell id: {e}"),
+                            }
+                        })?;
                     formula_cells.push((
                         cell_id,
                         id_map.sheet_ids[sheet_idx],
@@ -244,6 +250,7 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
     workbook_snap.canonical_tables = id_map.canonical_tables;
     workbook_snap.tables.clear();
     allocator.stamp_snapshot_counters(&mut workbook_snap);
+    cell_store.install_imported_workbook_defs(&workbook_snap);
     Ok((
         storage,
         workbook_snap,

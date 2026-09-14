@@ -1,19 +1,20 @@
-use domain_types::ParseOutput;
 use domain_types::domain::pivot::PivotCacheSourceDef;
+use domain_types::ParseOutput;
 
 use value_types::ComputeError;
 
-use crate::storage::WorkbookStorage;
 use crate::storage::sheet::pivots::insert_existing_pivot_if_absent;
 use crate::storage::workbook::imported_pivots::{
-    ImportedPivotAssociationStatus, ImportedPivotUnsupportedReason, association_from_parsed_pivot,
-    existing_promoted_import_pivot_matches, import_identity_for_parsed_pivot,
-    native_imported_pivot_id, write as write_imported_pivot_association,
+    association_from_parsed_pivot, existing_promoted_import_pivot_matches,
+    import_identity_for_parsed_pivot, native_imported_pivot_id,
+    write as write_imported_pivot_association, ImportedPivotAssociationStatus,
+    ImportedPivotUnsupportedReason,
 };
+use crate::storage::WorkbookStorage;
 
-use super::imported_pivot_classification::{ImportedPivotClassification, classify_imported_pivot};
+use super::imported_pivot_classification::{classify_imported_pivot, ImportedPivotClassification};
 use super::print_defined_names::hydrate_workbook_print_defined_names;
-use super::sheet::{SheetIdAllocation, hydrate_sheet, hydrate_sheet_with_allocation};
+use super::sheet::{hydrate_sheet, hydrate_sheet_with_allocation, SheetIdAllocation};
 use super::styles::{hydrate_style_palette, hydrate_workbook_stylesheet};
 use super::table_styles::hydrate_custom_table_styles_from_ooxml;
 use super::workbook::{
@@ -436,90 +437,6 @@ impl WorkbookStorage {
         );
         cache_imported_array_cells(self, sheet_id, sheet_data, &alloc.cell_ids);
         Ok(identities)
-    }
-
-    /// Extend an already loaded workbook with the remaining parsed sheets.
-    /// Workbook metadata and loaded sheet state keep their existing identities.
-    pub(crate) fn hydrate_remaining_sheets(
-        &mut self,
-        output: &ParseOutput,
-        allocations: &[SheetIdAllocation],
-        ranged_positions: &[std::collections::HashSet<(u32, u32)>],
-        range_style_positions: &[std::collections::HashSet<(u32, u32)>],
-        loaded_sheet_index: usize,
-        existing_tables: &[domain_types::domain::table::TableCatalogEntry],
-        allocator: &mut impl IdAllocator,
-    ) -> Result<HydrationIdMap, ComputeError> {
-        self.invalidate_cell_metadata_projection();
-        let mut id_map = HydrationIdMap::default();
-        for (index, allocation) in allocations.iter().enumerate() {
-            id_map.sheet_ids.push(allocation.sheet_id);
-            id_map.cell_ids.push(allocation.cell_ids.clone());
-            id_map.row_axes.push(allocation.row_axis.clone());
-            id_map.col_axes.push(allocation.col_axis.clone());
-            if index == loaded_sheet_index {
-                continue;
-            }
-            let identities = self.hydrate_allocated_sheet(
-                output,
-                index,
-                allocation,
-                &ranged_positions[index],
-                &range_style_positions[index],
-                allocator,
-            )?;
-            id_map.identities.extend(
-                identities
-                    .into_iter()
-                    .map(|(id, row, col)| (allocation.sheet_id, id, row, col)),
-            );
-        }
-        let all_tables: Vec<_> = output
-            .sheets
-            .iter()
-            .zip(&id_map.sheet_ids)
-            .enumerate()
-            .filter(|(index, _)| *index != loaded_sheet_index)
-            .flat_map(|(_, (sheet, id))| {
-                sheet
-                    .tables
-                    .iter()
-                    .map(move |table| (table.clone(), id.to_uuid_string()))
-            })
-            .collect();
-        let (table_identity, tables) = hydrate_workbook_tables(&all_tables, allocator);
-        id_map.canonical_tables = tables;
-        hydrate_workbook_print_defined_names(
-            &mut self.sheet_metadata,
-            &output.named_ranges,
-            &id_map.sheet_ids,
-            &output.workbook_sheet_inventory,
-        );
-        hydrate_workbook_slicers(
-            &mut self.metadata,
-            &output.sheets,
-            &id_map.sheet_ids,
-            &output.slicer_caches,
-            table_identity,
-            existing_tables,
-        );
-        hydrate_workbook_timelines(
-            &mut self.metadata,
-            &output.sheets,
-            &id_map.sheet_ids,
-            &output.timeline_caches,
-        );
-        hydrate_workbook_parsed_pivot_tables(&mut self.metadata, &output.pivot_tables);
-        hydrate_workbook_pivot_cache_sources(&mut self.metadata, &output.pivot_cache_sources);
-        hydrate_workbook_pivot_cache_records(&mut self.metadata, &output.pivot_cache_records);
-        hydrate_imported_pivots_as_native(
-            self,
-            &output.pivot_tables,
-            &output.pivot_cache_sources,
-            &output.sheets,
-            &id_map.sheet_ids,
-        )?;
-        Ok(id_map)
     }
 }
 

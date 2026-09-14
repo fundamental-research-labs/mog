@@ -1,6 +1,6 @@
 use bridge_core as bridge;
 
-use super::{ComputeEngine, CsvImportOptions, construction, services};
+use super::{construction, services, ComputeEngine, CsvImportOptions};
 use crate::snapshot::{ChangeKind, MutationResult, RecalcResult, WorkbookSnapshot};
 use value_types::ComputeError;
 
@@ -110,8 +110,8 @@ impl ComputeEngine {
         result
     }
 
-    /// Load the active worksheet into native storage for first display.
-    /// `complete_deferred_hydration()` loads the remaining worksheets.
+    /// Stream-load an XLSX workbook. Completing deferred hydration is a no-op
+    /// because every sheet is already materialized.
     #[bridge::write]
     #[tracing::instrument(name = "engine_import_from_xlsx_bytes_deferred", skip_all)]
     pub fn import_from_xlsx_bytes_deferred(
@@ -133,8 +133,7 @@ impl ComputeEngine {
         result
     }
 
-    /// Load the remaining worksheet payloads and complete the formula graph.
-    /// Retains the active sheet already installed by the initial load.
+    /// No-op after stream load: every worksheet is already in the live store.
     #[bridge::write]
     #[tracing::instrument(name = "engine_complete_deferred_hydration", skip_all)]
     pub fn complete_deferred_hydration(&mut self) -> Result<MutationResult, ComputeError> {

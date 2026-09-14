@@ -56,8 +56,7 @@ pub(super) use assembly::{
 pub(super) use csv::{from_csv_bytes, import_from_csv_bytes};
 pub(super) use deferred::{commit_deferred_hydration, stage_deferred_hydration};
 pub(super) use indexes::{
-    build_grid_indexes, build_grid_indexes_from_allocations_range, build_merge_indexes,
-    build_merge_indexes_from_parse_output_range, build_pixel_layout_for_sheet,
+    build_grid_indexes, build_merge_indexes, build_pixel_layout_for_sheet,
 };
 pub(super) use named_ranges::{defined_names_to_named_range_defs, normalize_named_range_refs};
 pub(super) use range_styles::{build_imported_range_style_plan, range_style_formats_enabled};

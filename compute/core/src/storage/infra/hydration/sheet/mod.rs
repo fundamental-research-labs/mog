@@ -9,14 +9,14 @@ mod allocation;
 mod grid_index;
 mod identity;
 
-pub(crate) use allocation::{allocate_sheet_ids, allocate_sheet_ids_with_previous_allocation};
+pub(crate) use allocation::allocate_sheet_ids;
 pub(crate) use identity::SheetIdAllocation;
 
-use super::IdAllocator;
 use super::features::{
     hydrate_auto_filter, hydrate_cells, hydrate_cells_with_ids, hydrate_comments,
     hydrate_floating_objects, hydrate_hyperlinks, hydrate_merges,
 };
+use super::IdAllocator;
 use grid_index::collect_identity_cells;
 use identity::{
     allocate_missing_anchored_identities, insert_missing_anchored_identities, sheet_identity_extent,

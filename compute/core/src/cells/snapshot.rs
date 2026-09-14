@@ -160,6 +160,23 @@ impl CellStore {
         Ok(cell_store)
     }
 
+    /// Install workbook-level snapshot defs after sheets were streamed in.
+    pub(crate) fn install_imported_workbook_defs(&mut self, snapshot: &WorkbookSnapshot) {
+        for nr in &snapshot.named_ranges {
+            self.variables
+                .insert(nr.scope.clone(), nr.name.clone(), nr.clone());
+        }
+        if !snapshot.canonical_tables.is_empty() {
+            for table in snapshot.canonical_tables.clone() {
+                self.set_table(table);
+            }
+        } else {
+            self.table_defs = snapshot.tables.clone();
+        }
+        self.pivot_tables = snapshot.pivot_tables.clone();
+        self.data_table_regions = snapshot.data_table_regions.clone();
+    }
+
     /// Add a new sheet from a snapshot.
     ///
     /// Recomputes materialized `rows`/`cols` from actual cell positions rather

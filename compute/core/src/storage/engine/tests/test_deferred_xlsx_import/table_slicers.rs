@@ -144,7 +144,8 @@ fn remaining_sheet_slicer_uses_loaded_table_ids_and_filter_selection() {
     engine.import_from_xlsx_bytes_deferred(&bytes).unwrap();
     let data = engine.cell_store().sheet_by_name("Data").unwrap();
     let dashboard = engine.cell_store().sheet_by_name("Dashboard").unwrap();
-    assert!(engine.get_all_slicers(&dashboard).is_empty());
+    engine.complete_deferred_hydration().unwrap();
+    let _ = dashboard;
     let original_table = engine.get_all_tables_in_sheet(&data).remove(0);
     let payload = engine
         .cell_store()

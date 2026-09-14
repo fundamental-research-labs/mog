@@ -16,16 +16,14 @@ mod table_styles;
 mod workbook;
 
 pub(crate) use self::sheet::hydrate_sheet;
-pub(crate) use self::sheet::{
-    SheetIdAllocation, allocate_sheet_ids, allocate_sheet_ids_with_previous_allocation,
-};
+pub(crate) use self::sheet::{SheetIdAllocation, allocate_sheet_ids};
 pub(crate) use self::styles::{
     ImportedRangeStyle, hydrate_cell_styles, merge_style_palette_incremental, remap_sheet_style_ids,
 };
 pub(crate) use self::table_styles::merge_custom_table_styles_from_ooxml;
 pub(crate) use self::workbook::hydrate_workbook_tables;
 
-use cell_types::{AxisIdentityId, AxisIdentityStore, CellId, ColId, RowId, SheetId};
+use cell_types::{AxisIdentityStore, CellId, ColId, RowId, SheetId};
 
 use crate::import::parse_output_to_snapshot::anchor_collection::IdentityAnchorReason;
 
@@ -162,12 +160,6 @@ impl DefaultIdAllocator {
     pub fn with_seed(seed: u64) -> Self {
         Self {
             inner: std::sync::Arc::new(cell_types::IdAllocator::with_seed(seed)),
-        }
-    }
-
-    pub(crate) fn reserve_axis<Id: AxisIdentityId>(&self, axis: &AxisIdentityStore<Id>) {
-        if let Some(run_id) = axis.max_run_id() {
-            self.inner.ensure_axis_run_past(run_id);
         }
     }
 

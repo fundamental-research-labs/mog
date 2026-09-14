@@ -167,6 +167,7 @@ fn assemble_engine_inner(
         history: Default::default(),
         viewport: ViewportService::new(),
         settings,
+        stream_load_stats: xlsx_parser::StreamLoadStats::default(),
         import_report: domain_types::ImportReport::default(),
         runtime_diagnostics: Default::default(),
         version_runtime_operation_context: Default::default(),

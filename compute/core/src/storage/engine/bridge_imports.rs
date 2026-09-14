@@ -85,6 +85,17 @@ impl ComputeEngine {
         construction::from_xlsx_bytes(xlsx_data)
     }
 
+    /// Stream-load a local `.xlsx` without copying the package into a `Vec<u8>`.
+    #[cfg(all(not(target_arch = "wasm32"), feature = "native"))]
+    pub fn from_xlsx_path(path: &str) -> Result<(Self, RecalcResult), ComputeError> {
+        construction::from_xlsx_path(path)
+    }
+
+    /// Inflate/parse counters from the most recent XLSX load into this engine.
+    pub fn stream_load_stats(&self) -> &xlsx_parser::StreamLoadStats {
+        &self.stream_load_stats
+    }
+
     /// Import from XLSX bytes without running formula recalculation.
     pub fn import_from_xlsx_bytes_no_recalc(
         &mut self,
@@ -108,7 +119,7 @@ impl ComputeEngine {
         xlsx_data: &[u8],
     ) -> Result<MutationResult, ComputeError> {
         let result = self.without_history(|engine| {
-            construction::import_from_xlsx_bytes_deferred(engine, xlsx_data)?;
+            construction::import_from_xlsx_bytes(engine, xlsx_data, false)?;
             let result = services::mutation_handlers::build_mutation_result_for_hydration(
                 &engine.stores,
                 &engine.cell_store,

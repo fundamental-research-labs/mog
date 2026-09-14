@@ -130,4 +130,10 @@ impl<'a> XlsxArchive<'a> {
     pub fn contains(&self, name: &str) -> bool {
         self.entries.iter().any(|e| e.name == name)
     }
+
+    /// Charge streamed uncompressed output against the archive safety budget.
+    pub(crate) fn charge_uncompressed(&self, bytes: usize) -> Result<(), ZipError> {
+        let dummy = ZipEntry::new(String::new(), 0, 0, bytes, 0, 0);
+        self.charge_materialized(&dummy, bytes)
+    }
 }

@@ -4,15 +4,17 @@ use super::*;
 pub(in crate::storage::engine) fn from_xlsx_bytes(
     xlsx_data: &[u8],
 ) -> Result<(ComputeEngine, RecalcResult), ComputeError> {
-    let (storage, workbook_snap, import_report, imported_formats) =
+    let (storage, workbook_snap, import_report, imported_formats, mut cell_store, formula_cells) =
         parse_and_hydrate_xlsx(xlsx_data)?;
 
     let (cell_store, compute, recalc_result) = {
         let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "store_compute_rebuild");
-        let mut cell_store = CellStore::new();
         let mut compute = ComputeCore::new();
-        let recalc_result =
-            compute.init_from_snapshot_no_recalc(&mut cell_store, workbook_snap.clone())?;
+        let recalc_result = compute.init_from_populated_store_no_recalc(
+            &mut cell_store,
+            formula_cells,
+            &workbook_snap,
+        )?;
         profile.counter("sheets", workbook_snap.sheets.len() as u64);
         profile.counter(
             "snapshot_cells",
@@ -32,6 +34,7 @@ pub(in crate::storage::engine) fn from_xlsx_bytes(
         &imported_formats,
     );
     engine.import_report = import_report;
+    engine.stream_load_stats = xlsx_parser::last_stream_load_stats();
     crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
         &mut engine.stores,
         &mut engine.cell_store,
@@ -42,6 +45,24 @@ pub(in crate::storage::engine) fn from_xlsx_bytes(
     Ok((engine, recalc_result))
 }
 
+/// Memory-map a local `.xlsx` and stream-inflate it into a live engine.
+///
+/// The mapping avoids an owned full-file `Vec<u8>`. Worksheet XML is inflated
+/// in chunks rather than materialized as a complete document.
+#[cfg(all(not(target_arch = "wasm32"), feature = "native"))]
+pub(in crate::storage::engine) fn from_xlsx_path(
+    path: &str,
+) -> Result<(ComputeEngine, RecalcResult), ComputeError> {
+    use xlsx_parser::pipeline::mmap::MmapXlsxFile;
+
+    // SAFETY: CLI/path load is a trusted local file that is not mutated while
+    // the mapping is live. Untrusted payloads must use `from_xlsx_bytes`.
+    let mapped = unsafe { MmapXlsxFile::open(path) }.map_err(|e| ComputeError::Deserialize {
+        message: format!("mmap {path}: {e}"),
+    })?;
+    from_xlsx_bytes(mapped.as_slice())
+}
+
 /// Import from raw XLSX bytes into an existing engine, with or without recalc.
 ///
 /// Classify homogeneous values into compact native ranges before assembly.
@@ -50,22 +71,23 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes(
     xlsx_data: &[u8],
     do_recalc: bool,
 ) -> Result<RecalcResult, ComputeError> {
-    let (storage, workbook_snap, import_report, imported_formats) =
-        parse_and_hydrate_xlsx(xlsx_data)?;
-    let result = rebuild_engine_from_snapshot(engine, storage, workbook_snap, do_recalc)?;
-    install_imported_formats(
-        &mut engine.cell_store,
-        &engine.stores.storage.metadata.style_palette,
-        &imported_formats,
-    );
-    engine.import_report = import_report;
+    let (loaded, recalc) = from_xlsx_bytes(xlsx_data)?;
+    engine.cell_store = loaded.cell_store;
+    engine.stores = loaded.stores;
+    engine.viewport = loaded.viewport;
+    engine.settings = loaded.settings;
+    engine.import_report = loaded.import_report;
+    engine.runtime_diagnostics = loaded.runtime_diagnostics;
+    engine.version_runtime_operation_context = loaded.version_runtime_operation_context;
+    engine.scenario_session = loaded.scenario_session;
+    engine.deferred_hydration = loaded.deferred_hydration;
+    engine.stream_load_stats = loaded.stream_load_stats;
     engine.clear_runtime_diagnostics();
-    crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
-        &mut engine.stores,
-        &mut engine.cell_store,
-        Some(&mut engine.import_report),
-        domain_types::ImportPhase::FullHydration,
-    );
+    let result = if do_recalc {
+        engine.recalculate()?
+    } else {
+        recalc
+    };
 
     Ok(result)
 }
@@ -74,7 +96,7 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes(
 /// used by the snapshot's sparse cells and compact ranges.
 pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
     xlsx_data: &[u8],
-) -> Result<XlsxHydrateResult, ComputeError> {
+) -> Result<XlsxStreamHydrateResult, ComputeError> {
     use crate::import;
     use crate::storage::infra::hydration::{DefaultIdAllocator, allocate_sheet_ids};
 
@@ -96,7 +118,7 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         parsed
     };
     let import_report = parsed.import_report;
-    let parse_output = parsed.output;
+    let mut parse_output = parsed.output;
     let diagnostics = parsed.diagnostics;
     if !diagnostics.errors.is_empty() {
         tracing::warn!(
@@ -131,156 +153,11 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         allocations
     };
 
-    // Build HydrationIdMap from pre-allocations so the snapshot builder
-    // can use the same IDs.
-    let id_map = {
-        use crate::storage::infra::hydration::HydrationIdMap;
-        let mut m = HydrationIdMap::default();
-        for alloc in &allocations {
-            m.sheet_ids.push(alloc.sheet_id);
-            m.cell_ids.push(alloc.cell_ids.clone());
-            m.row_axes.push(alloc.row_axis.clone());
-            m.col_axes.push(alloc.col_axis.clone());
-            for identity in &alloc.identity_only_cells {
-                m.identities
-                    .push((alloc.sheet_id, identity.cell_id, identity.row, identity.col));
-            }
-        }
-        m
-    };
-
-    // ── Pass 2: Build snapshot + run classifier ───────────────────────
-    let mut workbook_snap = {
-        let mut profile =
-            crate::xlsx_profile::PhaseTimer::new("import", "parse_output_to_workbook_snapshot");
-        let snap = import::parse_output_to_snapshot::parse_output_to_workbook_snapshot(
-            &parse_output,
-            Some(&id_map),
-            &mut allocator,
-        );
-        profile.counter("sheets", snap.sheets.len() as u64);
-        profile.counter(
-            "snapshot_cells",
-            snap.sheets
-                .iter()
-                .map(|sheet| sheet.cells.len() as u64)
-                .sum::<u64>(),
-        );
-        profile.counter(
-            "ranges",
-            snap.sheets
-                .iter()
-                .map(|sheet| sheet.ranges.len() as u64)
-                .sum::<u64>(),
-        );
-        snap
-    };
-    // ── Pass 3: Collect ranged positions per sheet ────────────────────
-    // After the classifier runs, `workbook_snap.sheets[i].ranges` contains
-    // the promoted RangeData entries. We need to identify which (row, col)
-    // positions were ranged so metadata hydration does not create value overlays.
-    //
-    // Only non-empty cells can be ranged (the classifier ignores Null cells).
-    // Empty styled cells are already skipped by hydrate_cells_with_ids, so
-    // we exclude them from the diff to keep the HashSet small.
-    let mut ranged_positions: Vec<std::collections::HashSet<(u32, u32)>> =
-        Vec::with_capacity(parse_output.sheets.len());
-    let mut range_style_positions: Vec<std::collections::HashSet<(u32, u32)>> =
-        Vec::with_capacity(parse_output.sheets.len());
-    let mut range_styles_per_sheet: Vec<Vec<crate::storage::infra::hydration::ImportedRangeStyle>> =
-        Vec::with_capacity(parse_output.sheets.len());
-    let range_style_formats_enabled = range_style_formats_enabled();
-
-    {
-        let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "ranged_positions");
-        for (sheet_idx, sheet_data) in parse_output.sheets.iter().enumerate() {
-            let snap_sheet = &workbook_snap.sheets[sheet_idx];
-
-            let snap_positions: std::collections::HashSet<(u32, u32)> =
-                snap_sheet.cells.iter().map(|c| (c.row, c.col)).collect();
-
-            // Only check non-empty cells against the snapshot. Empty cells are
-            // skipped by hydrate_cells_with_ids regardless of ranged_positions.
-            let ranged: std::collections::HashSet<(u32, u32)> = sheet_data
-                .cells
-                .iter()
-                .filter(|c| c.formula.is_some() || !c.value.is_null())
-                .map(|c| (c.row, c.col))
-                .filter(|pos| !snap_positions.contains(pos))
-                .collect();
-
-            ranged_positions.push(ranged);
-            if range_style_formats_enabled {
-                let (style_positions, range_styles) = build_imported_range_style_plan(
-                    sheet_data,
-                    &allocations[sheet_idx],
-                    &snap_sheet.ranges,
-                    &mut allocator,
-                );
-                range_style_positions.push(style_positions);
-                range_styles_per_sheet.push(range_styles);
-            } else {
-                range_style_positions.push(std::collections::HashSet::new());
-                range_styles_per_sheet.push(Vec::new());
-            }
-        }
-        profile.counter("sheets", ranged_positions.len() as u64);
-        profile.counter(
-            "ranged_positions",
-            ranged_positions
-                .iter()
-                .map(|positions| positions.len() as u64)
-                .sum::<u64>(),
-        );
-        let mut ranged_style_id = 0_u64;
-        let mut ranged_original_value = 0_u64;
-        let mut ranged_original_sst_index = 0_u64;
-        let mut ranged_formula_metadata = 0_u64;
-        for (sheet_idx, sheet_data) in parse_output.sheets.iter().enumerate() {
-            let ranged = &ranged_positions[sheet_idx];
-            for cell in &sheet_data.cells {
-                if !ranged.contains(&(cell.row, cell.col)) {
-                    continue;
-                }
-                if cell.style_id.is_some() {
-                    ranged_style_id += 1;
-                }
-                if cell.original_value.is_some() {
-                    ranged_original_value += 1;
-                }
-                if cell.original_sst_index.is_some() {
-                    ranged_original_sst_index += 1;
-                }
-                if cell.formula.is_some()
-                    || cell.cell_formula.is_some()
-                    || cell.formula_result_type.is_some()
-                    || cell.has_empty_cached_value
-                {
-                    ranged_formula_metadata += 1;
-                }
-            }
-        }
-        profile.counter("ranged_style_id", ranged_style_id);
-        profile.counter("ranged_original_value", ranged_original_value);
-        profile.counter("ranged_original_sst_index", ranged_original_sst_index);
-        profile.counter("ranged_formula_metadata", ranged_formula_metadata);
-        profile.counter(
-            "range_style_positions",
-            range_style_positions
-                .iter()
-                .map(|positions| positions.len() as u64)
-                .sum::<u64>(),
-        );
-        profile.counter(
-            "range_styles",
-            range_styles_per_sheet
-                .iter()
-                .map(|styles| styles.len() as u64)
-                .sum::<u64>(),
-        );
-    }
-
-    // ── Pass 4: Hydrate native metadata ───────────────────
+    // ── Pass 2: Hydrate native metadata while sheet cells still exist ─
+    let empty_ranged: Vec<std::collections::HashSet<(u32, u32)>> =
+        vec![std::collections::HashSet::new(); parse_output.sheets.len()];
+    let empty_range_styles: Vec<Vec<crate::storage::infra::hydration::ImportedRangeStyle>> =
+        vec![Vec::new(); parse_output.sheets.len()];
     let (storage, id_map) = {
         let mut profile =
             crate::xlsx_profile::PhaseTimer::new("import", "hydrate_from_parse_output_with_ranges");
@@ -288,8 +165,8 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         let id_map = storage.hydrate_from_parse_output_with_ranges(
             &parse_output,
             &allocations,
-            &ranged_positions,
-            &range_style_positions,
+            &empty_ranged,
+            &empty_ranged,
             &mut allocator,
         )?;
         storage
@@ -297,22 +174,82 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
             .external_links
             .import(&parse_output.external_links);
         profile.counter("sheets", parse_output.sheets.len() as u64);
-        profile.counter(
-            "ranged_positions",
-            ranged_positions
-                .iter()
-                .map(|positions| positions.len() as u64)
-                .sum::<u64>(),
-        );
         (storage, id_map)
     };
 
+    let imported_formats =
+        collect_imported_formats(&parse_output, &id_map.sheet_ids, &empty_range_styles);
+
+    // ── Pass 3: Write each sheet into the live store, then drop its IR ─
+    let mut cell_store = CellStore::new();
+    let mut formula_cells = Vec::new();
+    {
+        let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "stream_cells_into_store");
+        for (sheet_idx, sheet) in parse_output.sheets.iter_mut().enumerate() {
+            let mut sheet_id_map = crate::storage::infra::hydration::HydrationIdMap::default();
+            sheet_id_map.sheet_ids.push(id_map.sheet_ids[sheet_idx]);
+            sheet_id_map.cell_ids.push(id_map.cell_ids[sheet_idx].clone());
+            sheet_id_map.row_axes.push(id_map.row_axes[sheet_idx].clone());
+            sheet_id_map.col_axes.push(id_map.col_axes[sheet_idx].clone());
+            sheet_id_map.identities.extend(
+                id_map
+                    .identities
+                    .iter()
+                    .filter(|(sid, _, _, _)| *sid == id_map.sheet_ids[sheet_idx])
+                    .copied(),
+            );
+            let mut snap_sheets =
+                import::parse_output_to_snapshot::sheet_lowering::convert_sheets(
+                    std::slice::from_ref(sheet),
+                    Some(&sheet_id_map),
+                );
+            let mut snap_sheet = snap_sheets.remove(0);
+            import::parse_output_to_snapshot::classifier::classify_sheet_ranges(
+                &mut snap_sheet,
+                sheet,
+                &WorkbookSnapshot::default(),
+                None,
+                &id_map.row_axes[sheet_idx],
+                &id_map.col_axes[sheet_idx],
+                &mut allocator,
+            );
+            for cell in &snap_sheet.cells {
+                if let Some(formula) = &cell.formula {
+                    let cell_id = cell_types::CellId::from_uuid_str(&cell.cell_id).map_err(|e| {
+                        ComputeError::Deserialize {
+                            message: format!("imported cell id: {e}"),
+                        }
+                    })?;
+                    formula_cells.push((
+                        cell_id,
+                        id_map.sheet_ids[sheet_idx],
+                        compute_parser::normalize_xlsx_formula(formula),
+                    ));
+                }
+            }
+            cell_store.add_sheet(snap_sheet)?;
+            sheet.cells.clear();
+        }
+        profile.counter("sheets", id_map.sheet_ids.len() as u64);
+        profile.counter("formulas", formula_cells.len() as u64);
+    }
+
+    // Slim snapshot: sheet identities and workbook metadata, no cell grid IR.
+    let mut workbook_snap = import::parse_output_to_snapshot::parse_output_to_workbook_snapshot(
+        &parse_output,
+        Some(&id_map),
+        &mut allocator,
+    );
     id_map.install_snapshot_identities(&mut workbook_snap);
     workbook_snap.canonical_tables = id_map.canonical_tables;
     workbook_snap.tables.clear();
-
-    let imported_formats =
-        collect_imported_formats(&parse_output, &id_map.sheet_ids, &range_styles_per_sheet);
     allocator.stamp_snapshot_counters(&mut workbook_snap);
-    Ok((storage, workbook_snap, import_report, imported_formats))
+    Ok((
+        storage,
+        workbook_snap,
+        import_report,
+        imported_formats,
+        cell_store,
+        formula_cells,
+    ))
 }

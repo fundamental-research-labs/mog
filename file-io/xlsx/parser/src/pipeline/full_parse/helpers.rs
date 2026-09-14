@@ -187,6 +187,14 @@ pub(super) fn extract_worksheet_ext_lst_xml(post_sd: &[u8]) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+pub(super) fn worksheet_markup_without_sheet_data(pre: &[u8], post: &[u8]) -> Vec<u8> {
+    let mut xml = Vec::with_capacity(pre.len() + post.len() + b"<sheetData/>".len());
+    xml.extend_from_slice(pre);
+    xml.extend_from_slice(b"<sheetData/>");
+    xml.extend_from_slice(post);
+    xml
+}
+
 pub(super) fn extract_raw_element_xml(xml: &[u8], tag: &[u8]) -> Option<String> {
     let start = crate::infra::scanner::find_tag_simd(xml, tag, 0)?;
     let (_, end) = extract_element_bounds(xml, start)?;

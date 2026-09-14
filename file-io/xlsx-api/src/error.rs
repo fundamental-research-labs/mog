@@ -62,22 +62,6 @@ pub enum XlsxApiError {
     ParseFailed(Vec<ImportDiagnostic>),
 }
 
-impl From<xlsx_parser::pipeline::lazy::ParseError> for XlsxApiError {
-    fn from(e: xlsx_parser::pipeline::lazy::ParseError) -> Self {
-        match e {
-            xlsx_parser::pipeline::lazy::ParseError::InvalidArchive(msg) => {
-                XlsxApiError::InvalidArchive(msg)
-            }
-            xlsx_parser::pipeline::lazy::ParseError::SheetNotFound(idx) => {
-                XlsxApiError::SheetNotFound(format!("sheet index {}", idx))
-            }
-            xlsx_parser::pipeline::lazy::ParseError::ParseFailed(msg) => {
-                XlsxApiError::InvalidArchive(msg)
-            }
-        }
-    }
-}
-
 impl From<xlsx_parser::write::write_error::WriteError> for XlsxApiError {
     fn from(e: xlsx_parser::write::write_error::WriteError) -> Self {
         XlsxApiError::Export(e.to_string())

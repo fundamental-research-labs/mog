@@ -1,16 +1,16 @@
 use super::super::types::{CELL_TYPE_DATE, CellData, ParseExtras};
 use super::xml_text::validated_xml_text;
 
-pub(super) struct CellExtrasInput {
-    pub(super) cm_val: Option<u32>,
-    pub(super) vm_val: Option<u32>,
-    pub(super) has_ph: bool,
-    pub(super) has_explicit_s: bool,
-    pub(super) has_xml_space_v: bool,
-    pub(super) sst_raw_idx: Option<u32>,
+pub(crate) struct CellExtrasInput {
+    pub cm_val: Option<u32>,
+    pub vm_val: Option<u32>,
+    pub has_ph: bool,
+    pub has_explicit_s: bool,
+    pub has_xml_space_v: bool,
+    pub sst_raw_idx: Option<u32>,
 }
 
-pub(super) fn collect_cell_extras(
+pub(crate) fn collect_cell_extras(
     extras: &mut ParseExtras,
     last_idx: usize,
     cell_data: CellData,

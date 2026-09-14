@@ -131,12 +131,6 @@ pub use domain::cells::{
 };
 
 // =============================================================================
-// === Lazy Loading ===
-// =============================================================================
-
-pub use pipeline::lazy::{LazyWorkbook, ParseError, ParsedSheet, SheetMetadata};
-
-// =============================================================================
 // === Error Handling ===
 // =============================================================================
 
@@ -238,7 +232,8 @@ pub use pipeline::import_extensions::ImportExtensionParts;
 pub use infra::arena::ParseArena;
 
 pub use pipeline::streaming::{
-    DEFAULT_BUFFER_SIZE, ParseState, StreamingCellParser, StreamingDeflate,
+    DEFAULT_BUFFER_SIZE, ParseState, StreamLoadStats, StreamingCellParser, StreamingDeflate,
+    last_stream_load_stats, reset_stream_load_stats, stream_parse_worksheet,
 };
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "parallel"))]

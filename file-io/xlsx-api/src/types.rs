@@ -23,9 +23,6 @@ pub use xlsx_parser::{
     CELL_TYPE_VAL_NUMBER, CELL_TYPE_VAL_STRING,
 };
 
-// --- Lazy loading types ---
-pub use xlsx_parser::{ParsedSheet, SheetMetadata};
-
 // --- Error handling types ---
 pub use xlsx_parser::{ErrorCode, ErrorCollector, ErrorLocation, ErrorSeverity};
 

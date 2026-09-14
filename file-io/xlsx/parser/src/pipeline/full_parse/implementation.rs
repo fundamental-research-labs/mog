@@ -12,9 +12,8 @@
 #![allow(clippy::string_slice)]
 
 use crate::domain::cells::{
-    CellData, ParseExtras, apply_parse_extras, build_col_style_ranges_from_widths,
-    coalesce_authored_style_only_cells, convert_cell_data, count_worksheet_cell_elements,
-    data_table_info, parse_worksheet_fast_with_extras, pre_sheet_data_region,
+    apply_parse_extras, build_col_style_ranges_from_widths, coalesce_authored_style_only_cells,
+    convert_cell_data, data_table_info,
 };
 use crate::domain::charts::read::{
     parse_charts_for_sheet, parse_connectors_for_sheet, parse_drawing_and_charts_for_sheet,
@@ -46,11 +45,6 @@ use crate::domain::worksheet::read::{
 use crate::infra::error::{ParseContext, ParseMode};
 use crate::infra::opc::REL_HYPERLINK;
 use crate::infra::opc::opc_target_to_zip_path;
-#[cfg(all(not(target_arch = "wasm32"), feature = "parallel"))]
-use crate::output::results::{
-    CommentOutput, ConnectorOutput, FormControlOutput, OleObjectOutput, ParsedTable,
-    SmartArtPartsOutput,
-};
 use crate::output::results::{
     DefinedNameOutput, FullCellData, FullParseError, FullParseResult, FullParsedSheet,
     HyperlinkOutput, ImportedBinaryPart, ParseStats, ParseTimings, ProtectionOutput, RawVmlDrawing,
@@ -437,6 +431,8 @@ pub(super) fn parse_xlsx_full_native_impl(
     let tick = |t: &Option<&mut ParseTimings>| if t.is_some() { crate::now_us() } else { 0.0 };
     let t0 = tick(&timings);
 
+    crate::pipeline::streaming::reset_stream_load_stats();
+
     // Create parse context in lenient mode
     let mut ctx = ParseContext::new(ParseMode::Lenient);
 
@@ -718,227 +714,8 @@ pub(super) fn parse_xlsx_full_native_impl(
     // Per-sheet namespace data populated by both parallel and sequential paths.
     let mut sheet_ext_namespaces: Vec<NamespaceMap> = Vec::new();
 
-    // --- Parallel path: when `parallel` feature is enabled and profiling is off ---
-    #[cfg(all(not(target_arch = "wasm32"), feature = "parallel"))]
-    let mut sheets: Vec<FullParsedSheet> = if timings.is_none() {
-        use rayon::prelude::*;
-
-        // Step 1: Pre-decompress all worksheets + pre-read comments/tables sequentially
-        // (archive access is not thread-safe)
-        struct PreDecompressed {
-            idx: usize,
-            name: String,
-            xml: Vec<u8>,
-            comments: Vec<CommentOutput>,
-            comment_authors: Vec<String>,
-            comments_root_namespace_attrs: Vec<(String, String)>,
-            comments_ext_lst_xml: Option<String>,
-            tables: Vec<ParsedTable>,
-            table_xml_passthroughs: Vec<(String, Vec<u8>)>,
-            parsed_pivot_configs: Vec<domain_types::domain::pivot::ParsedPivotTable>,
-            charts: Vec<domain_types::ChartSpec>,
-            smartart_diagrams: Vec<SmartArtPartsOutput>,
-            slicers: Vec<ooxml_types::slicers::SlicerDef>,
-            slicer_anchors: Vec<ooxml_types::slicers::SlicerAnchor>,
-            timelines: Vec<ooxml_types::timelines::TimelineDef>,
-            timeline_anchors: Vec<ooxml_types::timelines::TimelineAnchor>,
-            form_controls: Vec<FormControlOutput>,
-            ole_objects: Vec<OleObjectOutput>,
-            connectors: Vec<ConnectorOutput>,
-            sheet_opc_rels: Vec<ooxml_types::shared::OpcRelationship>,
-            raw_vml_drawings: Vec<(String, Vec<u8>, Option<(String, Vec<u8>)>)>,
-            parsed_drawing: Option<crate::domain::drawings::types::Drawing>,
-            parsed_charts: Vec<crate::domain::charts::Chart>,
-            parsed_chart_ex: Vec<crate::output::results::ParsedChartEx>,
-        }
-
-        let mut pre_sheets: Vec<PreDecompressed> = Vec::with_capacity(parse_cell_count);
-        for (sheet_idx, sheet_context) in selected_sheet_contexts.iter().copied() {
-            let sheet_num = legacy_sheet_num_for_context(sheet_context);
-            let sheet_name = sheet_context.sheet_name.clone();
-            let sheet_path = sheet_context.owner_part_path.as_deref().ok_or_else(|| {
-                format!("Workbook sheet {} has no worksheet part path", sheet_name)
-            })?;
-
-            let worksheet_xml = archive
-                .read_file(sheet_path)
-                .map_err(|e| format!("Failed to read worksheet {}: {}", sheet_path, e))?;
-            ensure_count_limit(
-                "worksheet cell",
-                count_worksheet_cell_elements(&worksheet_xml),
-                MAX_WORKSHEET_CELLS,
-            )?;
-
-            let (comments, comment_authors, comments_root_namespace_attrs, comments_ext_lst_xml) =
-                parse_comments_for_sheet(&archive, sheet_num);
-            let (tables, table_xml_passthroughs) = parse_tables_for_sheet(&archive, sheet_num);
-            ensure_count_limit("table", tables.len(), MAX_TABLES)?;
-            let parsed_pivot_configs = crate::domain::pivot::read::parse_pivot_tables_for_sheet_v2(
-                &archive,
-                sheet_num,
-                &sheet_name,
-                &pivot_caches,
-            );
-            ensure_count_limit("pivot table", parsed_pivot_configs.len(), MAX_PIVOTS)?;
-            let charts = parse_charts_for_sheet(&archive, sheet_num);
-            ensure_count_limit("chart", charts.len(), MAX_CHARTS)?;
-            let (parsed_drawing, parsed_charts) =
-                parse_drawing_and_charts_for_sheet(&archive, sheet_num);
-            let parsed_chart_ex =
-                crate::domain::charts::read::parse_chart_ex_for_sheet(&archive, sheet_num);
-            let smartart_diagrams =
-                convert_smartart_parts(parse_smartart_for_sheet(&archive, sheet_num));
-            let (slicers, slicer_anchors) = parse_slicers_for_sheet(&archive, sheet_num);
-            let (timelines, timeline_anchors) = parse_timelines_for_sheet(&archive, sheet_num);
-            let form_controls = parse_form_controls_for_sheet(&archive, sheet_num, &worksheet_xml);
-            let ole_objects = parse_ole_objects_for_sheet(&archive, sheet_num, &worksheet_xml);
-            let connectors = parse_connectors_for_sheet(&archive, sheet_num);
-
-            // Preserve raw sheet-level OPC relationships for round-trip fidelity
-            let sheet_opc_rels = {
-                let rels_path = format!("xl/worksheets/_rels/sheet{}.xml.rels", sheet_num);
-                archive
-                    .read_file(&rels_path)
-                    .map(|xml| workbook::parse_all_rels(&xml))
-                    .unwrap_or_default()
-            };
-
-            // Read raw VML drawing bytes for verbatim round-trip passthrough.
-            // A sheet can have multiple VML drawings (e.g. one for comment shapes,
-            // another for embedded images referenced by those comments).
-            let raw_vml_drawings: Vec<(String, Vec<u8>, Option<(String, Vec<u8>)>)> =
-                sheet_opc_rels
-                    .iter()
-                    .filter(|r| r.rel_type == crate::infra::opc::REL_VML_DRAWING)
-                    .filter_map(|rel| {
-                        let zip_path = opc_target_to_zip_path(&rel.target, "xl/worksheets");
-                        archive.read_file(&zip_path).ok().map(|bytes| {
-                            // Also read the VML .rels file if it exists
-                            let vml_rels = {
-                                let dir = zip_path.rfind('/').map(|p| &zip_path[..p]).unwrap_or("");
-                                let filename = zip_path
-                                    .rfind('/')
-                                    .map(|p| &zip_path[p + 1..])
-                                    .unwrap_or(&zip_path);
-                                let rels_path = format!("{}/_rels/{}.rels", dir, filename);
-                                archive.read_file(&rels_path).ok().map(|rb| (rels_path, rb))
-                            };
-                            (zip_path, bytes, vml_rels)
-                        })
-                    })
-                    .collect();
-
-            pre_sheets.push(PreDecompressed {
-                idx: sheet_idx,
-                name: sheet_name,
-                xml: worksheet_xml,
-                comments,
-                comment_authors,
-                comments_root_namespace_attrs,
-                comments_ext_lst_xml,
-                tables,
-                table_xml_passthroughs,
-                parsed_pivot_configs,
-                charts,
-                smartart_diagrams,
-                slicers,
-                slicer_anchors,
-                timelines,
-                timeline_anchors,
-                form_controls,
-                ole_objects,
-                connectors,
-                sheet_opc_rels,
-                raw_vml_drawings,
-                parsed_drawing,
-                parsed_charts,
-                parsed_chart_ex,
-            });
-        }
-
-        // Step 2: Process all sheets in parallel
-        let parsed: Vec<SheetProcessResult> = pre_sheets
-            .into_par_iter()
-            .map(|ps| {
-                let parsed_drawing = ps.parsed_drawing;
-                let parsed_charts = ps.parsed_charts;
-                let parsed_chart_ex = ps.parsed_chart_ex;
-                let mut result = process_sheet_parallel(
-                    ps.idx,
-                    ps.name,
-                    &ps.xml,
-                    &shared_strings,
-                    ps.comments,
-                    ps.comment_authors,
-                    ps.comments_root_namespace_attrs,
-                    ps.comments_ext_lst_xml,
-                    ps.tables,
-                    ps.table_xml_passthroughs,
-                    ps.charts,
-                    ps.smartart_diagrams,
-                    ps.slicers,
-                    ps.slicer_anchors,
-                    ps.timelines,
-                    ps.timeline_anchors,
-                    ps.form_controls,
-                    ps.ole_objects,
-                    ps.connectors,
-                    ps.sheet_opc_rels,
-                    ps.raw_vml_drawings,
-                )?;
-                result.sheet.parsed_drawing = parsed_drawing;
-                result.sheet.parsed_charts = parsed_charts;
-                result.sheet.parsed_chart_ex = parsed_chart_ex;
-                result.sheet.parsed_pivot_configs = ps.parsed_pivot_configs;
-                Ok(result)
-            })
-            .collect::<Result<Vec<_>, String>>()?;
-
-        // Accumulate total cells
-        for r in &parsed {
-            total_cells += r.cell_count as u32;
-        }
-
-        // Sort by sheet index to maintain order, then decompose
-        let mut sorted: Vec<SheetProcessResult> = parsed.into_iter().collect();
-        sorted.sort_by_key(|r| r.sheet.index);
-        let mut sheets = Vec::with_capacity(sorted.len());
-        let mut par_sheet_namespaces = Vec::with_capacity(sorted.len());
-        for r in sorted {
-            let mut s = r.sheet;
-            s.owner_part_path = sheet_package_contexts
-                .get(s.index)
-                .and_then(|ctx| ctx.owner_part_path.clone());
-            s.sheet_id = sheet_package_contexts
-                .get(s.index)
-                .and_then(|ctx| ctx.sheet_id);
-            s.state = sheet_package_contexts
-                .get(s.index)
-                .map(|ctx| ctx.visibility)
-                .unwrap_or_default();
-            sheets.push(s);
-            par_sheet_namespaces.push(r.namespaces);
-        }
-        sheet_ext_namespaces = par_sheet_namespaces;
-        sheets
-    } else {
-        // Fall through to sequential path when profiling is enabled
-        parse_sheets_sequential(
-            &archive,
-            &selected_sheet_contexts,
-            &shared_strings,
-            &pivot_caches,
-            &mut ctx,
-            &timings,
-            &tick,
-            &mut total_cells,
-            &mut worksheet_timings,
-            &mut sheet_ext_namespaces,
-        )?
-    };
-
-    // --- Sequential path: default when `parallel` feature is not enabled ---
-    #[cfg(not(all(not(target_arch = "wasm32"), feature = "parallel")))]
+    // Stream-inflate worksheets one sheet at a time. The previous parallel path
+    // pre-decompressed every worksheet XML document into memory first.
     let mut sheets: Vec<FullParsedSheet> = parse_sheets_sequential(
         &archive,
         &selected_sheet_contexts,
@@ -1222,415 +999,6 @@ pub(super) fn parse_xlsx_full_native_impl(
     Ok(result)
 }
 
-// =============================================================================
-// Per-Sheet Processing Helpers
-// =============================================================================
-
-/// Result of processing a single sheet, including Tier 2 extension data.
-#[cfg(all(not(target_arch = "wasm32"), feature = "parallel"))]
-struct SheetProcessResult {
-    sheet: FullParsedSheet,
-    cell_count: usize,
-    namespaces: NamespaceMap,
-}
-
-/// Process a single sheet's XML into a FullParsedSheet. Used by the parallel path.
-#[cfg(all(not(target_arch = "wasm32"), feature = "parallel"))]
-fn process_sheet_core(
-    sheet_idx: usize,
-    sheet_name: String,
-    worksheet_xml: &[u8],
-    shared_strings: &[String],
-    comments_json: Vec<CommentOutput>,
-    comment_authors: Vec<String>,
-    comments_root_namespace_attrs: Vec<(String, String)>,
-    comments_ext_lst_xml: Option<String>,
-    tables: Vec<ParsedTable>,
-    table_xml_passthroughs: Vec<(String, Vec<u8>)>,
-    charts: Vec<domain_types::ChartSpec>,
-    smartart_diagrams: Vec<SmartArtPartsOutput>,
-    slicers: Vec<ooxml_types::slicers::SlicerDef>,
-    slicer_anchors: Vec<ooxml_types::slicers::SlicerAnchor>,
-    timelines: Vec<ooxml_types::timelines::TimelineDef>,
-    timeline_anchors: Vec<ooxml_types::timelines::TimelineAnchor>,
-    form_controls: Vec<FormControlOutput>,
-    ole_objects: Vec<OleObjectOutput>,
-    connectors: Vec<ConnectorOutput>,
-    sheet_opc_rels: Vec<ooxml_types::shared::OpcRelationship>,
-    raw_vml_drawings: Vec<(String, Vec<u8>, Option<(String, Vec<u8>)>)>,
-) -> Result<SheetProcessResult, String> {
-    let shared_string_refs: Vec<&str> = shared_strings.iter().map(|s| s.as_str()).collect();
-    // Count actual <c elements via memchr for accurate pre-allocation,
-    // avoiding the expensive retry loop when the heuristic underestimates.
-    let cell_count_estimate = count_worksheet_cell_elements(worksheet_xml);
-    ensure_count_limit("worksheet cell", cell_count_estimate, MAX_WORKSHEET_CELLS)?;
-    let mut buffer_size = cell_count_estimate.max(1000);
-    let mut cells_buffer: Vec<CellData> = vec![CellData::default(); buffer_size];
-    let mut strings_buffer: Vec<u8> = Vec::with_capacity(cell_count_estimate * 20);
-
-    let mut row_heights = Vec::new();
-    let mut extras = ParseExtras::default();
-
-    // Parse col widths early so we can build a col-style lookup for the cell parser
-    let pre_sd = pre_sheet_data_region(worksheet_xml);
-    let worksheet_dimension_ref = parse_dimension_ref_with_text(pre_sd).map(|d| d.ref_range);
-    let col_widths = parse_col_widths(pre_sd);
-    let fmt_pr = parse_sheet_format_pr(pre_sd);
-    let default_row_height = fmt_pr.default_row_height;
-    let default_col_width = fmt_pr.default_col_width;
-    let base_col_width = fmt_pr.base_col_width;
-    let default_row_descent = fmt_pr.default_row_descent;
-    let outline_level_row = fmt_pr.outline_level_row;
-    let outline_level_col = fmt_pr.outline_level_col;
-    let custom_height = fmt_pr.custom_height;
-    let zero_height = fmt_pr.zero_height;
-    let thick_top = fmt_pr.thick_top;
-    let thick_bottom = fmt_pr.thick_bottom;
-
-    let sheet_properties = crate::domain::worksheet::read::parse_sheet_properties(pre_sd);
-    let outline_properties = sheet_properties
-        .as_ref()
-        .and_then(|properties| properties.outline_pr.clone());
-
-    let explicit_blank_cells = extract_explicit_blank_cells(worksheet_xml);
-    let header_footer_xml = extract_raw_element_xml(worksheet_xml, b"headerFooter");
-    let worksheet_controls_xml = extract_worksheet_controls_xml(worksheet_xml);
-
-    // Tier 2: Capture worksheet namespace declarations from the <worksheet> root element
-    let sheet_namespaces = capture_namespaces_from_xml(worksheet_xml);
-
-    // Extract xr:uid from the <worksheet> root element (stable sheet identity for co-authoring)
-    let uid = {
-        use crate::infra::scanner::{extract_quoted_value, find_attr_simd};
-        find_attr_simd(pre_sd, b"xr:uid=\"", 0).and_then(|p| {
-            let value_start = p + b"xr:uid=\"".len();
-            extract_quoted_value(pre_sd, value_start).map(|(s, e)| {
-                std::str::from_utf8(&pre_sd[s..e])
-                    .expect("worksheet XML attributes were validated as UTF-8")
-                    .to_owned()
-            })
-        })
-    };
-
-    let col_style_ranges = build_col_style_ranges_from_widths(&col_widths);
-    let empty_col_styles: &[Option<u32>] = &[];
-
-    let mut cell_count = parse_worksheet_fast_with_extras(
-        worksheet_xml,
-        &shared_string_refs,
-        &mut cells_buffer,
-        &mut strings_buffer,
-        &mut row_heights,
-        &mut extras,
-        empty_col_styles,
-    );
-
-    // If the buffer was completely filled, the parser may have truncated cells.
-    // Retry with progressively larger buffers until all cells are captured.
-    while cell_count == buffer_size {
-        buffer_size *= 2;
-        cells_buffer = vec![CellData::default(); buffer_size];
-        strings_buffer.clear();
-        row_heights.clear();
-        extras = ParseExtras::default();
-
-        cell_count = parse_worksheet_fast_with_extras(
-            worksheet_xml,
-            &shared_string_refs,
-            &mut cells_buffer,
-            &mut strings_buffer,
-            &mut row_heights,
-            &mut extras,
-            empty_col_styles,
-        );
-    }
-
-    // CellData → FullCellData conversion (reusable decode buffer avoids per-cell alloc)
-    let mut decode_buf = Vec::with_capacity(256);
-    let mut cells: Vec<FullCellData> = cells_buffer
-        .iter()
-        .take(cell_count)
-        .map(|c| convert_cell_data(c, &strings_buffer, &mut decode_buf))
-        .collect();
-
-    // Apply collected extras (replaces postprocess_worksheet XML rescan)
-    apply_parse_extras(
-        &mut cells,
-        &extras,
-        &cells_buffer[..cell_count],
-        &strings_buffer,
-        shared_strings,
-    );
-
-    // Auxiliary XML parsers — scope to post-sheetData region for performance.
-    // All auxiliary elements (merges, CF, DV, hyperlinks, protection, print,
-    // sparklines) appear AFTER </sheetData>. By scoping the scan, we avoid
-    // redundantly scanning the massive sheetData section (~97% of XML bytes).
-    // Handle both `</sheetData>` (normal) and `<sheetData/>` (self-closing, empty sheet).
-    let post_sd = find_post_sheet_data_region(worksheet_xml);
-
-    // Tier 2: Capture preserved (unknown) child elements from pre and post sheetData regions
-
-    let merges = parse_merge_cells(post_sd);
-    ensure_count_limit("merge", merges.len(), MAX_MERGES)?;
-    let (conditional_formats, conditional_formatting_full) = parse_conditional_formats(post_sd);
-    let (data_validations, dv_container_attrs) = parse_data_validations(post_sd);
-    ensure_count_limit("data validation", data_validations.len(), MAX_VALIDATIONS)?;
-    let data_validations_declared_count = dv_container_attrs.declared_count;
-    let data_validations_disable_prompts = dv_container_attrs.disable_prompts;
-    let data_validations_x_window = dv_container_attrs.x_window;
-    let data_validations_y_window = dv_container_attrs.y_window;
-    let (x14_data_validations, x14_dv_container_attrs) = parse_x14_data_validations(post_sd);
-    ensure_count_limit(
-        "x14 data validation",
-        x14_data_validations.len(),
-        MAX_VALIDATIONS,
-    )?;
-    let x14_data_validations_declared_count = x14_dv_container_attrs.declared_count;
-    let x14_data_validations_disable_prompts = x14_dv_container_attrs.disable_prompts;
-    let x14_data_validations_x_window = x14_dv_container_attrs.x_window;
-    let x14_data_validations_y_window = x14_dv_container_attrs.y_window;
-    let auto_filter = crate::domain::auto_filter::read::parse_auto_filter(post_sd);
-    let sort_state = crate::domain::worksheet::read::parse_standalone_sort_state(post_sd);
-    let custom_properties_xml =
-        crate::domain::worksheet::read::extract_custom_properties_xml(post_sd);
-
-    // Extract full <extLst>...</extLst> from post-sheetData for round-trip passthrough
-    let ext_lst_xml = extract_worksheet_ext_lst_xml(post_sd);
-
-    let hyperlinks_parsed = build_hyperlinks_output(post_sd, &sheet_opc_rels);
-
-    let protection_output =
-        protection::SheetProtection::parse(post_sd).map(|sp| ProtectionOutput {
-            password: sp.password,
-            algorithm_name: {
-                let alg = sp.algorithm_name.as_str();
-                (!alg.is_empty()).then(|| alg.to_string())
-            },
-            hash_value: sp.hash_value,
-            salt_value: sp.salt_value,
-            spin_count: sp.spin_count,
-            sheet: sp.sheet,
-            objects: sp.objects,
-            scenarios: sp.scenarios,
-            format_cells: sp.format_cells,
-            format_columns: sp.format_columns,
-            format_rows: sp.format_rows,
-            insert_columns: sp.insert_columns,
-            insert_rows: sp.insert_rows,
-            insert_hyperlinks: sp.insert_hyperlinks,
-            delete_columns: sp.delete_columns,
-            delete_rows: sp.delete_rows,
-            sort: sp.sort,
-            auto_filter: sp.auto_filter,
-            pivot_tables: sp.pivot_tables,
-            select_locked_cells: sp.select_locked_cells,
-            select_unlocked_cells: sp.select_unlocked_cells,
-        });
-    let worksheet_semantic_containers =
-        crate::domain::worksheet::read::parse_worksheet_semantic_containers(post_sd);
-    let sheet_calc_pr = parse_sheet_calc_pr(post_sd);
-
-    let mut ps = print::PrintSettings::parse(post_sd);
-    ps.page_setup_properties = sheet_properties
-        .as_ref()
-        .and_then(|properties| properties.page_set_up_pr.clone());
-    let (print_settings, page_breaks) = crate::output::results::build_print_settings_output(&ps);
-
-    // Frozen pane is in pre-sheetData XML. Col widths and row heights
-    // were already extracted earlier / by the cell parser.
-    let frozen_pane = parse_frozen_pane(pre_sd);
-    let view_options: Vec<crate::output::results::SheetViewOutput> = parse_sheet_views(pre_sd)
-        .into_iter()
-        .map(crate::output::results::SheetViewOutput::from)
-        .collect();
-    let sheet_views_ext_lst_xml = parse_sheet_views_ext_lst(pre_sd);
-
-    let sparkline_groups = sparklines::parse_sparklines(post_sd);
-    let sparklines_output: Vec<SparklineSummary> = sparkline_groups
-        .iter()
-        .map(|sg| SparklineSummary {
-            sparkline_type: match sg.sparkline_type {
-                sparklines::SparklineType::Line => "line".to_string(),
-                sparklines::SparklineType::Column => "column".to_string(),
-                sparklines::SparklineType::WinLoss => "winLoss".to_string(),
-            },
-            sparklines_count: sg.sparklines.len(),
-        })
-        .collect();
-
-    let data_tables_info = extras.data_tables.iter().map(data_table_info).collect();
-
-    // Parse legacyDrawing r:id from the post-sheetData region
-    let legacy_drawing_r_id = crate::domain::worksheet::read::parse_legacy_drawing_r_id(post_sd);
-    let legacy_drawing_hf_r_id =
-        crate::domain::worksheet::read::parse_legacy_drawing_hf_r_id(post_sd);
-
-    // Build per-row descent map — preserve ALL original values for roundtrip fidelity.
-    // Previously we filtered out values matching default_row_descent, but Excel
-    // explicitly writes dyDescent on every row and expects it back.
-    let row_descents_map: std::collections::HashMap<u32, f64> =
-        extras.row_descents.iter().cloned().collect();
-
-    // Build per-row spans map from parsed extras
-    let row_spans_map: std::collections::HashMap<u32, String> =
-        extras.row_spans.iter().cloned().collect();
-    let row_style_lookup: std::collections::HashMap<u32, u32> = row_heights
-        .iter()
-        .filter_map(|rh| {
-            rh.style
-                .filter(|&style| style > 0)
-                .map(|style| (rh.row, style as u32))
-        })
-        .collect();
-    let authored_style_runs = coalesce_authored_style_only_cells(&extras.authored_style_only_cells)
-        .into_iter()
-        .filter(|run| {
-            !authored_run_repeats_positional_default(run, &row_style_lookup, &col_style_ranges)
-        })
-        .collect();
-
-    let sheet = FullParsedSheet {
-        name: sheet_name,
-        index: sheet_idx,
-        owner_part_path: None,
-        sheet_id: None,            // Set later from SheetInfo at assembly time
-        state: Default::default(), // Set later from SheetInfo at assembly time
-        cells,
-        authored_style_runs,
-        explicit_blank_cells,
-        merges,
-        conditional_formats,
-        conditional_formatting_full,
-        data_validations,
-        data_validations_declared_count,
-        data_validations_disable_prompts,
-        data_validations_x_window,
-        data_validations_y_window,
-        x14_data_validations,
-        x14_data_validations_declared_count,
-        x14_data_validations_disable_prompts,
-        x14_data_validations_x_window,
-        x14_data_validations_y_window,
-        tables,
-        table_xml_passthroughs,
-        parsed_pivot_configs: Vec::new(), // Set after process_sheet_core by caller
-        data_tables: data_tables_info,
-        sparklines: sparklines_output,
-        sparkline_groups,
-        comments: comments_json,
-        comment_authors,
-        comments_root_namespace_attrs,
-        comments_ext_lst_xml,
-        hyperlinks: hyperlinks_parsed,
-        protection: protection_output,
-        worksheet_semantic_containers,
-        worksheet_dimension_ref,
-        sheet_calc_pr,
-        print_settings,
-        header_footer_xml,
-        page_breaks,
-        default_row_height,
-        default_col_width,
-        base_col_width,
-        default_row_descent,
-        outline_level_row,
-        outline_level_col,
-        custom_height,
-        zero_height,
-        thick_top,
-        thick_bottom,
-        uid,
-        row_descents: row_descents_map,
-        row_spans: row_spans_map,
-        bare_empty_rows: extras.bare_empty_rows.clone(),
-        col_widths,
-        row_heights,
-        frozen_pane,
-        view_options,
-        sheet_views_ext_lst_xml,
-        sheet_properties,
-        outline_properties,
-        charts,
-        smartart_diagrams,
-        slicers,
-        slicer_anchors,
-        timelines,
-        timeline_anchors,
-        form_controls,
-        worksheet_controls_xml,
-        ole_objects,
-        connectors,
-        ext_lst_xml,
-        sheet_opc_rels,
-        auto_filter,
-        sort_state,
-        custom_properties_xml,
-        raw_vml_drawings,
-        legacy_drawing_r_id,
-        legacy_drawing_hf_r_id,
-        parsed_drawing: None,
-        parsed_charts: Vec::new(),
-        parsed_chart_ex: Vec::new(),
-    };
-
-    Ok(SheetProcessResult {
-        sheet,
-        cell_count,
-        namespaces: sheet_namespaces,
-    })
-}
-
-/// Parallel entry point: process a single sheet (called from rayon threads).
-#[cfg(all(not(target_arch = "wasm32"), feature = "parallel"))]
-fn process_sheet_parallel(
-    sheet_idx: usize,
-    sheet_name: String,
-    worksheet_xml: &[u8],
-    shared_strings: &[String],
-    comments_json: Vec<CommentOutput>,
-    comment_authors: Vec<String>,
-    comments_root_namespace_attrs: Vec<(String, String)>,
-    comments_ext_lst_xml: Option<String>,
-    tables: Vec<ParsedTable>,
-    table_xml_passthroughs: Vec<(String, Vec<u8>)>,
-    charts: Vec<domain_types::ChartSpec>,
-    smartart_diagrams: Vec<SmartArtPartsOutput>,
-    slicers: Vec<ooxml_types::slicers::SlicerDef>,
-    slicer_anchors: Vec<ooxml_types::slicers::SlicerAnchor>,
-    timelines: Vec<ooxml_types::timelines::TimelineDef>,
-    timeline_anchors: Vec<ooxml_types::timelines::TimelineAnchor>,
-    form_controls: Vec<FormControlOutput>,
-    ole_objects: Vec<OleObjectOutput>,
-    connectors: Vec<ConnectorOutput>,
-    sheet_opc_rels: Vec<ooxml_types::shared::OpcRelationship>,
-    raw_vml_drawings: Vec<(String, Vec<u8>, Option<(String, Vec<u8>)>)>,
-) -> Result<SheetProcessResult, String> {
-    process_sheet_core(
-        sheet_idx,
-        sheet_name,
-        worksheet_xml,
-        shared_strings,
-        comments_json,
-        comment_authors,
-        comments_root_namespace_attrs,
-        comments_ext_lst_xml,
-        tables,
-        table_xml_passthroughs,
-        charts,
-        smartart_diagrams,
-        slicers,
-        slicer_anchors,
-        timelines,
-        timeline_anchors,
-        form_controls,
-        ole_objects,
-        connectors,
-        sheet_opc_rels,
-        raw_vml_drawings,
-    )
-}
-
 /// Sequential worksheet loop with per-sheet profiling support.
 fn parse_sheets_sequential(
     archive: &XlsxArchive,
@@ -1660,30 +1028,38 @@ fn parse_sheets_sequential(
         let sheet_name = sheet_context.sheet_name.clone();
         let _sheet_id = sheet_context.sheet_id;
 
-        // --- Sub-phase: ZIP decompression ---
+        // --- Sub-phase: ZIP stream inflate + cell parse ---
         let ws_t0 = tick(timings);
-        let worksheet_xml = archive
-            .read_file(sheet_path)
-            .map_err(|e| format!("Failed to read worksheet {}: {}", sheet_path, e))?;
+        let compressed = archive.get_compressed_data(sheet_path).map_err(|e| {
+            format!("Failed to read compressed worksheet {}: {}", sheet_path, e)
+        })?;
+        archive
+            .charge_uncompressed(compressed.uncompressed_size)
+            .map_err(|e| e.to_string())?;
+        let shared_string_refs: Vec<&str> = shared_strings.iter().map(|s| s.as_str()).collect();
+        let streamed = crate::pipeline::streaming::stream_parse_worksheet(
+            &compressed,
+            &shared_string_refs,
+            |_| {},
+        )?;
+        crate::pipeline::streaming::record_stream_load_stats(&streamed.stats);
         ensure_count_limit(
             "worksheet cell",
-            count_worksheet_cell_elements(&worksheet_xml),
+            streamed.cells.len(),
             MAX_WORKSHEET_CELLS,
         )?;
         let ws_t1 = tick(timings);
+        let ws_t2 = ws_t1;
 
-        // --- Sub-phase: Core cell parse ---
-        let shared_string_refs: Vec<&str> = shared_strings.iter().map(|s| s.as_str()).collect();
-        let estimated_cells = worksheet_xml.len() / 50;
-        let mut buffer_size = estimated_cells.max(1000);
-        let mut cells_buffer: Vec<CellData> = vec![CellData::default(); buffer_size];
-        let mut strings_buffer: Vec<u8> = Vec::with_capacity(estimated_cells * 20);
+        let pre_sd_early = streamed.pre_sheet_data.as_slice();
+        let worksheet_without_cells =
+            worksheet_markup_without_sheet_data(&streamed.pre_sheet_data, &streamed.post_sheet_data);
+        let cells_buffer = streamed.cells;
+        let strings_buffer = streamed.strings;
+        let extras = streamed.extras;
+        let row_heights = streamed.row_heights;
+        let cell_count = cells_buffer.len();
 
-        let mut row_heights = Vec::new();
-        let mut extras = ParseExtras::default();
-
-        // Parse col widths early so we can build a col-style lookup for the cell parser
-        let pre_sd_early = pre_sheet_data_region(&worksheet_xml);
         let worksheet_dimension_ref =
             parse_dimension_ref_with_text(pre_sd_early).map(|d| d.ref_range);
         let col_widths = parse_col_widths(pre_sd_early);
@@ -1704,12 +1080,15 @@ fn parse_sheets_sequential(
             .as_ref()
             .and_then(|properties| properties.outline_pr.clone());
 
-        let explicit_blank_cells = extract_explicit_blank_cells(&worksheet_xml);
-        let header_footer_xml = extract_raw_element_xml(&worksheet_xml, b"headerFooter");
-        let worksheet_controls_xml = extract_worksheet_controls_xml(&worksheet_xml);
+        let mut explicit_blank_cells = streamed.explicit_blank_cells;
+        explicit_blank_cells.extend(extract_explicit_blank_cells(&worksheet_without_cells));
+        explicit_blank_cells.sort_unstable();
+        explicit_blank_cells.dedup();
+        let header_footer_xml = extract_raw_element_xml(&worksheet_without_cells, b"headerFooter");
+        let worksheet_controls_xml = extract_worksheet_controls_xml(&worksheet_without_cells);
 
         // Tier 2: Capture worksheet namespace declarations
-        let seq_sheet_ns = capture_namespaces_from_xml(&worksheet_xml);
+        let seq_sheet_ns = capture_namespaces_from_xml(&worksheet_without_cells);
 
         // Extract xr:uid from the <worksheet> root element (stable sheet identity for co-authoring)
         let uid = {
@@ -1725,44 +1104,11 @@ fn parse_sheets_sequential(
         };
 
         let col_style_ranges = build_col_style_ranges_from_widths(&col_widths);
-        let empty_col_styles: &[Option<u32>] = &[];
-
-        let mut cell_count = parse_worksheet_fast_with_extras(
-            &worksheet_xml,
-            &shared_string_refs,
-            &mut cells_buffer,
-            &mut strings_buffer,
-            &mut row_heights,
-            &mut extras,
-            empty_col_styles,
-        );
-
-        // If the buffer was completely filled, the parser may have truncated cells.
-        // Retry with progressively larger buffers until all cells are captured.
-        while cell_count == buffer_size {
-            buffer_size *= 2;
-            cells_buffer = vec![CellData::default(); buffer_size];
-            strings_buffer.clear();
-            row_heights.clear();
-            extras = ParseExtras::default();
-
-            cell_count = parse_worksheet_fast_with_extras(
-                &worksheet_xml,
-                &shared_string_refs,
-                &mut cells_buffer,
-                &mut strings_buffer,
-                &mut row_heights,
-                &mut extras,
-                empty_col_styles,
-            );
-        }
-        let ws_t2 = tick(timings);
 
         // --- Sub-phase: CellData → FullCellData conversion ---
         let mut decode_buf = Vec::with_capacity(256);
         let mut cells: Vec<FullCellData> = cells_buffer
             .iter()
-            .take(cell_count)
             .map(|c| convert_cell_data(c, &strings_buffer, &mut decode_buf))
             .collect();
         let ws_t3 = tick(timings);
@@ -1771,7 +1117,7 @@ fn parse_sheets_sequential(
         apply_parse_extras(
             &mut cells,
             &extras,
-            &cells_buffer[..cell_count],
+            &cells_buffer,
             &strings_buffer,
             shared_strings,
         );
@@ -1784,7 +1130,7 @@ fn parse_sheets_sequential(
         // parsers to only scan the small region after it (~3% of XML).
         // This avoids redundant scanning through the massive sheetData section.
         // Handle both `</sheetData>` (normal) and `<sheetData/>` (self-closing, empty sheet).
-        let post_sd = find_post_sheet_data_region(&worksheet_xml);
+        let post_sd = streamed.post_sheet_data.as_slice();
 
         // Extract full <extLst>...</extLst> from post-sheetData for round-trip passthrough
         let _ext_lst_xml = extract_worksheet_ext_lst_xml(post_sd);
@@ -1870,7 +1216,7 @@ fn parse_sheets_sequential(
 
         // Frozen pane is in pre-sheetData XML. Col widths and row heights
         // were already extracted earlier / by the cell parser.
-        let pre_sd = pre_sheet_data_region(&worksheet_xml);
+        let pre_sd = streamed.pre_sheet_data.as_slice();
         let frozen_pane = parse_frozen_pane(pre_sd);
         let aux_t7 = tick(timings);
         let view_options: Vec<crate::output::results::SheetViewOutput> = parse_sheet_views(pre_sd)
@@ -1937,11 +1283,12 @@ fn parse_sheets_sequential(
 
         // Parse form controls (requires ZIP reads for ctrlProp XML files, VML drawings, and .rels)
         let az_t6 = tick(timings);
-        let form_controls = parse_form_controls_for_sheet(archive, sheet_num, &worksheet_xml);
+        let form_controls =
+            parse_form_controls_for_sheet(archive, sheet_num, &worksheet_without_cells);
 
         // Parse OLE embedded objects (requires ZIP reads for .rels and VML drawings)
         let az_t7 = tick(timings);
-        let ole_objects = parse_ole_objects_for_sheet(archive, sheet_num, &worksheet_xml);
+        let ole_objects = parse_ole_objects_for_sheet(archive, sheet_num, &worksheet_without_cells);
 
         // Parse connectors (requires ZIP reads for drawing XML)
         let az_t8 = tick(timings);

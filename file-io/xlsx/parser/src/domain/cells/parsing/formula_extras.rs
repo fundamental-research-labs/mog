@@ -9,7 +9,7 @@ use super::super::types::{
 use super::data_tables::push_data_table_entry;
 use super::xml_text::validated_xml_text;
 
-pub(super) fn collect_formula_extras(
+pub(crate) fn collect_formula_extras(
     extras: &mut ParseExtras,
     last_idx: usize,
     cell_data: CellData,

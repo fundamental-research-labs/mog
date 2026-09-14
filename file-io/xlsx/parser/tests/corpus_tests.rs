@@ -10,7 +10,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use xlsx_parser::{LazyWorkbook, XlsxArchive, parse_xlsx_to_output};
+use xlsx_parser::{XlsxArchive, parse_xlsx_to_output};
 
 /// Get the path to the test corpus directory
 fn corpus_path() -> PathBuf {
@@ -105,7 +105,7 @@ fn test_basic_corpus() {
         };
 
         // Test lazy parsing
-        let lazy_result = std::panic::catch_unwind(|| LazyWorkbook::new(&data));
+        let lazy_result = std::panic::catch_unwind(|| parse_xlsx_to_output(&data));
         match lazy_result {
             Ok(result) => {
                 assert!(
@@ -180,7 +180,7 @@ fn test_malformed_xml_recovery() {
         };
 
         // Test that parsing does not panic
-        let lazy_result = std::panic::catch_unwind(|| LazyWorkbook::new(&data));
+        let lazy_result = std::panic::catch_unwind(|| parse_xlsx_to_output(&data));
         match lazy_result {
             Ok(result) => {
                 // Malformed files may or may not parse, but should not panic
@@ -253,7 +253,7 @@ fn test_truncated_files() {
         };
 
         // Test lazy parsing - should not panic
-        let lazy_result = std::panic::catch_unwind(|| LazyWorkbook::new(&data));
+        let lazy_result = std::panic::catch_unwind(|| parse_xlsx_to_output(&data));
         match lazy_result {
             Ok(result) => {
                 // Truncated files should fail to parse, but gracefully
@@ -326,7 +326,7 @@ fn test_invalid_cell_references() {
         };
 
         // Test that parsing does not panic
-        let lazy_result = std::panic::catch_unwind(|| LazyWorkbook::new(&data));
+        let lazy_result = std::panic::catch_unwind(|| parse_xlsx_to_output(&data));
         match lazy_result {
             Ok(result) => {
                 match result {
@@ -481,7 +481,7 @@ fn test_invalid_styles() {
         };
 
         // Test that parsing does not panic
-        let lazy_result = std::panic::catch_unwind(|| LazyWorkbook::new(&data));
+        let lazy_result = std::panic::catch_unwind(|| parse_xlsx_to_output(&data));
         match lazy_result {
             Ok(_) => {
                 results.record_success();
@@ -546,7 +546,7 @@ fn test_missing_relationships() {
         };
 
         // Test that parsing does not panic
-        let lazy_result = std::panic::catch_unwind(|| LazyWorkbook::new(&data));
+        let lazy_result = std::panic::catch_unwind(|| parse_xlsx_to_output(&data));
         match lazy_result {
             Ok(_) => {
                 results.record_success();
@@ -598,7 +598,7 @@ fn test_mixed_errors() {
         };
 
         // Test that parsing does not panic
-        let lazy_result = std::panic::catch_unwind(|| LazyWorkbook::new(&data));
+        let lazy_result = std::panic::catch_unwind(|| parse_xlsx_to_output(&data));
         match lazy_result {
             Ok(_) => {
                 results.record_success();
@@ -663,7 +663,7 @@ fn test_edge_cases() {
         };
 
         // Edge cases should parse successfully
-        let lazy_result = std::panic::catch_unwind(|| LazyWorkbook::new(&data));
+        let lazy_result = std::panic::catch_unwind(|| parse_xlsx_to_output(&data));
         match lazy_result {
             Ok(result) => match result {
                 Ok(ref wb) => {
@@ -721,20 +721,20 @@ fn test_synthetic_malformed_data() {
     let mut results = TestResults::default();
 
     // Test empty data
-    let empty_result = std::panic::catch_unwind(|| LazyWorkbook::new(&[]));
+    let empty_result = std::panic::catch_unwind(|| parse_xlsx_to_output(&[]));
     assert!(empty_result.is_ok(), "Empty data should not panic");
     results.record_success();
 
     // Test random garbage
     let garbage: Vec<u8> = (0..1000).map(|i| (i % 256) as u8).collect();
-    let garbage_result = std::panic::catch_unwind(|| LazyWorkbook::new(&garbage));
+    let garbage_result = std::panic::catch_unwind(|| parse_xlsx_to_output(&garbage));
     assert!(garbage_result.is_ok(), "Random garbage should not panic");
     results.record_success();
 
     // Test valid ZIP signature but garbage content
     let mut fake_zip = vec![0x50, 0x4B, 0x03, 0x04]; // PK signature
     fake_zip.extend_from_slice(&[0u8; 100]);
-    let fake_result = std::panic::catch_unwind(|| LazyWorkbook::new(&fake_zip));
+    let fake_result = std::panic::catch_unwind(|| parse_xlsx_to_output(&fake_zip));
     assert!(fake_result.is_ok(), "Fake ZIP should not panic");
     results.record_success();
 
@@ -803,7 +803,7 @@ fn test_parity_corpus() {
         };
 
         // Lazy parsing — should succeed (these are valid files)
-        let lazy_result = std::panic::catch_unwind(|| LazyWorkbook::new(&data));
+        let lazy_result = std::panic::catch_unwind(|| parse_xlsx_to_output(&data));
         match lazy_result {
             Ok(result) => {
                 match result {

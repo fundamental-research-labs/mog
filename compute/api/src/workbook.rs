@@ -98,6 +98,23 @@ impl Workbook {
     /// Load a workbook from an xlsx file on disk, preserving imported formula caches.
     ///
     /// Call [`Self::recalculate`] explicitly to evaluate formulas before exporting.
+    #[cfg(feature = "native")]
+    pub fn from_xlsx_path(path: &str) -> Result<(Self, RecalcResult), ComputeApiError> {
+        use compute_core::storage::engine::ComputeEngine;
+
+        let (engine, recalc) = ComputeEngine::from_xlsx_path(path)?;
+
+        #[cfg(feature = "native")]
+        let dispatch = Dispatch::spawn(engine)?;
+
+        #[cfg(not(feature = "native"))]
+        let dispatch = Dispatch::new(engine);
+
+        Ok((Workbook { dispatch }, recalc))
+    }
+
+    /// Load a workbook from an xlsx file on disk, preserving imported formula caches.
+    #[cfg(not(feature = "native"))]
     pub fn from_xlsx_path(path: &str) -> Result<(Self, RecalcResult), ComputeApiError> {
         let data = std::fs::read(path)
             .map_err(|e| ComputeApiError::InvalidOperation(format!("read {path}: {e}")))?;

@@ -218,6 +218,54 @@ impl ComputeCore {
         Ok(RecalcResult::empty())
     }
 
+    /// Finish formula registration for a store that already holds imported cells.
+    pub fn init_from_populated_store_no_recalc(
+        &mut self,
+        cell_store: &mut CellStore,
+        formula_cells: Vec<(CellId, SheetId, String)>,
+        snapshot: &WorkbookSnapshot,
+    ) -> Result<RecalcResult, ComputeError> {
+        self.iterative_calc = snapshot.iterative_calc;
+        self.max_iterations = snapshot.max_iterations;
+        self.max_change = snapshot.max_change.get();
+        self.calc_mode = snapshot
+            .calculation_settings
+            .as_ref()
+            .map_or(CalcMode::Auto, |settings| settings.calc_mode);
+
+        self.sheet_order = snapshot
+            .sheets
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, sheet)| SheetId::from_uuid_str(&sheet.id).ok().map(|sid| (sid, idx)))
+            .collect();
+        self.rebuild_ordered_sheets_cache();
+
+        {
+            self.id_alloc =
+                std::sync::Arc::new(IdAllocator::with_seed(snapshot.next_identity_counter()));
+            self.id_alloc
+                .ensure_axis_run_past(cell_types::AxisRunId::from_raw(
+                    snapshot.next_axis_run_counter().saturating_sub(1),
+                ));
+        }
+
+        cell_store.set_id_alloc(self.id_alloc.clone());
+        self.normalize_raw_named_ranges_for_graph(cell_store);
+        let formula_count = formula_cells.len();
+        let total_cell_count = cell_store.cells.len();
+        self.graph = DependencyGraph::with_capacity_full(formula_count, total_cell_count);
+        self.ast_cache = FxHashMap::with_capacity_and_hasher(formula_count, Default::default());
+        self.formula_strings =
+            FxHashMap::with_capacity_and_hasher(formula_count, Default::default());
+        self.cell_formula_text =
+            FxHashMap::with_capacity_and_hasher(formula_count, Default::default());
+        self.seed_cell_formula_text(&formula_cells);
+        self.bulk_parse_and_register(cell_store, formula_cells);
+        self.register_all_variables(cell_store);
+        Ok(RecalcResult::empty())
+    }
+
     /// Initialize from a WorkbookSnapshot with MINIMAL processing.
     ///
     /// Skips BOTH formula parsing AND recalc. The dependency graph is NOT built.

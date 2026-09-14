@@ -103,9 +103,8 @@ fn take_recalculate(args: Vec<String>) -> Result<(bool, Vec<String>), OfficeJsEr
 }
 
 fn load_workbook(path: &str) -> Result<Workbook, OfficeJsError> {
-    let bytes =
-        fs::read(path).map_err(|e| OfficeJsError::Script(format!("failed to read {path}: {e}")))?;
-    let (workbook, _) = Workbook::from_xlsx_bytes(&bytes)?;
+    let (workbook, _) = Workbook::from_xlsx_path(path)
+        .map_err(|e| OfficeJsError::Script(format!("failed to read {path}: {e}")))?;
     Ok(workbook)
 }
 

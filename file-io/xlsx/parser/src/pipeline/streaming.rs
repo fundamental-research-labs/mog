@@ -17,7 +17,12 @@ mod cell_xml;
 mod deflate;
 mod state;
 mod utf8;
+mod worksheet;
 
 pub use cell_parser::StreamingCellParser;
 pub use deflate::{DEFAULT_BUFFER_SIZE, StreamingDeflate};
 pub use state::ParseState;
+pub use worksheet::{
+    StreamLoadStats, StreamedWorksheet, last_stream_load_stats, record_stream_load_stats,
+    reset_stream_load_stats, stream_parse_worksheet,
+};

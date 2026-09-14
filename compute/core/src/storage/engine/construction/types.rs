@@ -7,6 +7,15 @@ pub(in crate::storage::engine) type XlsxHydrateResult = (
     Vec<(SheetId, crate::storage::properties::ImportedFormats)>,
 );
 
+pub(in crate::storage::engine) type XlsxStreamHydrateResult = (
+    WorkbookStorage,
+    WorkbookSnapshot,
+    domain_types::ImportReport,
+    Vec<(SheetId, crate::storage::properties::ImportedFormats)>,
+    CellStore,
+    Vec<(CellId, SheetId, String)>,
+);
+
 /// Pending worksheet load. Values and metadata already loaded live only in the
 /// native stores; completion needs the archive and the loaded sheet's index.
 pub struct DeferredHydrationData {

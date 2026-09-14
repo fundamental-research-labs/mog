@@ -8,7 +8,6 @@ pub(crate) mod external_refs;
 pub mod fast_parse;
 pub mod full_parse;
 pub mod import_extensions;
-pub mod lazy;
 pub mod metadata;
 pub mod streaming;
 

@@ -54,9 +54,7 @@ pub(super) use assembly::{
     rebuild_engine_from_snapshot, snapshot_id_high_water_mark,
 };
 pub(super) use csv::{from_csv_bytes, import_from_csv_bytes};
-pub(super) use deferred::{
-    commit_deferred_hydration, import_from_xlsx_bytes_deferred, stage_deferred_hydration,
-};
+pub(super) use deferred::{commit_deferred_hydration, stage_deferred_hydration};
 pub(super) use indexes::{
     build_grid_indexes, build_grid_indexes_from_allocations_range, build_merge_indexes,
     build_merge_indexes_from_parse_output_range, build_pixel_layout_for_sheet,
@@ -75,8 +73,13 @@ pub(in crate::storage::engine) use table_auto_filter_projection::{
     materialize_table_auto_filters_for_sheets, materialize_table_auto_filters_from_preserved_specs,
     table_filter_spec_to_column_filter,
 };
-pub(super) use types::{DeferredHydrationCompletion, DeferredHydrationData, XlsxHydrateResult};
+pub(super) use types::{
+    DeferredHydrationCompletion, DeferredHydrationData, XlsxHydrateResult, XlsxStreamHydrateResult,
+};
 pub(super) use xlsx::{from_xlsx_bytes, import_from_xlsx_bytes};
+
+#[cfg(all(not(target_arch = "wasm32"), feature = "native"))]
+pub(super) use xlsx::from_xlsx_path;
 
 #[cfg(test)]
 mod tests {

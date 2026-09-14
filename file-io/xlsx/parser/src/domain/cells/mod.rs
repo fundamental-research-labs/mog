@@ -42,8 +42,11 @@ pub(crate) use full_convert::{
     col_style_range_at, convert_cell_data, data_table_info,
 };
 pub(crate) use helpers::{
-    count_worksheet_cell_elements, find_closing_tag_span, find_start_tag, post_sheet_data_region,
-    pre_sheet_data_region,
+    count_worksheet_cell_elements, find_closing_tag_span, find_start_tag, parse_row_number,
+    post_sheet_data_region, pre_sheet_data_region, scan_cell, start_tag_at,
+};
+pub(crate) use parsing::{
+    CellExtrasInput, apply_fast_row_attrs, collect_cell_extras, collect_formula_extras,
 };
 
 // Re-export public helper functions

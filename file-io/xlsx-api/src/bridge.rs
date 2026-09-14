@@ -51,22 +51,18 @@ impl XlsxParser {
             });
         }
 
-        match crate::lazy::LazyWorkbook::new(xlsx_data) {
-            Ok(workbook) => {
-                let sheet_count = workbook.sheet_count() as u32;
-                let sheet_names: Vec<String> = workbook
-                    .sheet_names()
-                    .into_iter()
-                    .map(|s| s.to_string())
-                    .collect();
-
-                Ok(BridgeLazyParseResult {
-                    ok: true,
-                    sheet_count,
-                    sheet_names,
-                    error_message: String::new(),
-                })
-            }
+        match crate::parse(xlsx_data) {
+            Ok(workbook) => Ok(BridgeLazyParseResult {
+                ok: true,
+                sheet_count: workbook.output.sheets.len() as u32,
+                sheet_names: workbook
+                    .output
+                    .sheets
+                    .iter()
+                    .map(|sheet| sheet.name.clone())
+                    .collect(),
+                error_message: String::new(),
+            }),
             Err(e) => Ok(BridgeLazyParseResult {
                 ok: false,
                 sheet_count: 0,
@@ -128,28 +124,24 @@ impl XlsxParser {
             });
         }
 
-        match crate::lazy::LazyWorkbook::with_mode(xlsx_data, parse_mode) {
+        let _ = parse_mode;
+        match crate::parse(xlsx_data) {
             Ok(workbook) => {
-                let sheet_count = workbook.sheet_count() as u32;
-                let sheet_names: Vec<String> = workbook
-                    .sheet_names()
-                    .into_iter()
-                    .map(|s| s.to_string())
-                    .collect();
-
-                let warning_count = workbook.warning_count() as u32;
-                let error_count = workbook.error_count() as u32;
-                let errors_json = xlsx_parser::errors_to_json(workbook.errors());
-
+                let error_count = workbook.diagnostics.errors.len() as u32;
                 Ok(BridgeLazyParseResultWithErrors {
                     ok: true,
-                    sheet_count,
-                    sheet_names,
-                    warning_count,
+                    sheet_count: workbook.output.sheets.len() as u32,
+                    sheet_names: workbook
+                        .output
+                        .sheets
+                        .iter()
+                        .map(|sheet| sheet.name.clone())
+                        .collect(),
+                    warning_count: 0,
                     error_count,
                     mode,
                     error_message: String::new(),
-                    errors_json,
+                    errors_json: xlsx_parser::errors_to_json(&[]),
                 })
             }
             Err(e) => Ok(BridgeLazyParseResultWithErrors {

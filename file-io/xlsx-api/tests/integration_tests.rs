@@ -1,9 +1,8 @@
 //! Integration tests for xlsx-api using real XLSX files from the parser test corpus.
 //!
 //! These tests exercise the public API against actual .xlsx files to verify
-//! end-to-end behavior: parse, lazy loading, and export round-trip.
+//! end-to-end behavior: parse and export round-trip.
 
-use xlsx_api::lazy::LazyWorkbook;
 use xlsx_api::{ParseOptions, XlsxApiError, parse, parse_with_options};
 
 // =============================================================================
@@ -114,107 +113,6 @@ fn parse_with_unsupported_option_returns_unsupported_option() {
         }
         Err(other) => panic!("Expected UnsupportedOption, got: {other}"),
         Ok(_) => panic!("Expected error for unsupported option"),
-    }
-}
-
-// =============================================================================
-// Lazy loading tests
-// =============================================================================
-
-#[test]
-fn lazy_open_minimal_xlsx_reports_sheet_count_and_names() {
-    let data = read_test_file("basic/minimal.xlsx");
-    let wb = LazyWorkbook::new(&data).expect("lazy open should succeed for minimal.xlsx");
-
-    assert!(
-        wb.sheet_count() > 0,
-        "minimal.xlsx should have at least one sheet"
-    );
-
-    let names = wb.sheet_names();
-    assert_eq!(
-        names.len(),
-        wb.sheet_count(),
-        "sheet_names().len() should match sheet_count()"
-    );
-    for name in &names {
-        assert!(!name.is_empty(), "sheet name should not be empty");
-    }
-}
-
-#[test]
-fn lazy_open_with_strings_get_sheet_by_index_and_name() {
-    let data = read_test_file("basic/with_strings.xlsx");
-    let mut wb = LazyWorkbook::new(&data).expect("lazy open should succeed for with_strings.xlsx");
-
-    // Get sheet by index, capture cell_count before releasing borrow
-    let cell_count_by_index = {
-        let sheet = wb.get_sheet(0).expect("get_sheet(0) should succeed");
-        assert!(
-            sheet.cell_count > 0,
-            "first sheet of with_strings.xlsx should have cells"
-        );
-        sheet.cell_count
-    };
-
-    // Get the name of the first sheet, then look it up by name
-    let first_name = wb.sheet_names()[0].to_string();
-    let sheet_by_name = wb
-        .get_sheet_by_name(&first_name)
-        .expect("get_sheet_by_name should succeed for existing name");
-    assert_eq!(
-        sheet_by_name.cell_count, cell_count_by_index,
-        "same sheet fetched by index and by name should have same cell_count"
-    );
-}
-
-#[test]
-fn lazy_get_sheet_out_of_bounds_returns_error() {
-    let data = read_test_file("basic/minimal.xlsx");
-    let mut wb = LazyWorkbook::new(&data).expect("lazy open should succeed");
-
-    let count = wb.sheet_count();
-    let result = wb.get_sheet(count); // one past the end
-    match result {
-        Err(XlsxApiError::SheetIndexOutOfBounds { index, count: c }) => {
-            assert_eq!(index, count);
-            assert_eq!(c, count);
-        }
-        Err(other) => panic!("Expected SheetIndexOutOfBounds, got: {other}"),
-        Ok(_) => panic!("Expected error for out-of-bounds index"),
-    }
-
-    // Also try a large index
-    let result = wb.get_sheet(9999);
-    match result {
-        Err(XlsxApiError::SheetIndexOutOfBounds { .. }) => {} // expected
-        Err(other) => panic!("Expected SheetIndexOutOfBounds, got: {other}"),
-        Ok(_) => panic!("Expected error for large index"),
-    }
-}
-
-#[test]
-fn lazy_get_sheet_by_nonexistent_name_returns_not_found() {
-    let data = read_test_file("basic/minimal.xlsx");
-    let mut wb = LazyWorkbook::new(&data).expect("lazy open should succeed");
-
-    let result = wb.get_sheet_by_name("ThisSheetDoesNotExist");
-    match result {
-        Err(XlsxApiError::SheetNotFound(name)) => {
-            assert_eq!(name, "ThisSheetDoesNotExist");
-        }
-        Err(other) => panic!("Expected SheetNotFound, got: {other}"),
-        Ok(_) => panic!("Expected error for nonexistent sheet name"),
-    }
-}
-
-#[test]
-fn lazy_open_empty_bytes_returns_invalid_archive() {
-    let result = LazyWorkbook::new(&[]);
-    match result {
-        Err(XlsxApiError::InvalidArchive(_)) => {} // expected
-        Err(other) => panic!("Expected InvalidArchive, got: {other}"),
-        Ok(_) => panic!("Expected error for empty bytes"),
     }
 }
 

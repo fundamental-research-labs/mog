@@ -4,11 +4,11 @@ use super::row_attrs::RowAttrs;
 use super::row_attrs::parse_row_attrs;
 use ooxml_types::worksheet::RowHeight;
 
-pub(super) struct AppliedRowAttrs {
-    pub(super) row_style: Option<u32>,
+pub(crate) struct AppliedRowAttrs {
+    pub(crate) row_style: Option<u32>,
 }
 
-pub(super) fn apply_fast_row_attrs(
+pub(crate) fn apply_fast_row_attrs(
     tag_bytes: &[u8],
     current_row: u32,
     is_self_closing: bool,

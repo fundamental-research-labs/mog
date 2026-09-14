@@ -16,6 +16,10 @@ use super::types::{CellData, ParseExtras};
 use crate::infra::error::ParseContext;
 use ooxml_types::worksheet::RowHeight;
 
+pub(crate) use cell_extras::{CellExtrasInput, collect_cell_extras};
+pub(crate) use formula_extras::collect_formula_extras;
+pub(crate) use rows::apply_fast_row_attrs;
+
 /// Parse worksheet XML with OOXML-specific optimizations.
 ///
 /// This is the fast-path implementation optimized for valid XLSX files.

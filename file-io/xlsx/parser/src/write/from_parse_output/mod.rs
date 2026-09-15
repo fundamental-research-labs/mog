@@ -69,7 +69,7 @@ use crate::infra::opc::REL_CUSTOM_PROPERTY;
 use crate::write::relationships::{RelationshipManager, create_sheet_rels};
 use crate::write::{
     ControlsWriter, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CTRL_PROP, REL_DRAWING,
-    REL_HYPERLINK, REL_PIVOT_TABLE, REL_PRINTER_SETTINGS, REL_SLICER, REL_TABLE,
+    REL_HYPERLINK, REL_SLICER, REL_TABLE,
     REL_THREADED_COMMENT, REL_VML_DRAWING,
 };
 

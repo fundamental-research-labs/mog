@@ -1,7 +1,31 @@
 use super::*;
+use std::cell::RefCell;
+
+thread_local! {
+    static LOAD_PROGRESS: RefCell<Option<Box<dyn FnMut(&xlsx_parser::StreamLoadStats, &CellStore)>>> =
+        RefCell::new(None);
+}
 
 /// Construct a `ComputeEngine` from raw XLSX bytes without recalculation.
 pub(in crate::storage::engine) fn from_xlsx_bytes(
+    xlsx_data: &[u8],
+) -> Result<(ComputeEngine, RecalcResult), ComputeError> {
+    from_xlsx_bytes_with_progress(xlsx_data, |_, _| {})
+}
+
+/// Same as [`from_xlsx_bytes`], invoking `on_chunk` after each streamed cell
+/// with the live store (cells already ingested).
+pub(in crate::storage::engine) fn from_xlsx_bytes_with_progress(
+    xlsx_data: &[u8],
+    on_chunk: impl FnMut(&xlsx_parser::StreamLoadStats, &CellStore) + 'static,
+) -> Result<(ComputeEngine, RecalcResult), ComputeError> {
+    LOAD_PROGRESS.with(|slot| *slot.borrow_mut() = Some(Box::new(on_chunk)));
+    let result = from_xlsx_bytes_inner(xlsx_data);
+    LOAD_PROGRESS.with(|slot| *slot.borrow_mut() = None);
+    result
+}
+
+fn from_xlsx_bytes_inner(
     xlsx_data: &[u8],
 ) -> Result<(ComputeEngine, RecalcResult), ComputeError> {
     let (storage, workbook_snap, import_report, imported_formats, mut cell_store, formula_cells) =
@@ -98,18 +122,18 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
     xlsx_data: &[u8],
 ) -> Result<XlsxStreamHydrateResult, ComputeError> {
     use crate::import;
-    use crate::storage::infra::hydration::{allocate_sheet_ids, DefaultIdAllocator};
-    use std::cell::RefCell;
+    use crate::storage::infra::hydration::DefaultIdAllocator;
     use std::rc::Rc;
 
     let live_store = Rc::new(RefCell::new(CellStore::new()));
     let stream_sheet_ids = Rc::new(RefCell::new(Vec::<SheetId>::new()));
+    let streamed_formulas = Rc::new(RefCell::new(Vec::<(cell_types::CellId, SheetId, String)>::new()));
     let parsed = {
         let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "parse");
         let store = live_store.clone();
         let ids = stream_sheet_ids.clone();
         let parsed = xlsx_parser::with_stream_cell_hook(
-            move |sheet_idx, cell, strings, _stats| {
+            move |sheet_idx, cell, strings, stats| {
                 let mut store = store.borrow_mut();
                 let mut ids = ids.borrow_mut();
                 while ids.len() <= sheet_idx {
@@ -117,9 +141,47 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
                     let sheet_id = store.open_stream_sheet(&name);
                     ids.push(sheet_id);
                 }
-                store.ingest_streamed_xlsx_cell(&ids[sheet_idx], cell, strings);
+                let _ = store.ingest_streamed_xlsx_cell(&ids[sheet_idx], cell, strings);
+                LOAD_PROGRESS.with(|slot| {
+                    if let Some(observer) = slot.borrow_mut().as_mut() {
+                        observer(stats, &store);
+                    }
+                });
             },
             || {
+                let store = live_store.clone();
+                let ids = stream_sheet_ids.clone();
+                let formulas = streamed_formulas.clone();
+                xlsx_parser::set_stream_resolved_hook(move |sheet_idx, row, col, value, formula| {
+                    let mut store = store.borrow_mut();
+                    let ids = ids.borrow();
+                    let Some(&sheet_id) = ids.get(sheet_idx) else {
+                        return;
+                    };
+                    let Some(cell_id) = store
+                        .get_sheet(&sheet_id)
+                        .and_then(|sheet| {
+                            sheet.authored_cell_id_at(cell_types::SheetPos::new(row, col))
+                        })
+                    else {
+                        return;
+                    };
+                    if let Some(value) = value {
+                        let parsed = value
+                            .parse::<f64>()
+                            .ok()
+                            .map(value_types::CellValue::number)
+                            .unwrap_or_else(|| value_types::CellValue::from(value.to_string()));
+                        store.set_value_mut(&cell_id, parsed);
+                    }
+                    if let Some(formula) = formula {
+                        formulas.borrow_mut().push((
+                            cell_id,
+                            sheet_id,
+                            compute_parser::normalize_xlsx_formula(formula),
+                        ));
+                    }
+                });
                 xlsx_api::parse(xlsx_data).map_err(|e| ComputeError::Deserialize {
                     message: format!("XLSX parse error: {}", e),
                 })
@@ -142,6 +204,10 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         Err(rc) => rc.borrow().clone(),
     };
     let stream_sheet_ids = match Rc::try_unwrap(stream_sheet_ids) {
+        Ok(cell) => cell.into_inner(),
+        Err(rc) => rc.borrow().clone(),
+    };
+    let _ = match Rc::try_unwrap(streamed_formulas) {
         Ok(cell) => cell.into_inner(),
         Err(rc) => rc.borrow().clone(),
     };
@@ -171,20 +237,14 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         let allocations: Vec<_> = parse_output
             .sheets
             .iter()
-            .map(|sheet| allocate_sheet_ids(sheet, &mut allocator))
+            .map(|sheet| {
+                crate::storage::infra::hydration::allocate_sheet_ids(sheet, &mut allocator)
+            })
             .collect();
         profile.counter("sheets", allocations.len() as u64);
-        profile.counter(
-            "allocated_cells",
-            allocations
-                .iter()
-                .map(|allocation| allocation.cell_ids.len() as u64)
-                .sum::<u64>(),
-        );
         allocations
     };
 
-    // ── Pass 2: Classify each sheet, compact ranges, install the live store ─
     let mut formula_cells = Vec::new();
     let mut ranged_positions: Vec<std::collections::HashSet<(u32, u32)>> =
         Vec::with_capacity(parse_output.sheets.len());
@@ -192,9 +252,7 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         Vec::with_capacity(parse_output.sheets.len());
     let mut range_styles_per_sheet: Vec<Vec<crate::storage::infra::hydration::ImportedRangeStyle>> =
         Vec::with_capacity(parse_output.sheets.len());
-    let range_style_formats_enabled = range_style_formats_enabled();
     {
-        let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "stream_cells_into_store");
         for (sheet_idx, sheet) in parse_output.sheets.iter_mut().enumerate() {
             let mut sheet_id_map = crate::storage::infra::hydration::HydrationIdMap::default();
             sheet_id_map.sheet_ids.push(allocations[sheet_idx].sheet_id);
@@ -238,7 +296,7 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
                 .map(|c| (c.row, c.col))
                 .filter(|pos| !snap_positions.contains(pos))
                 .collect();
-            if range_style_formats_enabled {
+            if range_style_formats_enabled() {
                 let (style_positions, range_styles) = build_imported_range_style_plan(
                     sheet,
                     &allocations[sheet_idx],
@@ -269,8 +327,6 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
             }
             cell_store.add_sheet(snap_sheet)?;
         }
-        profile.counter("sheets", allocations.len() as u64);
-        profile.counter("formulas", formula_cells.len() as u64);
     }
 
     // ── Pass 3: Hydrate native metadata while sheet cells still exist ─

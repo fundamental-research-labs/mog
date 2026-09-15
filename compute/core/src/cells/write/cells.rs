@@ -111,11 +111,12 @@ impl CellStore {
         sheet: &SheetId,
         cell: &xlsx_parser::domain::cells::CellData,
         strings: &[u8],
-    ) {
+    ) -> Option<(CellId, Option<String>)> {
         if !self.sheets.contains_key(sheet) {
-            return;
+            return None;
         }
         let value = packed_xlsx_cell_value(cell, strings);
+        let formula = packed_xlsx_cell_formula(cell, strings);
         let cell_id = self.id_alloc.next_cell_id();
         self.insert_cell(
             sheet,
@@ -123,6 +124,7 @@ impl CellStore {
             SheetPos::new(cell.row, cell.col),
             CellEntry { value },
         );
+        Some((cell_id, formula))
     }
 
     fn insert_cell_with_formula(
@@ -347,4 +349,22 @@ fn packed_xlsx_cell_value(
             .or_else(|| text.map(|s| CellValue::from(s.to_string())))
             .unwrap_or(CellValue::Null),
     }
+}
+
+pub(crate) fn packed_xlsx_cell_formula(
+    cell: &xlsx_parser::domain::cells::CellData,
+    strings: &[u8],
+) -> Option<String> {
+    use xlsx_parser::domain::cells::VALUE_TYPE_FORMULA;
+    if cell.value_type != VALUE_TYPE_FORMULA || cell.value_len == 0 {
+        return None;
+    }
+    let start = cell.value_offset as usize;
+    let end = start
+        .saturating_add(cell.value_len as usize)
+        .min(strings.len());
+    std::str::from_utf8(&strings[start..end])
+        .ok()
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
 }

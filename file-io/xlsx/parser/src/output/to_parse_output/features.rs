@@ -18,7 +18,7 @@ use domain_types::{
     RichTextRun, Sparkline as DtSparkline, SparklineAxisSettings, SparklineCellAddress,
     SparklineDataRange, SparklineGroup as DtSparklineGroup, SparklineType as DtSparklineType,
     SparklineVisualSettings, TableColumnSpec, TableSpec, TotalsFunction, ValidationOperator,
-    ValidationRule, ValidationSpec, chart::ObjectSize,
+    ValidationRule, ValidationSpec,
 };
 
 use crate::domain::drawings::{Anchor as DrawingAnchor, Drawing, DrawingContent};

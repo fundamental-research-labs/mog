@@ -328,34 +328,6 @@ impl ComputeCore {
         Ok(RecalcResult::empty())
     }
 
-    /// Initialize formula descriptors against native values already installed by
-    /// the caller. The graph remains deferred until all sheets are available.
-    pub(crate) fn init_native_formula_descriptors(
-        &mut self,
-        cell_store: &mut CellStore,
-        sheet_order: &[SheetId],
-        settings: &snapshot_types::CalculationSettings,
-        formula_cells: Vec<(CellId, SheetId, String)>,
-        allocator: std::sync::Arc<IdAllocator>,
-    ) {
-        self.iterative_calc = settings.enable_iterative_calculation;
-        self.max_iterations = settings.max_iterations;
-        self.max_change = settings.max_change.get();
-        self.calc_mode = settings.calc_mode;
-        self.sheet_order = sheet_order
-            .iter()
-            .enumerate()
-            .map(|(i, &id)| (id, i))
-            .collect();
-        self.rebuild_ordered_sheets_cache();
-        self.id_alloc = allocator;
-        cell_store.set_id_alloc(self.id_alloc.clone());
-        self.normalize_raw_named_ranges_for_graph(cell_store);
-        self.seed_cell_formula_text(&formula_cells);
-        self.deferred_formula_cells = Some(formula_cells);
-        self.workbook_load_pending = false;
-    }
-
     /// Ultra-minimal init for deferred-hydration XLSX import.
     /// Seeds formula text for materialized cells but defers graph construction.
     /// Builds CellStore from the sparse first-paint snapshot, which includes

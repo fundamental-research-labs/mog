@@ -38,13 +38,6 @@ fn normalize_date_serial(serial: f64) -> Result<f64, CellError> {
 ///    whole calendar days.
 ///  - Boolean entries in either position cause the pair to be skipped.
 ///  - If the date is Null/Boolean the pair is skipped regardless.
-pub(super) fn collect_value_date_pairs(
-    flat_vals: &[CellValue],
-    flat_dates: &[CellValue],
-) -> Result<(Vec<f64>, Vec<f64>), CellError> {
-    collect_value_date_pairs_with_context(flat_vals, flat_dates, &FunctionContext::default())
-}
-
 /// Collect value/date pairs after converting workbook-relative date serials to
 /// the canonical 1900 system. Date-like text is already civil-date based and
 /// therefore is not shifted a second time in a 1904 workbook.

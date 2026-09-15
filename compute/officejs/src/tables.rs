@@ -505,7 +505,7 @@ impl TableRef {
 }
 
 /// Load the scalar properties supported by the Office.js table adapter.
-pub(crate) fn load_table_properties(
+fn load_table_properties(
     table: &TableState,
     properties: &[String],
 ) -> Result<HashMap<String, Value>, TableError> {

@@ -9,7 +9,9 @@ use serde_json::{Value, json};
 use value_types::CellValue;
 
 use crate::borders::{BorderCollectionRef, BorderError, BorderRef};
-use crate::dispatch::{ExtensionBinding, ExtensionHandler, ExtensionRegistry, HostDispatchContext};
+use crate::dispatch::{ExtensionBinding, ExtensionRegistry, HostDispatchContext};
+#[cfg(test)]
+use crate::dispatch::ExtensionHandler;
 use crate::format::{FormatError, FormatRef};
 use crate::names::{self, NameError, NamedItemCollectionRef, NamedItemRef};
 use crate::range_content::{self, RangeContentError};
@@ -477,10 +479,6 @@ impl RangeRef {
     pub(crate) fn address(&self) -> Option<&str> {
         self.address.as_deref()
     }
-
-    pub(crate) fn is_null_object(&self) -> bool {
-        self.is_null_object
-    }
 }
 
 #[derive(Clone)]
@@ -581,6 +579,7 @@ impl Host {
     /// Register a family handler before evaluating a script.  Registration
     /// is intentionally separate from the core `Op` enum so independent
     /// object families can be added in their own modules.
+    #[cfg(test)]
     pub(crate) fn register_extension<H>(&self, handler: H)
     where
         H: ExtensionHandler + 'static,
@@ -616,30 +615,11 @@ impl Host {
             })
     }
 
-    pub(crate) fn lookup_format(&self, id: &str) -> Result<FormatRef, BatchError> {
-        self.formats
-            .lock()
-            .expect("formats lock")
-            .get(id)
-            .cloned()
-            .ok_or_else(|| BatchError {
-                code: "InvalidObjectPath",
-                message: "The RangeFormat object is not available.".to_string(),
-            })
-    }
-
     pub(crate) fn bind_worksheet(&self, id: &str, worksheet: WorksheetRef) {
         self.sheets
             .lock()
             .expect("sheets lock")
             .insert(id.to_string(), worksheet);
-    }
-
-    pub(crate) fn bind_range(&self, id: &str, range: RangeRef) {
-        self.ranges
-            .lock()
-            .expect("ranges lock")
-            .insert(id.to_string(), range);
     }
 
     pub(crate) fn bind_extension_object(&self, id: &str, binding: ExtensionBinding) {
@@ -661,9 +641,8 @@ impl Host {
         &self,
         operation: &Value,
         loaded: &mut HashMap<String, HashMap<String, Value>>,
-        results: &mut HashMap<String, Value>,
     ) -> Result<ExtensionDispatch, BatchError> {
-        let mut context = HostDispatchContext::new(self, loaded, results);
+        let mut context = HostDispatchContext::new(self, loaded);
         let handled = self.extensions.dispatch(operation, &mut context)?;
         Ok(ExtensionDispatch {
             handled,
@@ -750,7 +729,7 @@ impl Host {
             // Give extension handlers first refusal for both new operation
             // names and property additions to existing core objects.  A
             // handler can return `false` to preserve the core path below.
-            let dispatch = self.dispatch_extension(&raw_op, &mut loaded, &mut results)?;
+            let dispatch = self.dispatch_extension(&raw_op, &mut loaded)?;
             let has_delegated_load = dispatch.delegated_load.is_some();
             let raw_op = if let Some((target_id, properties)) = dispatch.delegated_load {
                 let operation_id =

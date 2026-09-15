@@ -85,6 +85,14 @@ impl ComputeEngine {
         construction::from_xlsx_bytes(xlsx_data)
     }
 
+    /// Stream-load XLSX bytes, invoking `on_chunk` as cells land in the live store.
+    pub fn from_xlsx_bytes_with_progress(
+        xlsx_data: &[u8],
+        on_chunk: impl FnMut(&xlsx_parser::StreamLoadStats, &crate::cells::CellStore) + 'static,
+    ) -> Result<(Self, RecalcResult), ComputeError> {
+        construction::from_xlsx_bytes_with_progress(xlsx_data, on_chunk)
+    }
+
     /// Stream-load a local `.xlsx` without copying the package into a `Vec<u8>`.
     #[cfg(all(not(target_arch = "wasm32"), feature = "native"))]
     pub fn from_xlsx_path(path: &str) -> Result<(Self, RecalcResult), ComputeError> {

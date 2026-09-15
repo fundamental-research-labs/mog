@@ -9,7 +9,7 @@ use ooxml_types::charts::{
 use ooxml_types::drawings::{
     ColorTransform, DrawingColor, EffectList, EffectProperties, OuterShadow, Paragraph,
     ParagraphProperties, ShapeProperties, StAngle, StPositiveCoordinate, TextAlign, TextAnchor,
-    TextBody, TextRunContent,
+    TextBody,
 };
 
 use super::formatting::{

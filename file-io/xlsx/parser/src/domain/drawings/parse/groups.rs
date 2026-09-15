@@ -20,6 +20,7 @@ use super::shapes::parse_shape_with_namespace_context;
 use super::styling::{parse_effect_list, parse_fill_with_namespace_context};
 
 /// Parse a group shape element (CT_GroupShape).
+#[cfg(test)]
 pub fn parse_group_shape(xml: &[u8], start: usize) -> Option<GroupShape> {
     parse_group_shape_with_namespace_context(xml, start, &[])
 }

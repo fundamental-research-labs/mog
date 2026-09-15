@@ -7,4 +7,6 @@
 #![allow(unused_imports)]
 
 pub(crate) use super::parse::pictures::parse_picture_locking;
-pub use super::parse::pictures::{parse_blip_fill, parse_compression_state, parse_picture};
+pub use super::parse::pictures::{parse_blip_fill, parse_compression_state};
+#[cfg(test)]
+pub use super::parse::pictures::parse_picture;

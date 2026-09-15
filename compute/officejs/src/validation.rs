@@ -252,23 +252,6 @@ impl ValidationRef {
         Ok(Value::Null)
     }
 
-    /// Return the coordinates whose current values fail the durable
-    /// validation engine for this DataValidation range.
-    ///
-    /// This deliberately asks the engine to validate every cell instead of
-    /// decoding the stored rule in the Office.js adapter. In particular, the
-    /// engine owns blank handling, list membership, custom formulas, and
-    /// relative formula references.
-    pub(crate) fn invalid_cells(&self) -> Result<Vec<(u32, u32)>, ValidationError> {
-        let bounds = self.bounds()?;
-        let candidates = self.candidates()?;
-        let selected = select_candidate(&candidates, bounds);
-        let Some(_selected) = selected else {
-            return Ok(Vec::new());
-        };
-        self.invalid_cells_for_selected()
-    }
-
     fn invalid_cells_for_selected(&self) -> Result<Vec<(u32, u32)>, ValidationError> {
         let bounds = self.bounds()?;
         let values = self

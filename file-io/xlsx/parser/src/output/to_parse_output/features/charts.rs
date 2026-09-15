@@ -13,9 +13,7 @@ use chart_frames::{
 #[cfg(test)]
 pub(crate) use chart_frames::{chart_ex_anchor_position, chart_ref_extent_from_spec};
 pub(crate) use chart_specs::build_fallback_chart_spec;
-pub(crate) use source_fingerprint::{
-    finalize_standard_chart_source_fingerprints, standard_chart_source_fingerprint,
-};
+pub(crate) use source_fingerprint::finalize_standard_chart_source_fingerprints;
 
 // =============================================================================
 // Domain conversions: Charts and Pivots

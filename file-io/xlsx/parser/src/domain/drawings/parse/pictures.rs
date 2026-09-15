@@ -15,7 +15,7 @@ use super::super::types::{
 };
 use super::non_visual::parse_nv_props;
 use super::styling::{
-    parse_color, parse_fill, parse_fill_with_namespace_context,
+    parse_color, parse_fill_with_namespace_context,
     parse_shape_properties_with_namespace_context, parse_shape_style,
 };
 use crate::infra::xml_namespaces::NamespaceMap;
@@ -25,6 +25,7 @@ use ooxml_types::drawings::{
 };
 
 /// Parse a picture element
+#[cfg(test)]
 pub fn parse_picture(xml: &[u8], start: usize) -> Option<SpreadsheetPicture> {
     parse_picture_with_namespace_context(xml, start, &[])
 }

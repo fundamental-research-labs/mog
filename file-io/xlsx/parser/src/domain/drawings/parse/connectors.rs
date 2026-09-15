@@ -10,6 +10,7 @@ use super::pictures::{merge_namespace_declarations, namespace_declarations};
 use super::styling::{parse_shape_properties_with_namespace_context, parse_shape_style};
 
 /// Parse a connector element.
+#[cfg(test)]
 pub fn parse_connector(xml: &[u8], start: usize) -> Option<SpreadsheetConnector> {
     parse_connector_with_namespace_context(xml, start, &[])
 }

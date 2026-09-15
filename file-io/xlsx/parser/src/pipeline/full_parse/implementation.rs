@@ -1123,6 +1123,17 @@ fn parse_sheets_sequential(
             &strings_buffer,
             shared_strings,
         );
+        if !crate::pipeline::streaming::stream_retain_cells() {
+            for cell in &cells {
+                crate::pipeline::streaming::notify_stream_resolved(
+                    cell.row,
+                    cell.col,
+                    cell.value.as_deref(),
+                    cell.formula.as_deref(),
+                );
+            }
+            cells.clear();
+        }
         let ws_t4 = tick(timings);
 
         *total_cells += cell_count as u32;

@@ -89,15 +89,6 @@ pub(super) fn is_excel_weekend_mask(serial: f64, weekend_mask: &[bool; 7]) -> bo
 // Array broadcasting helpers (for SUMPRODUCT compatibility)
 // ---------------------------------------------------------------------------
 
-pub(super) fn add_months(date: NaiveDate, months: i32) -> Option<NaiveDate> {
-    let total_months = date.year() * 12 + date.month0() as i32 + months;
-    let new_year = total_months.div_euclid(12);
-    let new_month = (total_months.rem_euclid(12) + 1) as u32;
-    let max_day = last_day_of_month(new_year, new_month);
-    let new_day = date.day().min(max_day);
-    NaiveDate::from_ymd_opt(new_year, new_month, new_day)
-}
-
 pub(super) fn last_day_of_month(year: i32, month: u32) -> u32 {
     match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,

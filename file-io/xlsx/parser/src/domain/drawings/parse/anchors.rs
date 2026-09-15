@@ -15,6 +15,7 @@ use super::content::parse_drawing_content_with_namespace_context;
 use super::pictures::{merge_namespace_declarations, namespace_declarations};
 
 /// Parse a two-cell anchor element
+#[cfg(test)]
 pub fn parse_two_cell_anchor(xml: &[u8], start: usize) -> Option<TwoCellAnchor> {
     parse_two_cell_anchor_with_namespace_context(xml, start, &[])
 }
@@ -54,6 +55,7 @@ pub(crate) fn parse_two_cell_anchor_with_namespace_context(
 }
 
 /// Parse a one-cell anchor element
+#[cfg(test)]
 pub fn parse_one_cell_anchor(xml: &[u8], start: usize) -> Option<OneCellAnchor> {
     parse_one_cell_anchor_with_namespace_context(xml, start, &[])
 }
@@ -89,6 +91,7 @@ pub(crate) fn parse_one_cell_anchor_with_namespace_context(
 }
 
 /// Parse an absolute anchor element
+#[cfg(test)]
 pub fn parse_absolute_anchor(xml: &[u8], start: usize) -> Option<AbsoluteAnchor> {
     parse_absolute_anchor_with_namespace_context(xml, start, &[])
 }

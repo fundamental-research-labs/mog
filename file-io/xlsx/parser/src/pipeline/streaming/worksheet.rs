@@ -21,10 +21,13 @@ use std::cell::{Cell, RefCell};
 thread_local! {
     static LAST_STREAM_STATS: RefCell<StreamLoadStats> = RefCell::new(StreamLoadStats::default());
     static STREAM_CELL_HOOK: RefCell<Option<StreamCellHook>> = RefCell::new(None);
+    static STREAM_RESOLVED_HOOK: RefCell<Option<StreamResolvedHook>> = RefCell::new(None);
     static CURRENT_STREAM_SHEET: Cell<usize> = const { Cell::new(0) };
+    static STREAM_RETAIN_CELLS: Cell<bool> = const { Cell::new(true) };
 }
 
 type StreamCellHook = Box<dyn FnMut(usize, &CellData, &[u8], &StreamLoadStats)>;
+type StreamResolvedHook = Box<dyn FnMut(usize, u32, u32, Option<&str>, Option<&str>)>;
 
 /// Install a cell observer for the duration of `f`.
 ///
@@ -38,7 +41,33 @@ pub fn with_stream_cell_hook<R>(
     CURRENT_STREAM_SHEET.with(|idx| idx.set(0));
     let result = f();
     STREAM_CELL_HOOK.with(|slot| *slot.borrow_mut() = None);
+    STREAM_RESOLVED_HOOK.with(|slot| *slot.borrow_mut() = None);
+    STREAM_RETAIN_CELLS.with(|flag| flag.set(true));
     result
+}
+
+pub fn set_stream_resolved_hook(
+    hook: impl FnMut(usize, u32, u32, Option<&str>, Option<&str>) + 'static,
+) {
+    STREAM_RESOLVED_HOOK.with(|slot| *slot.borrow_mut() = Some(Box::new(hook)));
+}
+
+pub(crate) fn notify_stream_resolved(
+    row: u32,
+    col: u32,
+    value: Option<&str>,
+    formula: Option<&str>,
+) {
+    STREAM_RESOLVED_HOOK.with(|slot| {
+        if let Some(hook) = slot.borrow_mut().as_mut() {
+            let sheet_idx = CURRENT_STREAM_SHEET.with(|idx| idx.get());
+            hook(sheet_idx, row, col, value, formula);
+        }
+    });
+}
+
+pub(crate) fn stream_retain_cells() -> bool {
+    STREAM_RETAIN_CELLS.with(|flag| flag.get())
 }
 
 pub(crate) fn set_current_stream_sheet(sheet_idx: usize) {

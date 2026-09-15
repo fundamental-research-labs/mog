@@ -126,14 +126,6 @@ impl TableColumnRef {
         Self { table, column_id }
     }
 
-    pub(crate) fn key(&self) -> &str {
-        &self.column_id
-    }
-
-    pub(crate) fn table(&self) -> TableRef {
-        self.table.clone()
-    }
-
     pub(crate) fn sheet(&self) -> Sheet {
         self.table.sheet()
     }
@@ -304,10 +296,6 @@ impl TableRowRef {
 
     pub(crate) fn index(&self) -> u32 {
         self.relative_index
-    }
-
-    pub(crate) fn table(&self) -> TableRef {
-        self.table.clone()
     }
 
     pub(crate) fn sheet(&self) -> Sheet {

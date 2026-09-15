@@ -83,6 +83,7 @@ pub(crate) struct DispatchedContent {
 }
 
 /// Parse drawing content using the contract dispatch precedence.
+#[cfg(test)]
 pub(crate) fn dispatch_drawing_content(xml: &[u8]) -> DispatchedContent {
     dispatch_drawing_content_with_namespace_context(xml, &[])
 }
@@ -228,6 +229,7 @@ pub(crate) fn dispatch_drawing_content_with_namespace_context(
     }
 }
 
+#[cfg(test)]
 pub(crate) fn parse_drawing_content(xml: &[u8]) -> DrawingContent {
     parse_drawing_content_with_namespace_context(xml, &[])
 }

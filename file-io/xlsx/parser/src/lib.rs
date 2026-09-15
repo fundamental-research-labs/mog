@@ -233,7 +233,8 @@ pub use infra::arena::ParseArena;
 
 pub use pipeline::streaming::{
     DEFAULT_BUFFER_SIZE, ParseState, StreamLoadStats, StreamingCellParser, StreamingDeflate,
-    last_stream_load_stats, reset_stream_load_stats, stream_parse_worksheet, with_stream_cell_hook,
+    last_stream_load_stats, reset_stream_load_stats, set_stream_resolved_hook,
+    stream_parse_worksheet, with_stream_cell_hook,
 };
 
 // === Utilities ===

@@ -166,11 +166,13 @@ pub(crate) fn pre_sheet_data_region(xml: &[u8]) -> &[u8] {
     find_sheet_data_bounds(xml, 0).map_or(xml, |bounds| &xml[..bounds.start])
 }
 
+#[cfg(test)]
 #[inline]
 pub(crate) fn post_sheet_data_region(xml: &[u8]) -> &[u8] {
     find_sheet_data_bounds(xml, 0).map_or(&xml[xml.len()..], |bounds| &xml[bounds.end..])
 }
 
+#[cfg(test)]
 pub(crate) fn count_worksheet_cell_elements(xml: &[u8]) -> usize {
     let mut count = 0usize;
     let mut pos = 0usize;

@@ -1,7 +1,4 @@
-use crate::domain::cells::{
-    find_closing_tag_span, find_start_tag,
-    post_sheet_data_region as worksheet_post_sheet_data_region,
-};
+use crate::domain::cells::{find_closing_tag_span, find_start_tag};
 use crate::infra::xml::parse_string_attr;
 use crate::infra::xml_fragment::extract_element_bounds;
 use crate::infra::xml_namespaces::NamespaceMap;
@@ -416,8 +413,9 @@ pub(super) fn find_matching_alternate_content_end(xml: &[u8], start: usize) -> O
 /// Falls back to an empty slice at end-of-file so that callers never receive
 /// the full document as the "post" region, which would cause the root
 /// `<worksheet>` opening tag to be mistakenly captured as a preserved child.
+#[cfg(test)]
 pub(super) fn find_post_sheet_data_region(xml: &[u8]) -> &[u8] {
-    worksheet_post_sheet_data_region(xml)
+    crate::domain::cells::post_sheet_data_region(xml)
 }
 
 pub(super) fn parse_external_reference_rids(workbook_xml: &[u8]) -> Vec<String> {

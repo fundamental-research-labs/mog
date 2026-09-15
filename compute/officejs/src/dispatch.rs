@@ -21,7 +21,6 @@ use std::sync::{Arc, Mutex};
 use compute_api::Workbook;
 use serde_json::Value;
 
-use crate::format::FormatRef;
 use crate::host::{BatchError, Host, RangeRef, mark_object};
 use crate::worksheets::WorksheetRef;
 
@@ -63,18 +62,6 @@ impl ExtensionBinding {
             typed: Some(typed),
             is_null_object: false,
         }
-    }
-
-    pub(crate) fn null() -> Self {
-        Self {
-            object: None,
-            typed: None,
-            is_null_object: true,
-        }
-    }
-
-    pub(crate) fn is_null_object(&self) -> bool {
-        self.is_null_object
     }
 
     pub(crate) fn downcast<T>(&self) -> Option<Arc<T>>
@@ -179,14 +166,6 @@ impl ExtensionRegistry {
             .push(Arc::new(handler));
     }
 
-    /// Register a handler that is already shared by another host owner.
-    pub(crate) fn register_arc(&self, handler: Arc<dyn ExtensionHandler>) {
-        self.handlers
-            .lock()
-            .expect("extension handlers lock")
-            .push(handler);
-    }
-
     pub(crate) fn dispatch(
         &self,
         operation: &Value,
@@ -217,7 +196,6 @@ impl ExtensionRegistry {
 pub(crate) struct HostDispatchContext<'a> {
     host: &'a Host,
     loaded: &'a mut HashMap<String, HashMap<String, Value>>,
-    results: &'a mut HashMap<String, Value>,
     delegated_load: Option<(String, Vec<String>)>,
 }
 
@@ -225,12 +203,10 @@ impl<'a> HostDispatchContext<'a> {
     pub(crate) fn new(
         host: &'a Host,
         loaded: &'a mut HashMap<String, HashMap<String, Value>>,
-        results: &'a mut HashMap<String, Value>,
     ) -> Self {
         Self {
             host,
             loaded,
-            results,
             delegated_load: None,
         }
     }
@@ -250,24 +226,10 @@ impl<'a> HostDispatchContext<'a> {
         self.host.lookup_range(id)
     }
 
-    /// Resolve an existing RangeFormat-family binding when a new family adds
-    /// scalar properties to it.
-    pub(crate) fn format(&self, id: &str) -> Result<FormatRef, BatchError> {
-        self.host.lookup_format(id)
-    }
-
     /// Bind a family-produced Worksheet reference and mark it present in the
     /// current sync response.
     pub(crate) fn bind_worksheet(&mut self, id: &str, worksheet: WorksheetRef) {
         self.host.bind_worksheet(id, worksheet);
-        mark_object(self.loaded, id, false);
-    }
-
-    /// Bind a family-produced Range reference and mark it present in the
-    /// current sync response.  This reuses the core Range host map, so all
-    /// existing range navigation/content/format handlers can consume it.
-    pub(crate) fn bind_range(&mut self, id: &str, range: RangeRef) {
-        self.host.bind_range(id, range);
         mark_object(self.loaded, id, false);
     }
 
@@ -296,58 +258,6 @@ impl<'a> HostDispatchContext<'a> {
                 code: "InvalidObjectPath",
                 message: "The extension object is not available.".to_string(),
             })
-    }
-
-    /// Bind an Office.js `OrNullObject` result.
-    pub(crate) fn bind_null_object(&mut self, id: &str) {
-        self.host
-            .bind_extension_object(id, ExtensionBinding::null());
-        mark_object(self.loaded, id, true);
-    }
-
-    /// Add one loaded property to the response for an object bound by this
-    /// or another family operation in the same batch.
-    pub(crate) fn set_loaded(&mut self, id: &str, property: &str, value: Value) {
-        self.loaded
-            .entry(id.to_string())
-            .or_default()
-            .insert(property.to_string(), value);
-    }
-
-    /// Merge a loaded-property projection into the response.
-    pub(crate) fn extend_loaded(&mut self, id: &str, properties: HashMap<String, Value>) {
-        self.loaded
-            .entry(id.to_string())
-            .or_default()
-            .extend(properties);
-    }
-
-    /// Complete a deferred `ClientResult` queued by a family proxy.
-    pub(crate) fn set_result(&mut self, result_id: &str, value: Value) {
-        self.results.insert(result_id.to_string(), value);
-    }
-
-    /// Leave selected properties of a `load` operation for the central host
-    /// loader.  A family handler can therefore project its own properties
-    /// into `loaded`, delegate the remaining properties here, and return
-    /// `true` without swallowing a mixed request such as
-    /// `Range.load(["hyperlink", "values"])`.
-    pub(crate) fn delegate_load(
-        &mut self,
-        id: &str,
-        properties: &[String],
-    ) -> Result<(), BatchError> {
-        if self
-            .delegated_load
-            .replace((id.to_string(), properties.to_vec()))
-            .is_some()
-        {
-            return Err(BatchError {
-                code: "InvalidArgument",
-                message: "A family load handler delegated properties more than once.".to_string(),
-            });
-        }
-        Ok(())
     }
 
     pub(crate) fn take_delegated_load(&mut self) -> Option<(String, Vec<String>)> {

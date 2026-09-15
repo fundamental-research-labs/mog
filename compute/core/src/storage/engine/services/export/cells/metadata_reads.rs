@@ -2,22 +2,16 @@ use cell_types::{CellId, SheetId};
 use rustc_hash::FxHashMap;
 
 use crate::storage::engine::stores::EngineStores;
-use crate::storage::properties::{self, CellProperties};
 
-pub(super) fn batch_read_props_array_refs_and_formula_metadata(
+pub(super) fn batch_read_array_refs_and_formula_metadata(
     stores: &EngineStores,
     cell_store: &crate::cells::CellStore,
     sheet_id: &SheetId,
 ) -> (
-    FxHashMap<CellId, CellProperties>,
     FxHashMap<CellId, String>,
     FxHashMap<CellId, crate::storage::FormulaMetadata>,
     FxHashMap<CellId, domain_types::RichSharedString>,
 ) {
-    let all_props = properties::get_all_properties(&stores.storage, sheet_id)
-        .into_iter()
-        .collect();
-
     // --- Array formula refs + formula metadata ---
     let mut array_refs = FxHashMap::default();
     let mut formula_metadata = FxHashMap::default();
@@ -61,5 +55,5 @@ pub(super) fn batch_read_props_array_refs_and_formula_metadata(
         }
     }
 
-    (all_props, array_refs, formula_metadata, rich_strings)
+    (array_refs, formula_metadata, rich_strings)
 }

@@ -528,15 +528,11 @@ fn inline_cell_xfs_snapshot_inherited_row_and_column_fills_and_explicit_no_fill(
 fn imported_style_only_blank_cells_do_not_export_as_cells() {
     let sheet_id = SheetId::from_raw(103);
     let blank_cell_id = CellId::from_raw(203);
-    let mut props = FxHashMap::default();
-    props.insert(
-        blank_cell_id,
-        CellProperties {
-            format: None,
-            style_id: Some(15),
-            ..Default::default()
-        },
-    );
+    let props = CellProperties {
+        format: None,
+        style_id: Some(15),
+        ..Default::default()
+    };
     let array_refs = FxHashMap::default();
     let formula_metadata = FxHashMap::default();
     let rich_strings = FxHashMap::default();
@@ -551,7 +547,7 @@ fn imported_style_only_blank_cells_do_not_export_as_cells() {
         &blank_cell_id,
         1,
         55,
-        &props,
+        props,
         &array_refs,
         &formula_metadata,
         &rich_strings,
@@ -590,7 +586,6 @@ fn explicit_blank_cell_export_ignores_col_data_effective_value() {
         "effective reads should still see the materialized col_data value"
     );
 
-    let props = FxHashMap::default();
     let array_refs = FxHashMap::default();
     let formula_metadata = FxHashMap::default();
     let rich_strings = FxHashMap::default();
@@ -603,7 +598,7 @@ fn explicit_blank_cell_export_ignores_col_data_effective_value() {
         &blank_cell_id,
         0,
         0,
-        &props,
+        CellProperties::default(),
         &array_refs,
         &formula_metadata,
         &rich_strings,
@@ -667,6 +662,55 @@ fn cached_shared_string_metadata_survives_hydration_export() {
 
     assert_eq!(exported.original_sst_index, Some(7));
     assert_eq!(exported.original_value.as_deref(), Some("7"));
+}
+
+#[test]
+fn repeated_export_preserves_long_formula_cache_and_lexical_metadata() {
+    let text = " cached & <text> שלום ".repeat(1000);
+    let provenance = domain_types::FormulaCacheProvenance {
+        state: domain_types::FormulaCacheState::ImportedCurrent,
+        cached_value_kind: Some(6),
+        cached_value_presence: domain_types::FormulaCachedValuePresence::NonEmpty,
+        cached_value_lexeme: Some(text.clone()),
+        value_preserve_space: true,
+        formula_preserve_space: true,
+        ..Default::default()
+    };
+    let input = domain_types::ParseOutput {
+        sheets: vec![domain_types::SheetData {
+            name: "Sheet1".to_string(),
+            rows: 2,
+            cols: 1,
+            cells: vec![domain_types::CellData {
+                value: CellValue::Text(text.clone().into()),
+                formula: Some("A2".to_string()),
+                formula_result_type: Some(6),
+                original_value: Some(text.clone()),
+                formula_cache_provenance: provenance.clone(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let (engine, sheet_id) = engine_from_parse_output(&input);
+
+    // Saving must move only the export copy, leaving native caches intact for
+    // subsequent saves. The cached text deliberately differs from A2's value.
+    for _ in 0..2 {
+        let mut palette = Vec::new();
+        let palette = LocalPalette::from_vec(&mut palette);
+        let cells = export_cells_for_sheet(&engine.stores, &engine.cell_store, &sheet_id, &palette);
+        let cell = cells
+            .iter()
+            .find(|cell| cell.row == 0 && cell.col == 0)
+            .unwrap();
+        assert_eq!(cell.value, input.sheets[0].cells[0].value);
+        assert_eq!(cell.formula.as_deref(), Some("A2"));
+        assert_eq!(cell.formula_result_type, Some(6));
+        assert_eq!(cell.original_value.as_deref(), Some(text.as_str()));
+        assert_eq!(cell.formula_cache_provenance, provenance);
+    }
 }
 
 #[test]

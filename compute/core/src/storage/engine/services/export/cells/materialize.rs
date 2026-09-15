@@ -18,7 +18,7 @@ pub(super) fn build_cell_data_for_cell_id(
     cell_id: &CellId,
     row: u32,
     col: u32,
-    all_props: &FxHashMap<CellId, CellProperties>,
+    cell_props: CellProperties,
     array_refs: &FxHashMap<CellId, String>,
     formula_metadata: &FxHashMap<CellId, crate::storage::FormulaMetadata>,
     rich_strings: &FxHashMap<CellId, domain_types::RichSharedString>,
@@ -49,36 +49,33 @@ pub(super) fn build_cell_data_for_cell_id(
                 .map(|f| format!("={}", f.template))
         });
 
-    let cell_props = all_props.get(cell_id);
-    let style_id = cell_style_id(stores, cell_store, sheet_id, row, col, cell_props, palette);
+    let style_id = cell_style_id(
+        stores,
+        cell_store,
+        sheet_id,
+        row,
+        col,
+        Some(&cell_props),
+        palette,
+    );
 
-    let cell_metadata_index = cell_props.and_then(|props| props.cell_metadata_index);
-    let mut vm = cell_props.and_then(|props| props.vm);
-    let imported_rich_error = cell_props
-        .and_then(|props| props.imported_rich_error)
-        .filter(|imported| {
-            let current = vm == Some(imported.vm)
-                && matches!(&value, CellValue::Error(error, _) if *error == imported.semantic);
-            if !current {
-                vm = None;
-            }
-            current
-        });
-    let formula_result_type = cell_props.and_then(|props| props.formula_result_type);
-    let has_empty_cached_value = cell_props
-        .map(|props| props.has_empty_cached_value)
-        .unwrap_or(false);
-    let formula_cache_provenance = cell_props
-        .map(|props| props.formula_cache_provenance.clone())
-        .unwrap_or_default();
-    let original_sst_index = cell_props.and_then(|props| props.original_sst_index);
-    let original_value = cell_props
-        .and_then(|props| props.original_value.as_ref())
-        .cloned();
-    let phonetic = cell_props.map(|props| props.phonetic).unwrap_or(false);
-    let date_lexical_value = cell_props
-        .and_then(|props| props.date_lexical_value.as_ref())
-        .cloned();
+    let cell_metadata_index = cell_props.cell_metadata_index;
+    let mut vm = cell_props.vm;
+    let imported_rich_error = cell_props.imported_rich_error.filter(|imported| {
+        let current = vm == Some(imported.vm)
+            && matches!(&value, CellValue::Error(error, _) if *error == imported.semantic);
+        if !current {
+            vm = None;
+        }
+        current
+    });
+    let formula_result_type = cell_props.formula_result_type;
+    let has_empty_cached_value = cell_props.has_empty_cached_value;
+    let formula_cache_provenance = &cell_props.formula_cache_provenance;
+    let original_sst_index = cell_props.original_sst_index;
+    let original_value = cell_props.original_value.as_ref();
+    let phonetic = cell_props.phonetic;
+    let date_lexical_value = cell_props.date_lexical_value.as_ref();
 
     let rich_string = rich_strings.get(cell_id).cloned();
     // An authored empty `<f>` has no executable formula text, but its typed
@@ -105,16 +102,16 @@ pub(super) fn build_cell_data_for_cell_id(
         && !preserve_blank
         && is_imported_style_only_blank(
             style_id,
-            cell_props,
+            Some(&cell_props),
             cell_metadata_index,
             vm,
             formula_result_type,
             has_empty_cached_value,
-            &formula_cache_provenance,
+            formula_cache_provenance,
             original_sst_index,
-            original_value.as_ref(),
+            original_value,
             phonetic,
-            date_lexical_value.as_ref(),
+            date_lexical_value,
         )
     {
         return None;
@@ -188,13 +185,13 @@ pub(super) fn build_cell_data_for_cell_id(
         cell_metadata_index,
         formula_result_type,
         has_empty_cached_value,
-        formula_cache_provenance,
+        formula_cache_provenance: cell_props.formula_cache_provenance,
         vm,
         imported_rich_error,
         phonetic,
-        date_lexical_value,
+        date_lexical_value: cell_props.date_lexical_value,
         original_sst_index,
-        original_value,
+        original_value: cell_props.original_value,
         projection_role: if dynamic {
             ImportedCellProjectionRole::DynamicArraySource
         } else {

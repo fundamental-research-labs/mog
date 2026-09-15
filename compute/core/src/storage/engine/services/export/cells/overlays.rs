@@ -5,10 +5,11 @@ use value_types::CellValue;
 
 use crate::cells::CellStore;
 use crate::storage::engine::stores::EngineStores;
+use crate::storage::properties::get_properties_by_id;
 
 use super::super::PaletteOps;
 use super::materialize::{build_cell_data_for_cell_id, range_payload_cell};
-use super::metadata_reads::batch_read_props_array_refs_and_formula_metadata;
+use super::metadata_reads::batch_read_array_refs_and_formula_metadata;
 use super::style_ids::positional_style_id_at;
 
 pub(in crate::storage::engine) fn export_cells_for_sheet(
@@ -19,9 +20,8 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
 ) -> Vec<CellData> {
     let mut profile = crate::xlsx_profile::PhaseTimer::new("export", "export_cells_for_sheet");
 
-    // Read native cell properties and formula metadata using typed CellId keys.
-    let (all_props, array_refs, formula_metadata, rich_strings) =
-        batch_read_props_array_refs_and_formula_metadata(stores, cell_store, sheet_id);
+    let (array_refs, formula_metadata, rich_strings) =
+        batch_read_array_refs_and_formula_metadata(stores, cell_store, sheet_id);
 
     let mut cells_by_pos: FxHashMap<(u32, u32), CellData> = FxHashMap::default();
     if let Some(sheet) = cell_store.get_sheet(sheet_id) {
@@ -34,7 +34,9 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                 &cell_id,
                 row,
                 col,
-                &all_props,
+                // Materialize only this cell's properties, then move their cache
+                // strings into the export cell instead of copying a whole sheet.
+                get_properties_by_id(&stores.storage, sheet_id, &cell_id).unwrap_or_default(),
                 &array_refs,
                 &formula_metadata,
                 &rich_strings,
@@ -100,7 +102,11 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                     // authored cell. Its value and metadata are authoritative
                     // even if the import cache still exists in a deferred or
                     // manually-calculated engine.
-                    if has_authored_cell_at(cell_store, sheet, SheetPos::new(cached.row, cached.col)) {
+                    if has_authored_cell_at(
+                        cell_store,
+                        sheet,
+                        SheetPos::new(cached.row, cached.col),
+                    ) {
                         continue;
                     }
                     match cells_by_pos.entry(key) {

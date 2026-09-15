@@ -53,6 +53,17 @@ CTOR_ALIASES = {
     "DataHierarchy": "Excel.DataPivotHierarchy",
 }
 
+# One Mog constructor implements several Microsoft types. Table.sort returns
+# RangeSort; filterHierarchies uses PivotHierarchyList (already aliased to
+# RowColumnPivotHierarchyCollection). Copy implemented members onto those
+# catalog classes so host coverage matches what scripts call.
+SHARED_HOST_TYPES = {
+    "Excel.RangeSort": ("Excel.TableSort",),
+    "Excel.RowColumnPivotHierarchyCollection": (
+        "Excel.FilterPivotHierarchyCollection",
+    ),
+}
+
 APISET_RE = re.compile(
     r"API set:\s*(ExcelApi(?:Online|Desktop)?(?:\s+[\d.]+)?)",
     re.I,
@@ -436,7 +447,22 @@ def scan_officejs_host(src_dir: Path, catalog: dict[str, Any]) -> dict[tuple[str
     implemented[("Excel.RequestContext", "workbook")] = "property"
     implemented[("Excel.RequestContext", "sync")] = "method"
     implemented[("Excel", "run")] = "method"
+    expand_shared_host_types(implemented, class_ids)
     return implemented
+
+
+def expand_shared_host_types(
+    implemented: dict[tuple[str, str], str], class_ids: set[str]
+) -> None:
+    extra: dict[tuple[str, str], str] = {}
+    for src, dests in SHARED_HOST_TYPES.items():
+        for (cid, name), kind in implemented.items():
+            if cid != src:
+                continue
+            for dest in dests:
+                if dest in class_ids:
+                    extra[(dest, name)] = kind
+    implemented.update(extra)
 
 
 TOKEN_RE = re.compile(

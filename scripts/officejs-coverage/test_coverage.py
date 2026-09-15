@@ -217,6 +217,64 @@ class HostScanTests(unittest.TestCase):
         self.assertIn(("Excel.Range", "values"), implemented)
         self.assertIn(("Excel.WorksheetFreezePanes", "freezeRows"), implemented)
 
+    def test_shared_host_types_table_sort_and_filter_hierarchies(self) -> None:
+        js = """
+        function RangeSort(context, range) {}
+        RangeSort.prototype.apply = function (fields) {};
+        Excel.RangeSort = RangeSort;
+        function PivotHierarchyList(context, pivot, area) {}
+        PivotHierarchyList.prototype.add = function (hierarchy) {};
+        Excel.RowColumnPivotHierarchyCollection = PivotHierarchyList;
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp)
+            (src / "host.js").write_text(js)
+            catalog = {
+                "classes": [
+                    {
+                        "id": "Excel.RangeSort",
+                        "family": "object-model",
+                        "methods": [{"name": "apply", "kind": "method", "returnType": "void"}],
+                        "properties": [],
+                        "events": [],
+                    },
+                    {
+                        "id": "Excel.TableSort",
+                        "family": "object-model",
+                        "methods": [
+                            {"name": "apply", "kind": "method", "returnType": "void"},
+                            {"name": "clear", "kind": "method", "returnType": "void"},
+                        ],
+                        "properties": [],
+                        "events": [],
+                    },
+                    {
+                        "id": "Excel.RowColumnPivotHierarchyCollection",
+                        "family": "object-model",
+                        "methods": [{"name": "add", "kind": "method", "returnType": "void"}],
+                        "properties": [],
+                        "events": [],
+                    },
+                    {
+                        "id": "Excel.FilterPivotHierarchyCollection",
+                        "family": "object-model",
+                        "methods": [
+                            {"name": "add", "kind": "method", "returnType": "void"},
+                            {"name": "getItem", "kind": "method", "returnType": "void"},
+                        ],
+                        "properties": [],
+                        "events": [],
+                    },
+                ]
+            }
+            implemented = cov.scan_officejs_host(src, catalog)
+        self.assertIn(("Excel.RangeSort", "apply"), implemented)
+        self.assertIn(("Excel.TableSort", "apply"), implemented)
+        self.assertNotIn(("Excel.TableSort", "clear"), implemented)
+        self.assertIn(("Excel.RowColumnPivotHierarchyCollection", "add"), implemented)
+        self.assertIn(("Excel.FilterPivotHierarchyCollection", "add"), implemented)
+        self.assertNotIn(("Excel.FilterPivotHierarchyCollection", "getItem"), implemented)
+
 
 if __name__ == "__main__":
     unittest.main()

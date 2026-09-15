@@ -18,6 +18,7 @@
 //! stubbed with empty Vecs until export support is wired.
 
 mod cells;
+pub(crate) mod cell_context;
 mod comments;
 mod diagnostics;
 mod dropped_import_diagnostics;
@@ -39,6 +40,7 @@ use crate::infra::opc::{
     REL_COMMENTS, REL_THREADED_COMMENT, REL_VML_DRAWING, resolve_relationship_target,
 };
 use cells::*;
+pub(crate) use cells::parse_range_ref as stream_range;
 use comments::build_sheet_comment_package_info;
 use diagnostics::{append_import_compatibility_acknowledgements, append_object_import_diagnostics};
 #[cfg(test)]
@@ -338,3 +340,5 @@ pub fn full_parse_result_to_parse_output(
 
 #[cfg(test)]
 mod tests;
+
+pub use features::{ChartSourceRange, refresh_chart_source_fingerprints};

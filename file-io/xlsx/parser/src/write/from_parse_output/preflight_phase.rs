@@ -6,7 +6,7 @@ use super::sheet_parts;
 use super::style_remap::build_style_export_plan;
 use crate::write::pivot_writer;
 
-pub(super) fn run(output: &ParseOutput) -> WorkbookPreflight {
+pub(super) fn run(output: ParseOutput) -> WorkbookPreflight {
     let (remapped_output, registry_dxfs) = differential_formats::remap_for_export(output);
     let mut remapped_output = remapped_output;
     super::chart_source_completion::complete_chart_sources_for_xlsx_export(&mut remapped_output);
@@ -30,7 +30,8 @@ pub(super) fn run(output: &ParseOutput) -> WorkbookPreflight {
             .and_then(|stylesheet| stylesheet.normalized().indexed_colors);
     }
 
-    let mut shared_strings = sheet_parts::build_shared_strings(&remapped_output);
+    // Reserve only as distinct values are encountered, not for every text cell.
+    let mut shared_strings = crate::write::SharedStringsWriter::new();
     shared_strings.set_root_ext_lst_xml(
         remapped_output
             .package_fidelity
@@ -56,6 +57,7 @@ pub(super) fn run(output: &ParseOutput) -> WorkbookPreflight {
         output: remapped_output,
         styles_writer,
         shared_strings,
+        style_remapper: style_export.remapper,
         sheet_writers,
         sheet_extras,
         all_chart_entries,

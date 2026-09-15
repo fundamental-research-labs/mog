@@ -3,26 +3,17 @@
 //! This module provides high-performance parsing of OOXML worksheet XML
 //! with zero allocations in the hot path and direct output to shared buffers.
 //!
-//! # Error Recovery
-//!
-//! The parser supports three modes of operation via `ParseContext`:
-//! - **Strict**: Fail on first error
-//! - **Lenient**: Skip problematic cells, continue parsing, collect errors
-//! - **Permissive**: Maximum recovery, use defaults for invalid data
-//!
-//! Use `parse_worksheet_with_context` for error recovery support, or
-//! `parse_worksheet_fast` for backward-compatible behavior.
+//! Cell scanning and metadata extraction are shared by the unified worksheet stream.
 
 // Internal submodules
 mod adapters;
 mod full_convert;
 mod helpers;
 mod parsing;
-mod recovery;
 pub mod types;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 // Re-export public types and constants
 pub use types::{
@@ -32,11 +23,6 @@ pub use types::{
     VALUE_TYPE_FORMULA, VALUE_TYPE_INLINE, VALUE_TYPE_NONE, VALUE_TYPE_SHARED_STRING,
 };
 
-// Re-export public parsing functions
-pub use parsing::{
-    parse_worksheet_fast, parse_worksheet_fast_with_extras, parse_worksheet_with_context,
-};
-
 pub(crate) use full_convert::{
     apply_parse_extras, build_col_style_ranges_from_widths, coalesce_authored_style_only_cells,
     col_style_range_at, convert_cell_data, data_table_info,
@@ -44,7 +30,7 @@ pub(crate) use full_convert::{
 #[cfg(test)]
 pub(crate) use helpers::post_sheet_data_region;
 pub(crate) use helpers::{
-    find_closing_tag_span, find_start_tag, parse_row_number, scan_cell, start_tag_at,
+    find_closing_tag_span, find_start_tag, matches_tag, parse_row_number, scan_cell, start_tag_at,
 };
 pub(crate) use parsing::{
     CellExtrasInput, apply_fast_row_attrs, collect_cell_extras, collect_formula_extras,

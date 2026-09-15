@@ -96,6 +96,10 @@ pub struct PackageGraphViolation {
 impl PackageGraphViolation {
     pub fn to_fingerprint(&self) -> FailureFingerprint {
         let (id, category) = match self.code {
+            PackageGraphViolationCode::UnreadableXmlPart => (
+                "pkg-xml-unreadable",
+                CorrectnessFingerprintCategory::PackageGraph,
+            ),
             PackageGraphViolationCode::MissingRelationshipOwner => (
                 "pkg-rel-owner-missing",
                 CorrectnessFingerprintCategory::PackageGraph,
@@ -157,6 +161,7 @@ impl PackageGraphViolation {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum PackageGraphViolationCode {
+    UnreadableXmlPart,
     MissingRelationshipOwner,
     DuplicateRelationshipId,
     InvalidRelationshipTarget,

@@ -14,10 +14,6 @@ fn finish_filter_mutation(
     result
 }
 
-fn ensure_filter_full_recalc_ready(engine: &ComputeEngine) -> Result<(), ComputeError> {
-    engine.stores.compute.ensure_graph_construction_ready()
-}
-
 pub(super) fn create_filter(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
@@ -34,7 +30,6 @@ pub(super) fn delete_filter(
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    ensure_filter_full_recalc_ready(engine)?;
     let mut result = filter_svc::delete_filter(
         &mut engine.stores,
         &mut engine.cell_store,
@@ -60,7 +55,6 @@ pub(super) fn set_column_filter(
     header_col: u32,
     criteria: filters::ColumnFilter,
 ) -> Result<MutationResult, ComputeError> {
-    ensure_filter_full_recalc_ready(engine)?;
     let result = filter_svc::set_column_filter(
         &mut engine.stores,
         &mut engine.cell_store,
@@ -89,7 +83,6 @@ pub(super) fn clear_column_filter(
     filter_id: &str,
     header_col: u32,
 ) -> Result<MutationResult, ComputeError> {
-    ensure_filter_full_recalc_ready(engine)?;
     let result = filter_svc::clear_column_filter(
         &mut engine.stores,
         &mut engine.cell_store,
@@ -116,7 +109,6 @@ pub(super) fn clear_all_column_filters(
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    ensure_filter_full_recalc_ready(engine)?;
     let result = filter_svc::clear_all_column_filters(
         &mut engine.stores,
         &mut engine.cell_store,
@@ -157,9 +149,6 @@ pub(super) fn apply_advanced_filter(
     request: filters::AdvancedFilterRequest,
 ) -> Result<MutationResult, ComputeError> {
     let mode = request.mode;
-    if matches!(mode, filters::AdvancedFilterMode::InPlace) {
-        ensure_filter_full_recalc_ready(engine)?;
-    }
     let mut result = advanced_filter_svc::apply_advanced_filter(
         &mut engine.stores,
         &mut engine.cell_store,
@@ -192,7 +181,6 @@ pub(super) fn apply_filter(
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    ensure_filter_full_recalc_ready(engine)?;
     let result = filter_svc::apply_filter(
         &mut engine.stores,
         &mut engine.cell_store,
@@ -208,7 +196,6 @@ pub(super) fn reapply_filter(
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    ensure_filter_full_recalc_ready(engine)?;
     let result = filter_svc::reapply_filter(
         &mut engine.stores,
         &mut engine.cell_store,
@@ -324,7 +311,6 @@ pub(super) fn clear_all_filters(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,
 ) -> Result<MutationResult, ComputeError> {
-    ensure_filter_full_recalc_ready(engine)?;
     let mut result =
         filter_svc::clear_all_filters(&mut engine.stores, &mut engine.cell_store, sheet_id)?;
     crate::storage::engine::cell_metadata::refresh(

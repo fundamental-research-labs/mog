@@ -12,8 +12,7 @@
 #![allow(clippy::string_slice)]
 
 use crate::domain::cells::{
-    apply_parse_extras, build_col_style_ranges_from_widths, coalesce_authored_style_only_cells,
-    convert_cell_data, data_table_info,
+    build_col_style_ranges_from_widths, coalesce_authored_style_only_cells, data_table_info,
 };
 use crate::domain::charts::read::{
     parse_charts_for_sheet, parse_connectors_for_sheet, parse_drawing_and_charts_for_sheet,
@@ -46,13 +45,13 @@ use crate::infra::error::{ParseContext, ParseMode};
 use crate::infra::opc::REL_HYPERLINK;
 use crate::infra::opc::opc_target_to_zip_path;
 use crate::output::results::{
-    DefinedNameOutput, FullCellData, FullParseError, FullParseResult, FullParsedSheet,
+    DefinedNameOutput, FullParseError, FullParseResult, FullParsedSheet,
     HyperlinkOutput, ImportedBinaryPart, ParseStats, ParseTimings, ProtectionOutput, RawVmlDrawing,
     SparklineSummary, StylesOutput,
 };
 use crate::zip::constants::{
     MAX_CHARTS, MAX_MERGES, MAX_PIVOTS, MAX_SHARED_STRINGS, MAX_STYLES, MAX_TABLES,
-    MAX_VALIDATIONS, MAX_WORKSHEET_CELLS,
+    MAX_VALIDATIONS,
 };
 use crate::zip::{XlsxArchive, ZipError};
 
@@ -320,6 +319,7 @@ fn legacy_sheet_num_for_context(context: &SheetPackageContext) -> usize {
 pub(super) fn parse_xlsx_full_native_impl(
     xlsx_data: &[u8],
     timings: Option<&mut ParseTimings>,
+    mut sink: Option<&mut dyn crate::pipeline::streaming::XlsxCellSink>,
 ) -> Result<FullParseResult, String> {
     // Validate input
     if xlsx_data.is_empty() {
@@ -339,7 +339,6 @@ pub(super) fn parse_xlsx_full_native_impl(
     let tick = |t: &Option<&mut ParseTimings>| if t.is_some() { crate::now_us() } else { 0.0 };
     let t0 = tick(&timings);
 
-    crate::pipeline::streaming::reset_stream_load_stats();
 
     // Create parse context in lenient mode
     let mut ctx = ParseContext::new(ParseMode::Lenient);
@@ -389,6 +388,10 @@ pub(super) fn parse_xlsx_full_native_impl(
     let shared_strings_declared_count = shared_strings_parser.declared_count();
     let shared_strings_declared_unique_count = shared_strings_parser.declared_unique_count();
     let shared_strings_ext_lst_xml = shared_strings_parser.root_ext_lst_xml();
+    let (ss_plain, ss_entities, ss_rich) = shared_strings_parser.count_categories();
+    // Only the indexed table is needed while streaming worksheets. Release
+    // its source XML and parse references before cells enter the live store.
+    drop(shared_strings_parser);
     let t2 = tick(&timings);
 
     // Parse styles
@@ -605,6 +608,10 @@ pub(super) fn parse_xlsx_full_native_impl(
         &archive,
         &selected_sheet_contexts,
         &shared_strings,
+        &crate::output::to_parse_output::cell_context::CellConversionContext::new(
+            &shared_strings, &shared_strings_rich_runs, &shared_strings_phonetic_xml,
+        ),
+        &mut sink,
         &pivot_caches,
         &mut ctx,
         &timings,
@@ -857,11 +864,10 @@ pub(super) fn parse_xlsx_full_native_impl(
         t.ss_parse_refs_us = t_ss2 - t_ss1;
         t.ss_materialize_us = t2 - t_ss2;
         t.ss_xml_bytes = ss_xml_len as f64;
-        let (plain, entities, rich) = shared_strings_parser.count_categories();
         t.ss_count_total = string_count as f64;
-        t.ss_count_plain = plain as f64;
-        t.ss_count_entities = entities as f64;
-        t.ss_count_rich_text = rich as f64;
+        t.ss_count_plain = ss_plain as f64;
+        t.ss_count_entities = ss_entities as f64;
+        t.ss_count_rich_text = ss_rich as f64;
         t.styles_us = t3 - t2;
         t.metadata_us = t4 - t3;
         t.worksheet_parse_us = t5 - t4;
@@ -877,6 +883,8 @@ fn parse_sheets_sequential(
     archive: &XlsxArchive,
     sheet_package_contexts: &[(usize, &SheetPackageContext)],
     shared_strings: &[String],
+    cell_context: &crate::output::to_parse_output::cell_context::CellConversionContext<'_>,
+    sink: &mut Option<&mut dyn crate::pipeline::streaming::XlsxCellSink>,
     pivot_caches: &std::collections::HashMap<u32, crate::domain::pivot::types::ParsedPivotCache>,
     ctx: &mut ParseContext,
     timings: &Option<&mut ParseTimings>,
@@ -909,16 +917,9 @@ fn parse_sheets_sequential(
         archive
             .charge_uncompressed(compressed.uncompressed_size)
             .map_err(|e| e.to_string())?;
-        let shared_string_refs: Vec<&str> = shared_strings.iter().map(|s| s.as_str()).collect();
-        crate::pipeline::streaming::set_current_stream_sheet(sheet_idx);
         let streamed = crate::pipeline::streaming::stream_parse_worksheet(
-            &compressed,
-            &shared_string_refs,
-            crate::pipeline::streaming::notify_stream_cell,
-            |_| {},
+            &compressed, shared_strings, cell_context, sheet_idx, sink,
         )?;
-        crate::pipeline::streaming::record_stream_load_stats(&streamed.stats);
-        ensure_count_limit("worksheet cell", streamed.cells.len(), MAX_WORKSHEET_CELLS)?;
         let ws_t1 = tick(timings);
         let ws_t2 = ws_t1;
 
@@ -927,11 +928,10 @@ fn parse_sheets_sequential(
             &streamed.pre_sheet_data,
             &streamed.post_sheet_data,
         );
-        let cells_buffer = streamed.cells;
-        let strings_buffer = streamed.strings;
+        let cells = streamed.cells;
         let extras = streamed.extras;
         let row_heights = streamed.row_heights;
-        let cell_count = cells_buffer.len();
+        let cell_count = streamed.stats.cells_parsed;
 
         let worksheet_dimension_ref =
             parse_dimension_ref_with_text(pre_sd_early).map(|d| d.ref_range);
@@ -978,38 +978,9 @@ fn parse_sheets_sequential(
 
         let col_style_ranges = build_col_style_ranges_from_widths(&col_widths);
 
-        // --- Sub-phase: CellData → FullCellData conversion ---
-        let mut decode_buf = Vec::with_capacity(256);
-        let mut cells: Vec<FullCellData> = cells_buffer
-            .iter()
-            .map(|c| convert_cell_data(c, &strings_buffer, &mut decode_buf))
-            .collect();
+        // Cell conversion and decoding happened during inflation.
         let ws_t3 = tick(timings);
-
-        // --- Sub-phase: Postprocessing (inline from extras, no XML rescan) ---
-        apply_parse_extras(
-            &mut cells,
-            &extras,
-            &cells_buffer,
-            &strings_buffer,
-            shared_strings,
-        );
-        for cell in &cells {
-            crate::pipeline::streaming::notify_stream_resolved(
-                cell.row,
-                cell.col,
-                cell.value.as_deref(),
-                cell.formula.as_deref(),
-                cell.cached_value_type,
-                cell.array_ref.as_deref(),
-                cell.has_empty_cached_value,
-                cell.cell_formula.as_ref(),
-            );
-        }
-        if !crate::pipeline::streaming::stream_retain_cells() {
-            cells.clear();
-        }
-        let ws_t4 = tick(timings);
+        let ws_t4 = ws_t3;
 
         *total_cells += cell_count as u32;
 

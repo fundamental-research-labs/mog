@@ -173,9 +173,13 @@ fn deferred_xlsx_import_materializes_active_visible_sheet_before_full_hydration(
         "imported showButton=0 should suppress the header button: {first_header:?}"
     );
 
-    engine
+    let completion_result = engine
         .complete_deferred_hydration()
         .expect("stream load completion is a no-op");
+    assert!(
+        completion_result.filter_changes.is_empty(),
+        "completion must not repeat imported filter creation"
+    );
 
     assert_eq!(
         engine.get_cell_value(&hidden_first, 0, 0),
@@ -340,7 +344,7 @@ fn deferred_xlsx_import_emits_active_second_sheet_view_state_before_full_hydrati
 }
 
 #[test]
-fn deferred_xlsx_filter_clear_rejects_before_hydration_without_partial_mutation() {
+fn stream_xlsx_filter_clear_applies_immediately() {
     let bytes = active_visible_deferred_fixture_xlsx();
 
     let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
@@ -375,7 +379,7 @@ fn deferred_xlsx_filter_clear_rejects_before_hydration_without_partial_mutation(
 }
 
 #[test]
-fn deferred_xlsx_cell_write_rejects_before_history_or_cell_metadata_mutates() {
+fn stream_xlsx_cell_write_preserves_identity_and_can_be_undone() {
     let bytes = active_visible_deferred_fixture_xlsx();
     let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
@@ -397,7 +401,15 @@ fn deferred_xlsx_cell_write_rejects_before_history_or_cell_metadata_mutates() {
         CellValue::number(99.0),
         "cell write should apply after stream load"
     );
-    let _ = (cell_id_before, value_before, undo_before);
+    assert_eq!(
+        engine.get_cell_id_at(&active_visible, 0, 0),
+        Some(cell_id_before)
+    );
+    assert_ne!(engine.get_undo_state(), undo_before);
+    engine
+        .undo()
+        .expect("imported cell write should be undoable");
+    assert_eq!(engine.get_cell_value(&active_visible, 0, 0), value_before);
 }
 
 #[test]

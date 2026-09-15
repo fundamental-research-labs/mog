@@ -160,6 +160,18 @@ impl XmlWriter {
         &self.buffer
     }
 
+    /// Write buffered bytes without resetting the open-element state.
+    ///
+    /// Streaming serializers call this between records to reuse the buffer.
+    pub(crate) fn drain_to(
+        &mut self,
+        sink: &mut (impl std::io::Write + ?Sized),
+    ) -> std::io::Result<()> {
+        sink.write_all(&self.buffer)?;
+        self.buffer.clear();
+        Ok(())
+    }
+
     /// Get the current buffer length.
     #[inline]
     pub fn len(&self) -> usize {

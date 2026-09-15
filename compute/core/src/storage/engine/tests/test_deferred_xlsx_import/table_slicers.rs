@@ -122,7 +122,7 @@ fn table_slicer_workbook() -> Vec<u8> {
     xlsx_parser::write::write_xlsx_from_parse_output(&output).unwrap()
 }
 
-fn assert_slicer_targets_current_table(engine: &ComputeEngine) {
+fn assert_slicer_targets_current_table(engine: &ComputeEngine, expected_region: &str) {
     let data = engine.cell_store().sheet_by_name("Data").unwrap();
     let dashboard = engine.cell_store().sheet_by_name("Dashboard").unwrap();
     let tables = engine.get_all_tables_in_sheet(&data);
@@ -134,7 +134,7 @@ fn assert_slicer_targets_current_table(engine: &ComputeEngine) {
         if table_id == &tables[0].id && column_cell_id == &tables[0].columns[1].id)
     );
     assert_eq!(slicers[0].selected_values, vec![CellValue::from("East")]);
-    assert_eq!(engine.get_raw_value(&data, 2, 1), "North");
+    assert_eq!(engine.get_raw_value(&data, 2, 1), expected_region);
 }
 
 #[test]
@@ -144,8 +144,8 @@ fn remaining_sheet_slicer_uses_loaded_table_ids_and_filter_selection() {
     engine.import_from_xlsx_bytes_deferred(&bytes).unwrap();
     let data = engine.cell_store().sheet_by_name("Data").unwrap();
     let dashboard = engine.cell_store().sheet_by_name("Dashboard").unwrap();
-    engine.complete_deferred_hydration().unwrap();
-    let _ = dashboard;
+    assert_eq!(engine.get_all_slicers(&dashboard).len(), 1);
+    assert_slicer_targets_current_table(&engine, "West");
     let original_table = engine.get_all_tables_in_sheet(&data).remove(0);
     let payload = engine
         .cell_store()
@@ -179,7 +179,7 @@ fn remaining_sheet_slicer_uses_loaded_table_ids_and_filter_selection() {
             .values
     ));
     engine.set_cell_value_parsed(&data, 2, 1, "North").unwrap();
-    assert_slicer_targets_current_table(&engine);
+    assert_slicer_targets_current_table(&engine, "North");
 
     let exported = engine.export_to_xlsx_bytes().unwrap();
     let parsed = xlsx_api::parse(&exported).unwrap().output;
@@ -217,5 +217,5 @@ fn remaining_sheet_slicer_uses_loaded_table_ids_and_filter_selection() {
     assert_eq!(dashboard.slicers.len(), 1);
     assert_eq!(dashboard.slicer_anchors[0].from.row, 1);
     let (reloaded, _) = ComputeEngine::from_xlsx_bytes(&exported).unwrap();
-    assert_slicer_targets_current_table(&reloaded);
+    assert_slicer_targets_current_table(&reloaded, "North");
 }

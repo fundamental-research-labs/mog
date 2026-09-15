@@ -599,24 +599,8 @@ mod tests {
           <c r="G1" t="str"><v>&amp;amp;</v></c>
           <c r="H1" t="s"><v>0</v></c>
         </row></sheetData></worksheet>"#;
-        let mut packed = vec![CellData::default(); 8];
-        let mut strings = Vec::new();
-        let mut extras = ParseExtras::default();
-        let count = crate::domain::cells::parse_worksheet_fast_with_extras(
-            xml,
-            &["&amp;"],
-            &mut packed,
-            &mut strings,
-            &mut Vec::new(),
-            &mut extras,
-            &[],
-        );
-        assert_eq!(count, 8);
-        let mut cells: Vec<_> = packed
-            .iter()
-            .map(|c| convert_cell_data(c, &strings, &mut Vec::new()))
-            .collect();
-        apply_parse_extras(&mut cells, &extras, &packed, &strings, &["&amp;".into()]);
+        let (cells, _, _) = crate::domain::cells::tests::parse_streamed(xml, &["&amp;"]);
+        assert_eq!(cells.len(), 8);
         let values: Vec<_> = cells.iter().map(|c| c.value.as_deref()).collect();
         assert_eq!(
             values,

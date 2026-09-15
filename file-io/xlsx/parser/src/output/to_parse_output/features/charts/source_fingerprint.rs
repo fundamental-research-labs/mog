@@ -1,75 +1,90 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use domain_types::{ChartSpec, SheetData};
 
 use super::live_source_ref;
 
-type WorkbookChartCellState = HashMap<String, HashMap<(u32, u32), ChartCellState>>;
-
+/// Source range for a chart fingerprint, with a canonical worksheet name.
 #[derive(Debug, Clone)]
-struct ChartCellState {
-    formula: String,
-    value: String,
+pub struct ChartSourceRange {
+    pub sheet_name: String,
+    pub start_row: u32,
+    pub start_col: u32,
+    pub end_row: u32,
+    pub end_col: u32,
 }
 
-/// Complete source fingerprints after every worksheet has been converted.
-///
-/// Per-sheet chart conversion has only the current worksheet's parsed cells at
-/// hand. A second pass over the assembled output fills cross-sheet source
-/// dependencies, so export-time freshness checks cover ordinary A1 refs on
-/// every worksheet as well as local refs.
-pub(crate) fn finalize_standard_chart_source_fingerprints(sheets: &mut [SheetData]) {
-    let workbook_state: WorkbookChartCellState = sheets
-        .iter()
-        .map(|sheet| {
-            (
-                canonical_chart_sheet_name(&sheet.name),
-                sheet
-                    .cells
-                    .iter()
-                    .filter_map(|cell| {
-                        let formula = cell
-                            .formula
-                            .as_deref()
-                            .unwrap_or_default()
-                            .trim_start_matches('=');
-                        let value = cell.value.to_string();
-                        if formula.is_empty() && value.is_empty() {
-                            None
-                        } else {
-                            Some((
-                                (cell.row, cell.col),
-                                ChartCellState {
-                                    formula: formula.to_string(),
-                                    value,
-                                },
-                            ))
-                        }
-                    })
-                    .collect(),
-            )
-        })
-        .collect();
+impl ChartSourceRange {
+    pub fn contains(&self, row: u32, col: u32) -> bool {
+        (self.start_row..=self.end_row).contains(&row)
+            && (self.start_col..=self.end_col).contains(&col)
+    }
+}
 
-    for sheet in sheets {
-        let owner_sheet_name = sheet.name.clone();
-        for chart in &mut sheet.charts {
-            if chart.is_chart_ex {
-                continue;
+type CellVisitor<'a> = dyn FnMut(&str, u32, u32, &str, &value_types::CellValue) + 'a;
+
+/// Recompute chart source authority from the actual value owner. The visitor
+/// emits each existing cell in the requested ranges at most once; it need not
+/// build another workbook-sized cell map.
+pub fn refresh_chart_source_fingerprints(
+    sheets: &mut [SheetData],
+    mut visit: impl FnMut(&[SheetData], &[ChartSourceRange], &mut CellVisitor<'_>),
+) {
+    let updates =
+        source_fingerprint_updates(sheets, &mut |ranges, emit| visit(sheets, ranges, emit));
+    apply_source_fingerprints(sheets, updates);
+}
+
+pub(crate) fn finalize_standard_chart_source_fingerprints(sheets: &mut [SheetData]) {
+    let updates = source_fingerprint_updates(sheets, &mut |ranges, emit| {
+        for sheet in sheets.iter() {
+            let name = canonical_chart_sheet_name(&sheet.name);
+            for cell in &sheet.cells {
+                if ranges
+                    .iter()
+                    .any(|range| range.sheet_name == name && range.contains(cell.row, cell.col))
+                {
+                    emit(
+                        &name,
+                        cell.row,
+                        cell.col,
+                        cell.formula.as_deref().unwrap_or_default(),
+                        &cell.value,
+                    );
+                }
             }
-            let Some(source_fingerprint) = standard_chart_source_fingerprint_from_state(
-                chart,
-                &owner_sheet_name,
-                &workbook_state,
-            ) else {
-                continue;
-            };
-            if let Some(provenance) = chart.standard_chart_provenance.as_mut() {
-                provenance.source_fingerprint = Some(source_fingerprint.clone());
+        }
+    });
+    apply_source_fingerprints(sheets, updates);
+}
+
+fn source_fingerprint_updates(
+    sheets: &[SheetData],
+    visit: &mut impl FnMut(&[ChartSourceRange], &mut CellVisitor<'_>),
+) -> Vec<(usize, usize, String)> {
+    let mut updates = Vec::new();
+    for (sheet_idx, sheet) in sheets.iter().enumerate() {
+        for (chart_idx, chart) in sheet.charts.iter().enumerate() {
+            if !chart.is_chart_ex {
+                if let Some(fingerprint) =
+                    standard_chart_source_fingerprint_from_source(chart, &sheet.name, visit)
+                {
+                    updates.push((sheet_idx, chart_idx, fingerprint));
+                }
             }
-            if let Some(authority) = chart.standard_chart_export_authority.as_mut() {
-                authority.source_fingerprint = Some(source_fingerprint);
-            }
+        }
+    }
+    updates
+}
+
+fn apply_source_fingerprints(sheets: &mut [SheetData], updates: Vec<(usize, usize, String)>) {
+    for (sheet_idx, chart_idx, fingerprint) in updates {
+        let chart = &mut sheets[sheet_idx].charts[chart_idx];
+        if let Some(provenance) = chart.standard_chart_provenance.as_mut() {
+            provenance.source_fingerprint = Some(fingerprint.clone());
+        }
+        if let Some(authority) = chart.standard_chart_export_authority.as_mut() {
+            authority.source_fingerprint = Some(fingerprint);
         }
     }
 }
@@ -216,10 +231,10 @@ pub(crate) fn standard_chart_source_fingerprint(
 /// Compute a source fingerprint from the complete workbook cell projection.
 /// This second-pass form is needed for cross-sheet chart references, which are
 /// not available while an individual `FullParsedSheet` is being converted.
-fn standard_chart_source_fingerprint_from_state(
+fn standard_chart_source_fingerprint_from_source(
     spec: &ChartSpec,
     owner_sheet_name: &str,
-    workbook_state: &WorkbookChartCellState,
+    visit: &mut impl FnMut(&[ChartSourceRange], &mut CellVisitor<'_>),
 ) -> Option<String> {
     let mut references = Vec::new();
     if let Some(reference) = spec.data_range.as_deref() {
@@ -308,30 +323,30 @@ fn standard_chart_source_fingerprint_from_state(
             "range:{sheet_name}:{start_row}:{start_col}:{end_row}:{end_col}"
         ));
     }
+    let requested: Vec<_> = ranges
+        .iter()
+        .map(|(name, r0, c0, r1, c1)| ChartSourceRange {
+            sheet_name: name.clone(),
+            start_row: *r0,
+            start_col: *c0,
+            end_row: *r1,
+            end_col: *c1,
+        })
+        .collect();
     let mut present_cells = Vec::new();
-    for (sheet_name, cells) in workbook_state {
-        for ((row, col), state) in cells {
-            if ranges
-                .iter()
-                .any(|(range_sheet, start_row, start_col, end_row, end_col)| {
-                    range_sheet == sheet_name
-                        && (*start_row..=*end_row).contains(row)
-                        && (*start_col..=*end_col).contains(col)
-                })
-            {
-                if state.formula.is_empty() && state.value.is_empty() {
-                    continue;
-                }
-                present_cells.push((
-                    sheet_name.clone(),
-                    *row,
-                    *col,
-                    state.formula.clone(),
-                    state.value.clone(),
-                ));
-            }
+    visit(&requested, &mut |sheet_name, row, col, formula, value| {
+        let formula = formula.trim_start_matches('=');
+        let value = value.to_string();
+        if !formula.is_empty() || !value.is_empty() {
+            present_cells.push((
+                canonical_chart_sheet_name(sheet_name),
+                row,
+                col,
+                formula.to_string(),
+                value,
+            ));
         }
-    }
+    });
     present_cells.sort_unstable();
     for (sheet_name, row, col, formula, value) in present_cells {
         fingerprint.write_str(&format!("cell:{sheet_name}:{row}:{col}"));

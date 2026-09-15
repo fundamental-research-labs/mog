@@ -102,9 +102,15 @@ fn test_write_formula_canonicalizes_ooxml_future_function_prefixes() {
 #[test]
 fn test_write_digit_containing_function_storage_names() {
     let mut writer = SheetWriter::new();
-    writer.set_formula(0, 0, "T.DIST.2T(2,10)+T.INV.2T(0.05,10)+LOG10(100)+SUMX2MY2(B1:B2,C1:C2)");
+    writer.set_formula(
+        0,
+        0,
+        "T.DIST.2T(2,10)+T.INV.2T(0.05,10)+LOG10(100)+SUMX2MY2(B1:B2,C1:C2)",
+    );
     let xml = String::from_utf8(writer.to_xml()).unwrap();
-    assert!(xml.contains("<f>_xlfn.T.DIST.2T(2,10)+_xlfn.T.INV.2T(0.05,10)+LOG10(100)+SUMX2MY2(B1:B2,C1:C2)</f>"));
+    assert!(xml.contains(
+        "<f>_xlfn.T.DIST.2T(2,10)+_xlfn.T.INV.2T(0.05,10)+LOG10(100)+SUMX2MY2(B1:B2,C1:C2)</f>"
+    ));
 }
 
 #[test]
@@ -648,7 +654,7 @@ fn test_dy_descent_no_namespaces_when_absent() {
 #[test]
 fn test_dy_descent_parse_and_write_roundtrip() {
     // Simulate parsing a sheet XML fragment with dyDescent attributes
-    use crate::domain::cells::{CellData, ParseExtras, parse_worksheet_fast_with_extras};
+    use crate::domain::cells::tests::parse_streamed;
 
     let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
@@ -662,23 +668,8 @@ fn test_dy_descent_parse_and_write_roundtrip() {
 </sheetData>
 </worksheet>"#;
 
-    let shared_strings: Vec<&str> = vec![];
-    let mut cells = vec![CellData::default(); 100];
-    let mut strings = Vec::new();
-    let mut row_heights = Vec::new();
-    let mut extras = ParseExtras::default();
-
-    let count = parse_worksheet_fast_with_extras(
-        xml,
-        &shared_strings,
-        &mut cells,
-        &mut strings,
-        &mut row_heights,
-        &mut extras,
-        &[],
-    );
-
-    assert_eq!(count, 2, "should parse 2 cells");
+    let (cells, extras, _) = parse_streamed(xml, &[]);
+    assert_eq!(cells.len(), 2, "should parse 2 cells");
     assert_eq!(extras.row_descents.len(), 2, "should have 2 row descents");
 
     // Verify parsed descent values
@@ -944,4 +935,57 @@ fn test_root_namespaces_mc_ignorable_roundtrip() {
             "Case 3: xmlns:mc should NOT be injected when original didn't have it"
         );
     }
+}
+
+#[test]
+fn worksheet_streams_cells_within_a_single_large_row() {
+    #[derive(Default)]
+    struct ChunkSink {
+        chunks: Vec<Vec<u8>>,
+    }
+    impl std::io::Write for ChunkSink {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.chunks.push(bytes.to_vec());
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let mut writer = SheetWriter::new();
+    for col in 0..4096 {
+        writer.set_inline_string(0, col, &format!("cell {col}: {} & <", "x".repeat(100)));
+    }
+    let mut sink = ChunkSink::default();
+    writer.write_to(&mut sink).unwrap();
+    assert!(sink.chunks.len() > 8);
+    assert!(sink.chunks.iter().all(|chunk| chunk.len() < 65_800));
+    let first = String::from_utf8(sink.chunks[0].clone()).unwrap();
+    assert!(first.contains("<worksheet"));
+    assert!(!first.contains("cell 4095"));
+    let xml = String::from_utf8(sink.chunks.concat()).unwrap();
+    assert_eq!(xml.matches("<c ").count(), 4096);
+    assert!(xml.contains("cell 4095:"));
+    assert!(xml.contains(" &amp; &lt;"));
+    assert!(xml.ends_with("</row></sheetData></worksheet>"));
+}
+
+#[test]
+fn worksheet_streaming_propagates_sink_failure() {
+    struct FailedSink;
+    impl std::io::Write for FailedSink {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other("disk full"))
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut writer = SheetWriter::new();
+    writer.set_number(0, 0, 42.0);
+    assert_eq!(
+        writer.write_to(&mut FailedSink).unwrap_err().to_string(),
+        "disk full"
+    );
 }

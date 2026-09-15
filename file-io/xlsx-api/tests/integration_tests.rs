@@ -166,3 +166,81 @@ fn export_round_trip_preserves_basic_structure() {
         );
     }
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn streamed_file_export_matches_validated_byte_export() {
+    let input = read_test_file("basic/with_strings.xlsx");
+    let parsed = parse(&input).unwrap();
+    let expected = xlsx_api::export_from_parse_output(&parsed.output).unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("streamed.xlsx");
+    xlsx_api::export_from_parse_output_to_path(&parsed.output, &path).unwrap();
+    let actual = std::fs::read(&path).unwrap();
+    assert_eq!(actual, expected);
+    assert_eq!(
+        parse(&actual).unwrap().output.sheets.len(),
+        parsed.output.sheets.len()
+    );
+    assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn failed_streamed_file_export_preserves_destination_and_cleans_temporary() {
+    let input = read_test_file("basic/minimal.xlsx");
+    let mut parsed = parse(&input).unwrap();
+    parsed.output.workbook_conformance = Some("strict".into());
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("existing.xlsx");
+    std::fs::write(&path, &input).unwrap();
+    assert!(xlsx_api::export_from_parse_output_to_path(&parsed.output, &path).is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), input);
+    assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+}
+
+#[test]
+fn streamed_export_propagates_output_failure() {
+    struct FailingSink;
+    impl std::io::Write for FailingSink {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other("output unavailable"))
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let input = read_test_file("basic/minimal.xlsx");
+    let parsed = parse(&input).unwrap();
+    match xlsx_api::export_from_parse_output_to(&parsed.output, FailingSink) {
+        Err(error) => assert!(error.to_string().contains("output unavailable")),
+        Ok(_) => panic!("failed sink accepted"),
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn serialized_validation_failure_does_not_replace_destination() {
+    let input = read_test_file("basic/minimal.xlsx");
+    let mut parsed = parse(&input).unwrap();
+    parsed.output.sheets[0].worksheet_ext_lst_xml =
+        Some(r#"<extLst><ext uri="stream-save-test"><custom></mismatched></ext></extLst>"#.into());
+    // Preflight succeeds and the streamed package is emitted; the serialized
+    // XML validation must catch malformed preserved metadata before publishing it.
+    let raw = xlsx_api::export_from_parse_output_to(&parsed.output, Vec::new()).unwrap();
+    let archive = xlsx_api::zip::OoxmlArchive::open(&raw).unwrap();
+    let sheet = archive.read_entry("xl/worksheets/sheet1.xml").unwrap();
+    assert!(String::from_utf8(sheet).unwrap().contains("</mismatched>"));
+    let byte_error = match xlsx_api::export_from_parse_output(&parsed.output) {
+        Err(error) => error,
+        Ok(_) => panic!("serialized XML validation accepted mismatched tags"),
+    };
+    assert!(byte_error.to_string().contains("sheet1.xml"));
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("existing.xlsx");
+    std::fs::write(&path, &input).unwrap();
+    let file_error = xlsx_api::export_from_parse_output_to_path(&parsed.output, &path).unwrap_err();
+    assert!(file_error.to_string().contains("sheet1.xml"));
+    assert_eq!(std::fs::read(&path).unwrap(), input);
+    assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+}

@@ -4,15 +4,6 @@ mod comments;
 
 use comments::build_sheet_comments;
 
-fn env_flag_default_true(name: &str) -> bool {
-    std::env::var(name)
-        .map(|value| {
-            let normalized = value.trim().to_ascii_lowercase();
-            !matches!(normalized.as_str(), "0" | "false" | "no" | "off")
-        })
-        .unwrap_or(true)
-}
-
 fn build_col_style_ranges(col_widths: &[ooxml_types::worksheet::ColWidth]) -> Vec<ColStyleRange> {
     col_widths
         .iter()
@@ -78,17 +69,9 @@ pub(super) fn convert_sheet(
 
     // --- Cells ---
     let projection_roles = build_projection_roles(&sheet.cells, metadata);
-    let compact_sst_provenance = env_flag_default_true("MOG_XLSX_COMPACT_SST_PROVENANCE");
-    let compact_numeric_provenance = env_flag_default_true("MOG_XLSX_COMPACT_NUMERIC_PROVENANCE");
-    let compact_non_formula_cached_type =
-        env_flag_default_true("MOG_XLSX_COMPACT_NON_FORMULA_CACHED_TYPE");
-    let sst_compaction = compact_sst_provenance.then(|| {
-        SharedStringProvenanceCompaction::from_shared_strings(
-            shared_strings,
-            shared_strings_rich_runs,
-            shared_strings_phonetic_xml,
-        )
-    });
+    let cell_context = super::cell_context::CellConversionContext::new(
+        shared_strings, shared_strings_rich_runs, shared_strings_phonetic_xml,
+    );
     let converted_cells: Vec<CellData> = sheet
         .cells
         .iter()
@@ -97,16 +80,7 @@ pub(super) fn convert_sheet(
                 .get(&(c.row, c.col))
                 .copied()
                 .unwrap_or_default();
-            convert_cell_with_projection_role_and_provenance(
-                c,
-                shared_strings,
-                shared_strings_rich_runs,
-                shared_strings_phonetic_xml,
-                role,
-                sst_compaction.as_ref(),
-                compact_numeric_provenance,
-                compact_non_formula_cached_type,
-            )
+            cell_context.convert(c, role)
         })
         .collect();
     let mut authored_style_points = Vec::new();

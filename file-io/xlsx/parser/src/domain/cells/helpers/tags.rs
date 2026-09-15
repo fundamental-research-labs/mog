@@ -17,14 +17,6 @@ pub(crate) struct ClosingTag {
     pub end: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct SheetDataBounds {
-    pub start: usize,
-    pub content_start: usize,
-    pub content_end: usize,
-    pub end: usize,
-}
-
 #[inline]
 fn name_end_for_start_tag(xml: &[u8], name_start: usize) -> usize {
     let mut name_end = name_start;
@@ -59,6 +51,16 @@ fn local_name(name: &[u8]) -> &[u8] {
 #[inline]
 fn name_matches_local(name: &[u8], expected: &[u8]) -> bool {
     name == expected || local_name(name) == expected
+}
+
+/// Match a possibly namespace-prefixed XML local name at the given byte offset.
+#[inline]
+pub(crate) fn matches_tag(xml: &[u8], name_start: usize, expected: &[u8]) -> bool {
+    if name_start >= xml.len() {
+        return false;
+    }
+    let end = name_end_for_start_tag(xml, name_start);
+    end > name_start && name_matches_local(&xml[name_start..end], expected)
 }
 
 #[inline]
@@ -139,32 +141,17 @@ pub(crate) fn find_closing_tag_span(xml: &[u8], local: &[u8], start: usize) -> O
     None
 }
 
-#[inline]
-pub(crate) fn find_sheet_data_bounds(xml: &[u8], start: usize) -> Option<SheetDataBounds> {
-    let opening = find_start_tag(xml, b"sheetData", start)?;
-    if opening.is_self_closing {
-        return Some(SheetDataBounds {
-            start: opening.lt,
-            content_start: opening.content_start,
-            content_end: opening.content_start,
-            end: opening.content_start,
-        });
-    }
-
-    let closing = find_closing_tag_span(xml, b"sheetData", opening.content_start);
-    let (content_end, end) = closing.map_or((xml.len(), xml.len()), |tag| (tag.lt, tag.end));
-    Some(SheetDataBounds {
-        start: opening.lt,
-        content_start: opening.content_start,
-        content_end,
-        end,
-    })
-}
-
 #[cfg(test)]
-#[inline]
 pub(crate) fn post_sheet_data_region(xml: &[u8]) -> &[u8] {
-    find_sheet_data_bounds(xml, 0).map_or(&xml[xml.len()..], |bounds| &xml[bounds.end..])
+    let Some(opening) = find_start_tag(xml, b"sheetData", 0) else {
+        return &xml[xml.len()..];
+    };
+    if opening.is_self_closing {
+        &xml[opening.content_start..]
+    } else {
+        find_closing_tag_span(xml, b"sheetData", opening.content_start)
+            .map_or(&xml[xml.len()..], |tag| &xml[tag.end..])
+    }
 }
 
 #[cfg(test)]

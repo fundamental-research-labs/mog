@@ -806,3 +806,42 @@ fn make_chart(chart_type: ChartType, data_range: &str) -> ChartSpec {
         import_status: None,
     }
 }
+
+#[test]
+fn streamed_sheets_share_stable_sst_slots_and_exact_reference_counts() {
+    let output = make_parse_output(vec![
+        SheetData {
+            name: "First".to_string(),
+            cells: vec![
+                make_cell(0, 0, DomainValue::Text(Arc::from("same"))),
+                make_cell(0, 1, DomainValue::Text(Arc::from("first"))),
+            ],
+            ..Default::default()
+        },
+        SheetData {
+            name: "Second".to_string(),
+            cells: vec![
+                make_cell(0, 0, DomainValue::Text(Arc::from("same"))),
+                make_cell(0, 1, DomainValue::Text(Arc::from("second"))),
+            ],
+            ..Default::default()
+        },
+    ]);
+    let preflight = preflight_phase::run(output.clone());
+    assert_eq!(preflight.shared_strings.total_count(), 4);
+    assert_eq!(preflight.shared_strings.len(), 3);
+    assert!(preflight.sheet_writers.iter().all(|sheet| {
+        sheet.rows.values().all(|(_, cells)| cells.is_empty())
+    }), "preflight must not stage converted cells for every worksheet");
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).unwrap();
+    let sst = String::from_utf8(archive.read_file("xl/sharedStrings.xml").unwrap()).unwrap();
+    assert!(sst.contains(r#"count="4" uniqueCount="3""#), "{sst}");
+    for sheet in 1..=2 {
+        let xml = String::from_utf8(archive.read_file(&format!("xl/worksheets/sheet{sheet}.xml")).unwrap()).unwrap();
+        assert!(xml.contains(r#"<c r="A1" t="s"><v>0</v></c>"#), "{xml}");
+        assert!(xml.contains(&format!(r#"<c r="B1" t="s"><v>{sheet}</v></c>"#)), "{xml}");
+    }
+    validate_archive_package_integrity(&archive).unwrap();
+}

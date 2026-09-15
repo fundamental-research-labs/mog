@@ -13,17 +13,18 @@ use super::styles::hex_to_color_def;
 
 mod preserved_cf;
 
-pub(super) fn remap_for_export(output: &ParseOutput) -> (ParseOutput, Vec<DxfDef>) {
+pub(super) fn remap_for_export(mut output: ParseOutput) -> (ParseOutput, Vec<DxfDef>) {
     let registry = output
         .workbook_stylesheet
         .as_ref()
-        .map(|stylesheet| stylesheet.dxf_registry.as_slice())
-        .unwrap_or(&[]);
+        .map(|stylesheet| stylesheet.dxf_registry.clone())
+        .unwrap_or_default();
+    let registry = registry.as_slice();
 
     let mut reachable = HashSet::new();
-    collect_reachable_ids(output, &mut reachable);
-    let theme_colors = preserved_cf::theme_colors(output);
-    preserved_cf::collect_unchanged_ids(output, registry, &theme_colors, &mut reachable);
+    collect_reachable_ids(&output, &mut reachable);
+    let theme_colors = preserved_cf::theme_colors(&output);
+    preserved_cf::collect_unchanged_ids(&output, registry, &theme_colors, &mut reachable);
 
     // Opaque stylesheet extensions include custom slicer and timeline styles
     // whose dxfId attributes refer to this registry. Retain its positions as a
@@ -43,16 +44,15 @@ pub(super) fn remap_for_export(output: &ParseOutput) -> (ParseOutput, Vec<DxfDef
             compact_reachable_ids(registry, &reachable)
         };
 
-    let mut remapped = output.clone();
-    remap_non_cf_dxf_ids(&mut remapped, &id_to_export_id);
+    remap_non_cf_dxf_ids(&mut output, &id_to_export_id);
     preserved_cf::assign_styles(
-        &mut remapped,
+        &mut output,
         registry,
         &theme_colors,
         &id_to_export_id,
         &mut dxfs,
     );
-    (remapped, dxfs)
+    (output, dxfs)
 }
 
 fn registry_has_dense_ooxml_ids(registry: &[domain_types::DxfDef]) -> bool {
@@ -468,7 +468,7 @@ mod tests {
                 }),
                 ..Default::default()
             };
-            let (_, emitted) = remap_for_export(&output);
+            let (_, emitted) = remap_for_export(output.clone());
             for entry in registry {
                 assert_eq!(emitted[entry.id as usize], entry.to_ooxml());
             }
@@ -580,7 +580,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (remapped, dxfs) = remap_for_export(&output);
+        let (remapped, dxfs) = remap_for_export(output.clone());
 
         assert_eq!(dxfs.len(), reachable_ids.len());
         assert_eq!(dxfs[0], registry_entry(20).to_ooxml());
@@ -645,7 +645,8 @@ mod tests {
         assert_eq!(remapped.custom_table_styles[0].elements[0].dxf_id, Some(13));
 
         output.sheets[0].tables[0].data_dxf_id = Some(999);
-        let (remapped_with_preceding_reachable, dxfs_with_preceding) = remap_for_export(&output);
+        let (remapped_with_preceding_reachable, dxfs_with_preceding) =
+            remap_for_export(output.clone());
         assert_eq!(dxfs_with_preceding[0], registry_entry(999).to_ooxml());
         assert_eq!(
             remapped_with_preceding_reachable.sheets[0].tables[0].data_dxf_id,
@@ -679,7 +680,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (remapped, dxfs) = remap_for_export(&output);
+        let (remapped, dxfs) = remap_for_export(output.clone());
 
         assert_eq!(dxfs.len(), 8);
         assert_eq!(dxfs[7], registry_entry(7).to_ooxml());
@@ -732,7 +733,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (remapped, dxfs) = remap_for_export(&output);
+        let (remapped, dxfs) = remap_for_export(output.clone());
 
         assert_eq!(dxfs.len(), 1);
         assert_eq!(
@@ -783,7 +784,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (remapped, dxfs) = remap_for_export(&output);
+        let (remapped, dxfs) = remap_for_export(output.clone());
 
         assert!(dxfs.is_empty());
         assert_eq!(

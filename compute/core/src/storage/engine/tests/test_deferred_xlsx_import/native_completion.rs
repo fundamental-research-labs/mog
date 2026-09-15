@@ -17,11 +17,13 @@ fn native_range_workbook() -> Vec<u8> {
                         ..Default::default()
                     })
                     .collect(),
-                floating_objects: vec![serde_json::from_value(serde_json::json!({
-                    "id":"shape-1","type":"shape","shapeType":"rect",
-                    "anchor":{"anchorRow":1,"anchorCol":1},"width":10,"height":10
-                }))
-                .unwrap()],
+                floating_objects: vec![
+                    serde_json::from_value(serde_json::json!({
+                        "id":"shape-1","type":"shape","shapeType":"rect",
+                        "anchor":{"anchorRow":1,"anchorCol":1},"width":10,"height":10
+                    }))
+                    .unwrap(),
+                ],
                 ..Default::default()
             },
             domain_types::SheetData {
@@ -64,6 +66,7 @@ fn completion_reuses_active_native_payload_and_metadata_identities() {
         .common
         .anchor_cell_id
         .clone();
+    assert!(engine.get_cell_id_at(&remaining, 0, 0).is_some());
     engine.complete_deferred_hydration().unwrap();
     let completed_sheet = engine.cell_store().get_sheet(&active).unwrap();
     assert!(
@@ -91,5 +94,63 @@ fn completion_reuses_active_native_payload_and_metadata_identities() {
             .cell_store()
             .get_cell_value_at(&remaining, cell_types::SheetPos::new(0, 0)),
         Some(&CellValue::number(131_328.0))
+    );
+}
+
+#[test]
+fn failed_stream_import_preserves_loaded_state_and_can_retry() {
+    let bytes = native_range_workbook();
+    let (mut engine, _) = ComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
+    engine.import_from_xlsx_bytes_deferred(&bytes).unwrap();
+    let active = engine.cell_store().sheet_by_name("Active").unwrap();
+    let payload = engine
+        .cell_store()
+        .get_sheet(&active)
+        .unwrap()
+        .iter_ranges()
+        .next()
+        .unwrap()
+        .1
+        .values
+        .clone();
+    let high_water = engine.stores.grid_id_alloc.high_water_mark();
+    let history = engine.get_undo_state();
+
+    // Corrupt the later worksheet's compressed bytes. The first worksheet has
+    // already streamed into the staged engine when this entry fails to inflate.
+    let archive = xlsx_parser::zip::XlsxArchive::new(&bytes).unwrap();
+    let entry = archive.find_entry("xl/worksheets/sheet2.xml").unwrap();
+    let name_len =
+        u16::from_le_bytes([bytes[entry.offset + 26], bytes[entry.offset + 27]]) as usize;
+    let extra_len =
+        u16::from_le_bytes([bytes[entry.offset + 28], bytes[entry.offset + 29]]) as usize;
+    let data_offset = entry.offset + 30 + name_len + extra_len;
+    let mut corrupt = bytes.clone();
+    corrupt[data_offset..data_offset + entry.compressed_size].fill(0xff);
+    assert!(engine.import_from_xlsx_bytes_deferred(&corrupt).is_err());
+
+    assert_eq!(engine.stores.grid_id_alloc.high_water_mark(), high_water);
+    assert_eq!(engine.get_undo_state(), history);
+    assert!(Arc::ptr_eq(
+        &payload,
+        &engine
+            .cell_store()
+            .get_sheet(&active)
+            .unwrap()
+            .iter_ranges()
+            .next()
+            .unwrap()
+            .1
+            .values
+    ));
+    assert_eq!(
+        engine.get_cell_value(&active, 511, 0),
+        CellValue::number(512.0)
+    );
+    engine.import_from_xlsx_bytes_deferred(&bytes).unwrap();
+    let active = engine.cell_store().sheet_by_name("Active").unwrap();
+    assert_eq!(
+        engine.get_cell_value(&active, 511, 0),
+        CellValue::number(512.0)
     );
 }

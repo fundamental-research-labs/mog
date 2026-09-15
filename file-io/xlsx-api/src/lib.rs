@@ -24,7 +24,13 @@ mod types;
 pub mod zip;
 
 pub use error::XlsxApiError;
-pub use export::{ExportReport, export_from_parse_output, export_from_parse_output_with_report};
+pub use export::{
+    ExportReport, export_from_parse_output, export_from_parse_output_to,
+    export_from_parse_output_with_report, export_owned_parse_output,
+};
 pub use options::{ParseMode, ParseOptions};
 pub use parse::{ParsedWorkbook, parse, parse_with_options};
 pub use types::*;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub use export::{export_from_parse_output_to_path, export_owned_parse_output_to_path};

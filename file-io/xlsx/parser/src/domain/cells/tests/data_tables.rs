@@ -1,4 +1,4 @@
-use crate::domain::cells::{CellData, ParseExtras, parse_worksheet_fast_with_extras};
+use super::parse_streamed;
 
 #[test]
 fn test_parse_data_table_typed_input_refs() {
@@ -18,20 +18,7 @@ fn test_parse_data_table_typed_input_refs() {
     </row>
   </sheetData></worksheet>"#;
 
-    let shared_strings: Vec<&str> = vec![];
-    let mut cells = vec![CellData::default(); 10];
-    let mut strings = Vec::new();
-    let mut extras = ParseExtras::default();
-
-    let _ = parse_worksheet_fast_with_extras(
-        xml,
-        &shared_strings,
-        &mut cells,
-        &mut strings,
-        &mut Vec::new(),
-        &mut extras,
-        &[],
-    );
+    let (_, extras, _) = parse_streamed(xml, &[]);
 
     assert_eq!(extras.data_tables.len(), 1, "data table extracted");
     let dt = &extras.data_tables[0];
@@ -73,20 +60,7 @@ fn test_parse_data_table_ref_error_collapses_to_none() {
     </row>
   </sheetData></worksheet>"##;
 
-    let shared_strings: Vec<&str> = vec![];
-    let mut cells = vec![CellData::default(); 10];
-    let mut strings = Vec::new();
-    let mut extras = ParseExtras::default();
-
-    let _ = parse_worksheet_fast_with_extras(
-        xml,
-        &shared_strings,
-        &mut cells,
-        &mut strings,
-        &mut Vec::new(),
-        &mut extras,
-        &[],
-    );
+    let (_, extras, _) = parse_streamed(xml, &[]);
 
     assert_eq!(extras.data_tables.len(), 1);
     let dt = &extras.data_tables[0];
@@ -115,20 +89,7 @@ fn test_parse_data_table_unicode_does_not_panic() {
   </sheetData></worksheet>"
         .as_bytes();
 
-    let shared_strings: Vec<&str> = vec![];
-    let mut cells = vec![CellData::default(); 10];
-    let mut strings = Vec::new();
-    let mut extras = ParseExtras::default();
-
-    let _ = parse_worksheet_fast_with_extras(
-        xml,
-        &shared_strings,
-        &mut cells,
-        &mut strings,
-        &mut Vec::new(),
-        &mut extras,
-        &[],
-    );
+    let (_, extras, _) = parse_streamed(xml, &[]);
 
     // We don't assert the specific classification — just that nothing
     // panicked and the entry exists. Sheet-qualified shape rejects to

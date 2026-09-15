@@ -62,6 +62,9 @@ bridge-types = { path = "../../../infra/rust-bridge/bridge-types" }
 # ZIP decompression (pure Rust, no std dependency)
 miniz_oxide = "0.7"
 
+# Incremental ZIP deflate writing on native and WASM.
+flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }
+
 # Fast byte searching with SIMD support
 memchr = "2.7"
 
@@ -113,14 +116,13 @@ js-sys = "0.3"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 memmap2 = { version = "0.9", optional = true }
 rayon = { version = "1.8", optional = true }
-flate2 = { version = "1.0", optional = true, default-features = false, features = ["rust_backend"] }
 
 [features]
 default = []
 # CLI feature for the roundtrip testing tool (native only)
 cli = []
 # Native feature for memory-mapped I/O and fast DEFLATE decompression (not available on WASM)
-native = ["memmap2", "flate2"]
+native = ["memmap2"]
 # Parallel parsing feature for multi-core systems (native only)
 parallel = ["native", "rayon"]
 # Test corpus generator feature (native only, generates malformed test files)

@@ -848,14 +848,25 @@ impl SheetWriter {
         self
     }
 
-    /// Generate worksheet XML.
+    /// Generate worksheet XML using the streaming serializer.
     pub fn to_xml(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        self.write_to(&mut bytes)
+            .expect("writing XML to a Vec cannot fail");
+        bytes
+    }
+
+    /// Serialize worksheet XML incrementally to a sink.
+    ///
+    /// Cell output is drained every 64 KiB, so the XML buffer grows with the
+    /// largest cell or metadata section rather than the entire worksheet.
+    pub fn write_to(&self, sink: &mut (impl std::io::Write + ?Sized)) -> std::io::Result<()> {
         let mut w = XmlWriter::new();
         w.write_declaration();
         root::write_worksheet_start(&mut w, self);
-        body::write_worksheet_body(&mut w, self);
+        body::write_worksheet_body(&mut w, self, sink)?;
         root::write_worksheet_end(&mut w);
-        w.finish()
+        w.drain_to(sink)
     }
 }
 

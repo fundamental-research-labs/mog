@@ -19,8 +19,8 @@ use crate::output::results::{FullParseResult, ParseTimings};
 /// Parse an XLSX file from raw bytes and return a full structured result.
 ///
 /// This is the core parse pipeline shared between WASM entry points and native
-/// CLI tools. It performs all the same steps as the WASM `parse_xlsx_full` but
-/// returns a native `Result<FullParseResult, String>` instead of `Result<JsValue, JsValue>`.
+/// CLI tools. Worksheet inflation, cell parsing, and semantic conversion use
+/// one incremental pipeline, with an optional consumer for native hydration.
 ///
 /// # Profiling
 ///
@@ -30,5 +30,13 @@ pub fn parse_xlsx_full_native(
     xlsx_data: &[u8],
     timings: Option<&mut ParseTimings>,
 ) -> Result<FullParseResult, String> {
-    implementation::parse_xlsx_full_native_impl(xlsx_data, timings)
+    implementation::parse_xlsx_full_native_impl(xlsx_data, timings, None)
+}
+
+/// The same parser with a consumer that takes ownership of streamed values.
+pub(crate) fn parse_xlsx_with_sink(
+    xlsx_data: &[u8],
+    sink: &mut dyn crate::pipeline::streaming::XlsxCellSink,
+) -> Result<FullParseResult, String> {
+    implementation::parse_xlsx_full_native_impl(xlsx_data, None, Some(sink))
 }

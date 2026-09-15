@@ -14,18 +14,12 @@ pub(in crate::storage::engine) type XlsxStreamHydrateResult = (
     Vec<(SheetId, crate::storage::properties::ImportedFormats)>,
     CellStore,
     Vec<(CellId, SheetId, String)>,
+    xlsx_parser::StreamLoadStats,
 );
 
-/// Marker kept so `ComputeEngine::deferred_hydration` stays `None` after stream load.
-pub struct DeferredHydrationData;
-
-/// Fully staged deferred XLSX completion. This owns every component needed to
-/// replace the live engine after any fallible import-open recalculation has
-/// succeeded.
-pub(in crate::storage::engine) struct DeferredHydrationCompletion {
-    pub(in crate::storage::engine) stores: EngineStores,
-    pub(in crate::storage::engine) cell_store: CellStore,
-    pub(in crate::storage::engine) settings: EngineSettings,
-    pub(in crate::storage::engine) calculation: domain_types::CalculationProperties,
-    pub(in crate::storage::engine) import_report: domain_types::ImportReport,
+/// Calculation policy for an XLSX import into an existing engine.
+pub(in crate::storage::engine) enum XlsxRecalculation {
+    Never,
+    Always,
+    OnLoad,
 }

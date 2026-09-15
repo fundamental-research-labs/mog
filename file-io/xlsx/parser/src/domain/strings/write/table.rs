@@ -159,6 +159,13 @@ impl SharedStringsWriter {
         self.root_ext_lst_xml = ext_lst_xml.filter(|xml| !xml.is_empty());
     }
 
+    /// Recount references during emission while preserving preflight SST slots.
+    pub(crate) fn reset_reference_counts(&mut self) {
+        for entry in &mut self.entries {
+            entry.count = 0;
+        }
+    }
+
     /// Get the total reference count (sum of all string usage counts).
     ///
     /// This is used for the `count` attribute in the `<sst>` element.

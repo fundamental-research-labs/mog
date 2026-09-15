@@ -401,31 +401,32 @@ fn test_minimal_init_first_formula_edit_survives_deferred_graph_build() {
 }
 
 #[test]
-fn test_viewport_only_init_seeds_materialized_formula_readback() {
+fn test_minimal_init_seeds_formula_readback_without_graph() {
     let mut core = ComputeCore::new();
     let mut cell_store = CellStore::new();
-    core.init_from_snapshot_viewport_only(&mut cell_store, basic_snapshot())
+    core.init_from_snapshot_minimal(&mut cell_store, basic_snapshot())
         .unwrap();
 
     let c1_id = cid(0x12);
     assert_eq!(core.get_formula(&c1_id), Some("=A1+B1"));
     assert!(
         core.ast_cache.is_empty(),
-        "viewport-only init must keep dependency graph construction lazy",
+        "minimal init must keep dependency graph construction lazy",
     );
 }
 
 #[test]
-fn test_viewport_only_init_rejects_partial_graph_build() {
+fn test_minimal_init_builds_graph_without_changing_formula_readback() {
     let mut core = ComputeCore::new();
     let mut cell_store = CellStore::new();
-    core.init_from_snapshot_viewport_only(&mut cell_store, basic_snapshot())
+    core.init_from_snapshot_minimal(&mut cell_store, basic_snapshot())
         .unwrap();
 
-    let err = core.ensure_graph_built(&mut cell_store).unwrap_err();
-    assert!(
-        err.to_string().contains("deferred XLSX hydration"),
-        "viewport-only graph build must fail with a materialization error, got {err}",
+    core.ensure_graph_built(&mut cell_store).unwrap();
+    assert!(!core.ast_cache.is_empty());
+    assert_eq!(
+        core.get_cell_value(&cell_store, &cid(0x12)),
+        Some(&CellValue::number(0.0))
     );
     assert_eq!(core.get_formula(&cid(0x12)), Some("=A1+B1"));
 }

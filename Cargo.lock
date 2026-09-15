@@ -2691,6 +2691,8 @@ version = "0.1.0"
 dependencies = [
  "bridge-core",
  "domain-types",
+ "memmap2",
+ "tempfile",
  "thiserror",
  "xlsx-parser",
 ]

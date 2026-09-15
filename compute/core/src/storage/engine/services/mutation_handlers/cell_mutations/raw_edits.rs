@@ -45,10 +45,6 @@ pub(in crate::storage::engine) fn mutation_set_cells_raw_with_trust(
             .compute
             .validate_raw_user_edit_region_writes(cell_store, &edits)?;
     }
-    // Viewport-only deferred imports reject graph construction. Do that
-    // preflight before history, identity, and metadata are mutated below.
-    stores.compute.ensure_graph_construction_ready()?;
-
     for (sheet, cell, row, col, _, _) in &edits {
         crate::storage::engine::history::cells::capture_cell(
             stores, cell_store, *sheet, *cell, *row, *col,

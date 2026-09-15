@@ -57,7 +57,7 @@ impl ComputeEngine {
     #[tracing::instrument(name = "engine_export_to_xlsx_bytes", skip_all)]
     pub fn export_to_xlsx_bytes(&self) -> Result<Vec<u8>, ComputeError> {
         let result = self.export_to_parse_output()?;
-        self.write_xlsx_export_result(&result)
+        self.write_xlsx_export_result(result)
     }
 
     /// Exports the current workbook state through the modeled parse-output path.
@@ -69,21 +69,13 @@ impl ComputeEngine {
     #[tracing::instrument(name = "engine_export_to_xlsx_bytes_context_stripped", skip_all)]
     pub fn export_to_xlsx_bytes_context_stripped(&self) -> Result<Vec<u8>, ComputeError> {
         let result = self.export_to_parse_output()?;
-        self.write_xlsx_export_result(&result)
+        self.write_xlsx_export_result(result)
     }
 
-    fn write_xlsx_export_result(
-        &self,
-        result: &ExportParseResult,
-    ) -> Result<Vec<u8>, ComputeError> {
+    fn write_xlsx_export_result(&self, result: ExportParseResult) -> Result<Vec<u8>, ComputeError> {
         let bytes = {
             let mut profile =
                 crate::xlsx_profile::PhaseTimer::new("export", "export_to_xlsx_writer");
-            let bytes = xlsx_api::export_from_parse_output(&result.parse_output).map_err(|e| {
-                ComputeError::ExportError {
-                    message: e.to_string(),
-                }
-            })?;
             profile.counter("sheets", result.parse_output.sheets.len() as u64);
             profile.counter(
                 "cells",
@@ -94,6 +86,11 @@ impl ComputeEngine {
                     .map(|sheet| sheet.cells.len() as u64)
                     .sum::<u64>(),
             );
+            let bytes = xlsx_api::export_owned_parse_output(result.parse_output).map_err(|e| {
+                ComputeError::ExportError {
+                    message: e.to_string(),
+                }
+            })?;
             profile.counter("bytes", bytes.len() as u64);
             bytes
         };
@@ -107,6 +104,17 @@ impl ComputeEngine {
 // =============================================================================
 
 impl ComputeEngine {
+    /// Stream XLSX output to a validated temporary file and replace the destination.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn export_to_xlsx_path(&self, path: &std::path::Path) -> Result<(), ComputeError> {
+        let result = self.export_to_parse_output()?;
+        xlsx_api::export_owned_parse_output_to_path(result.parse_output, path).map_err(|error| {
+            ComputeError::ExportError {
+                message: error.to_string(),
+            }
+        })
+    }
+
     /// Build a `ParseOutput` from the current native storage state.
     ///
     /// Reads typed native metadata for all domains.
@@ -132,22 +140,8 @@ impl ComputeEngine {
     /// Export the engine state as a `ParseOutput`.
     #[tracing::instrument(name = "engine_export_to_parse_output", skip_all)]
     pub fn export_to_parse_output(&self) -> Result<ExportParseResult, ComputeError> {
-        self.require_all_sheets_materialized("export_to_parse_output")?;
         let parse_output = self.build_parse_output()?;
         Ok(ExportParseResult { parse_output })
-    }
-}
-
-impl ComputeEngine {
-    fn require_all_sheets_materialized(&self, operation: &str) -> Result<(), ComputeError> {
-        if self.deferred_hydration.is_some() {
-            return Err(ComputeError::InvalidInput {
-                message: format!(
-                    "{operation} requires deferred XLSX hydration to complete before reading all sheets"
-                ),
-            });
-        }
-        Ok(())
     }
 }
 

@@ -118,15 +118,8 @@ fn write_xlsx(workbook: &Workbook, out_path: &str) -> Result<(), OfficeJsError> 
             "output must be .xlsx, got {out_path}"
         )));
     }
-    let bytes = workbook.to_xlsx_bytes()?;
-    if let Some(parent) = Path::new(out_path).parent()
-        && !parent.as_os_str().is_empty()
-    {
-        fs::create_dir_all(parent).map_err(|e| {
-            OfficeJsError::Script(format!("failed to create {}: {e}", parent.display()))
-        })?;
-    }
-    fs::write(out_path, bytes)
+    workbook
+        .to_xlsx_path(out_path)
         .map_err(|e| OfficeJsError::Script(format!("failed to write {out_path}: {e}")))
 }
 

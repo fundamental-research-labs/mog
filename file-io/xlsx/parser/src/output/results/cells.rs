@@ -16,7 +16,7 @@ pub const CELL_TYPE_VAL_FORMULA: u8 = 5;
 pub const CELL_TYPE_VAL_DATE: u8 = 7;
 
 /// Cell data for full parse result (serializable version)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FullCellData {
     /// Row index (0-based)

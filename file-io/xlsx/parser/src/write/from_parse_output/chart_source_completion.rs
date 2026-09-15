@@ -44,6 +44,9 @@ struct ParsedWorkbookRange {
 }
 
 pub(super) fn complete_chart_sources_for_xlsx_export(output: &mut ParseOutput) {
+    if output.sheets.iter().all(|sheet| sheet.charts.is_empty()) {
+        return;
+    }
     let cell_text = workbook_cell_text(output);
     let cell_state = workbook_cell_state(output);
     for sheet_data in &mut output.sheets {

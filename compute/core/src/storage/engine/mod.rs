@@ -128,10 +128,6 @@ pub struct ComputeEngine {
     /// baseline, writes scenario values through `apply_mutation`, and restore
     /// consumes that baseline through `apply_mutation`.
     pub(crate) scenario_session: crate::what_if::scenarios::ScenarioSessionState,
-
-    /// Remaining import state when only the critical sheet has been hydrated.
-    /// `complete_deferred_hydration` installs the remaining metadata and indexes.
-    deferred_hydration: Option<construction::DeferredHydrationData>,
 }
 
 impl ComputeEngine {

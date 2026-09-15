@@ -18,6 +18,7 @@ mod read;
 mod recovery;
 mod streaming;
 mod validation;
+mod xml_reader;
 
 #[cfg(test)]
 mod deflate_tests;

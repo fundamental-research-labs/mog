@@ -173,7 +173,6 @@ fn assemble_engine_inner(
         version_runtime_operation_context: Default::default(),
 
         scenario_session: crate::what_if::scenarios::ScenarioSessionState::default(),
-        deferred_hydration: None,
     };
 
     crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(

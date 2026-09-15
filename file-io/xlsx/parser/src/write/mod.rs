@@ -125,4 +125,4 @@ pub use sheet::{
 };
 pub use write_error::WriteError;
 pub use xml_writer::{XmlWriteError, XmlWriter};
-pub use zip_writer::{CompressionMethod, ZipWriteEntry, ZipWriteError, ZipWriter};
+pub use zip_writer::{CompressionMethod, ZipWriteError, ZipWriter};

@@ -12,8 +12,8 @@
 //! # Architecture
 //!
 //! Modules are organized into logical groups:
-//! - **`read/`** — Domain-specific parsers (strings, styles, workbook, etc.)
-//! - **`pipeline/`** — Parse orchestration (full, fast, lazy, streaming)
+//! - **`domain/`** — Domain-specific parsers (strings, styles, workbook, etc.)
+//! - **`pipeline/`** — Unified workbook loading over streamed worksheet inflation
 //! - **`infra/`** — Shared XML, ZIP, namespace, and parser infrastructure
 //! - **`output/`** — Result types and serialization helpers
 //! - **Root-level** — Infrastructure (error handling, scanner, arena, etc.)
@@ -95,8 +95,8 @@ pub mod write;
 // === Entry Points ===
 // =============================================================================
 
-// Native entry point — now crate-private. External consumers use parse_xlsx_to_output().
-// Still accessible within the crate for binaries (crashtest, profile_corpus) and tests.
+// Low-level native result entry point used by profiling tools and corpus tests.
+// Consumers of shared domain types use parse_xlsx_to_output().
 pub use pipeline::full_parse::parse_xlsx_full_native;
 
 // =============================================================================
@@ -107,10 +107,9 @@ pub use output::results::{
     CELL_TYPE_VAL_BOOL, CELL_TYPE_VAL_EMPTY, CELL_TYPE_VAL_ERROR, CELL_TYPE_VAL_FORMULA,
     CELL_TYPE_VAL_NUMBER, CELL_TYPE_VAL_STRING, CellMetadataBlock, CellMetadataRecord, ColWidth,
     CustomProperty, CustomPropertyValue, DocPropsApp, DocPropsCore, DocPropsCustom,
-    FutureMetadataBlock, FutureMetadataGroup, LazyParseResult, LazyParseResultWithErrors,
-    MergeRange, MetadataOutput, MetadataTypeOutput, Pane, PaneState, ParseResult,
-    ParseResultWithErrors, ParseStats, ParseTimings, ParsedCellRange, ParsedTable,
-    ParsedTableColumn, RowHeight, SheetPane,
+    FutureMetadataBlock, FutureMetadataGroup, MergeRange, MetadataOutput, MetadataTypeOutput, Pane,
+    PaneState, ParseStats, ParseTimings, ParsedCellRange, ParsedTable, ParsedTableColumn,
+    RowHeight, SheetPane,
 };
 
 // FullParseResult and related types are public so integration/corpus tests can use
@@ -148,8 +147,8 @@ pub use write::{
     CT_DRAWING, CT_EMF, CT_EXTENDED_PROPERTIES, CT_GIF, CT_JPEG, CT_METADATA, CT_PIVOT_CACHE,
     CT_PIVOT_TABLE, CT_PNG, CT_RELATIONSHIPS, CT_SHARED_STRINGS, CT_STYLES, CT_TABLE,
     CT_TABLE_SINGLE_CELLS, CT_THEME, CT_VBA, CT_WMF, CT_WORKBOOK, CT_WORKSHEET, CT_XML,
-    CompressionMethod, ContentTypeDefault, ContentTypeOverride, ContentTypesManager, ZipWriteEntry,
-    ZipWriteError, ZipWriter, create_xlsx_content_types,
+    CompressionMethod, ContentTypeDefault, ContentTypeOverride, ContentTypesManager, ZipWriteError,
+    ZipWriter, create_xlsx_content_types,
 };
 
 // =============================================================================
@@ -225,9 +224,7 @@ pub use pipeline::import_extensions::ImportExtensionParts;
 pub use infra::arena::ParseArena;
 
 pub use pipeline::streaming::{
-    DEFAULT_BUFFER_SIZE, ParseState, StreamLoadStats, StreamingCellParser, StreamingDeflate,
-    last_stream_load_stats, reset_stream_load_stats, set_stream_resolved_hook,
-    stream_parse_worksheet, with_stream_cell_hook,
+    DEFAULT_BUFFER_SIZE, StreamLoadStats, StreamingDeflate, XlsxCellSink,
 };
 
 // === Utilities ===
@@ -260,6 +257,17 @@ pub fn parse_xlsx_to_output(
     xlsx_data: &[u8],
 ) -> Result<(domain_types::ParseOutput, domain_types::ParseDiagnostics), String> {
     let result = parse_xlsx_full_native(xlsx_data, None)?;
+    Ok(full_parse_result_to_parse_output(&result))
+}
+
+/// Parse through the unified worksheet stream, transferring cell values to a
+/// native consumer while retaining only the metadata it requests in `ParseOutput`.
+/// The consumer must discard its staged state if parsing fails.
+pub fn parse_xlsx_to_output_with_sink(
+    xlsx_data: &[u8],
+    sink: &mut dyn XlsxCellSink,
+) -> Result<(domain_types::ParseOutput, domain_types::ParseDiagnostics), String> {
+    let result = pipeline::full_parse::parse_xlsx_with_sink(xlsx_data, sink)?;
     Ok(full_parse_result_to_parse_output(&result))
 }
 
@@ -383,3 +391,5 @@ mod tests {
         );
     }
 }
+
+pub use output::to_parse_output::{ChartSourceRange, refresh_chart_source_fingerprints};

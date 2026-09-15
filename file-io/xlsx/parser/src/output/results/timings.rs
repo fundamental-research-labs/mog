@@ -61,11 +61,11 @@ pub struct ParseTimings {
     pub(crate) ss_count_rich_text: f64,
 
     // --- Worksheet sub-phase breakdown (cumulative across all sheets) ---
-    /// Sub-phase: ZIP decompression of worksheet XMLs (us)
+    /// Combined worksheet stream inflation, cell parsing, and conversion (us)
     pub(crate) ws_zip_decompress_us: f64,
-    /// Sub-phase: parse_worksheet_fast() core cell parsing (us)
+    /// Legacy separate cell-parse timing; included in ws_zip_decompress_us during streaming.
     pub(crate) ws_cell_parse_us: f64,
-    /// Sub-phase: CellData → FullCellData conversion (us)
+    /// Legacy separate cell-conversion timing; included in ws_zip_decompress_us during streaming.
     pub(crate) ws_cell_convert_us: f64,
     /// Sub-phase: postprocessing — shared formulas, cached values, data tables (us)
     pub(crate) ws_postprocess_us: f64,
@@ -202,17 +202,17 @@ impl ParseTimings {
 
     // --- Worksheet sub-phase getters ---
 
-    /// Sub-phase: ZIP decompression of worksheet XMLs (us)
+    /// Combined worksheet stream inflation, cell parsing, and conversion (us)
     pub fn ws_zip_decompress_us(&self) -> f64 {
         self.ws_zip_decompress_us
     }
 
-    /// Sub-phase: parse_worksheet_fast() core cell parsing (us)
+    /// Legacy separate cell-parse timing; included in ws_zip_decompress_us during streaming.
     pub fn ws_cell_parse_us(&self) -> f64 {
         self.ws_cell_parse_us
     }
 
-    /// Sub-phase: CellData → FullCellData conversion (us)
+    /// Legacy separate cell-conversion timing; included in ws_zip_decompress_us during streaming.
     pub fn ws_cell_convert_us(&self) -> f64 {
         self.ws_cell_convert_us
     }
@@ -405,7 +405,3 @@ impl ParseTimings {
         }
     }
 }
-
-// =============================================================================
-// LazyParseResult
-// =============================================================================

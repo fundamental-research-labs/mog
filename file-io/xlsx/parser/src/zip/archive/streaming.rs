@@ -75,6 +75,14 @@ impl<'a> XlsxArchive<'a> {
         result.map_err(|e| self.remember_zip_error(e))
     }
 
+    /// Open XML as a bounded reader with size, CRC, and UTF-8 validation.
+    /// The caller must read through EOF to complete DEFLATE integrity checks.
+    pub(crate) fn xml_reader(&self, name: &str) -> Result<impl std::io::BufRead + '_, ZipError> {
+        let entry = self.get_compressed_data(name)?;
+        super::xml_reader::XmlEntryReader::new(self, entry)
+            .map_err(|error| self.remember_zip_error(error))
+    }
+
     /// Get the raw compressed data for a worksheet by 1-based index.
     ///
     /// This is a convenience method for streaming worksheet parsing.

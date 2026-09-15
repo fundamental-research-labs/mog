@@ -1,4 +1,5 @@
-//! Regression coverage for the XLSX deferred-open production path.
+//! Streaming XLSX import coverage through the legacy deferred-open entry point.
+//! Loading completes before return; completion remains an idempotent compatibility call.
 
 use super::super::*;
 use super::helpers::*;

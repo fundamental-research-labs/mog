@@ -3,23 +3,27 @@ use super::*;
 use value_types::CellValue;
 
 #[test]
-fn deferred_xlsx_full_calc_on_load_recalculates_empty_formula_caches_on_completion() {
+fn stream_xlsx_full_calc_on_load_recalculates_empty_formula_caches_on_import() {
     let bytes = deferred_calc_fixture_xlsx(DeferredCalcFixtureMode::FullCalcOnLoad);
     let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-    engine
-        .import_from_xlsx_bytes_deferred(&bytes)
-        .expect("deferred XLSX import should succeed");
-    engine
-        .complete_deferred_hydration()
-        .expect("stream load completion is a no-op");
     let mutation = engine
-        .recalculate()
-        .expect("explicit recalc after stream load");
+        .import_from_xlsx_bytes_deferred(&bytes)
+        .expect("stream XLSX import should succeed");
     let (first, second) = sheet_ids(&engine);
 
     assert_eq!(engine.get_cell_value(&first, 0, 1), CellValue::number(6.0));
     assert_eq!(engine.get_cell_value(&second, 0, 1), CellValue::number(9.0));
-    let _ = mutation;
+    assert_changed_formula(&mutation, &first, 0, 1, 6.0);
+    assert_changed_formula(&mutation, &second, 0, 1, 9.0);
+    assert!(
+        engine
+            .complete_deferred_hydration()
+            .unwrap()
+            .recalc
+            .changed_cells
+            .is_empty()
+    );
+    assert!(engine.recalculate().unwrap().changed_cells.is_empty());
 
     let settings = engine.get_calculation_settings();
     assert!(settings.full_calc_on_load);
@@ -28,24 +32,28 @@ fn deferred_xlsx_full_calc_on_load_recalculates_empty_formula_caches_on_completi
 }
 
 #[test]
-fn deferred_xlsx_force_full_calc_recalculates_even_when_manual() {
+fn stream_xlsx_force_full_calc_recalculates_even_when_manual() {
     let bytes = deferred_calc_fixture_xlsx(DeferredCalcFixtureMode::ForceFullCalcManual);
     let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-    engine
-        .import_from_xlsx_bytes_deferred(&bytes)
-        .expect("deferred XLSX import should succeed");
-
-    engine
-        .complete_deferred_hydration()
-        .expect("stream load completion is a no-op");
     let mutation = engine
-        .recalculate()
-        .expect("explicit recalc after stream load");
+        .import_from_xlsx_bytes_deferred(&bytes)
+        .expect("stream XLSX import should succeed");
+
     let (first, second) = sheet_ids(&engine);
 
     assert_eq!(engine.get_cell_value(&first, 0, 1), CellValue::number(6.0));
     assert_eq!(engine.get_cell_value(&second, 0, 1), CellValue::number(9.0));
-    let _ = mutation;
+    assert_changed_formula(&mutation, &first, 0, 1, 6.0);
+    assert_changed_formula(&mutation, &second, 0, 1, 9.0);
+    assert!(
+        engine
+            .complete_deferred_hydration()
+            .unwrap()
+            .recalc
+            .changed_cells
+            .is_empty()
+    );
+    assert!(engine.recalculate().unwrap().changed_cells.is_empty());
     assert!(!engine.get_calculation_settings().full_calc_on_load);
 
     let exported = engine
@@ -124,9 +132,11 @@ fn deferred_xlsx_default_calculation_options_perform_pending_first_calculation()
         .unwrap();
     assert_eq!(engine.get_cell_value(&first, 0, 1), CellValue::number(6.0));
     assert_eq!(engine.get_cell_value(&second, 0, 1), CellValue::number(9.0));
-    assert!(engine
-        .recalculate_with_options(&snapshot_types::RecalcOptions::default())
-        .unwrap()
-        .changed_cells
-        .is_empty());
+    assert!(
+        engine
+            .recalculate_with_options(&snapshot_types::RecalcOptions::default())
+            .unwrap()
+            .changed_cells
+            .is_empty()
+    );
 }

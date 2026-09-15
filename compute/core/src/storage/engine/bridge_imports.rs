@@ -1,7 +1,7 @@
 use bridge_core as bridge;
 
-use super::{construction, services, ComputeEngine, CsvImportOptions};
-use crate::snapshot::{ChangeKind, MutationResult, RecalcResult, WorkbookSnapshot};
+use super::{ComputeEngine, CsvImportOptions, construction, services};
+use crate::snapshot::{MutationResult, RecalcResult, WorkbookSnapshot};
 use value_types::ComputeError;
 
 #[bridge::api(
@@ -59,25 +59,14 @@ impl ComputeEngine {
         xlsx_data: &[u8],
         do_recalc: bool,
     ) -> Result<MutationResult, ComputeError> {
-        let result = self.without_history(|engine| {
-            let recalc = {
-                let _span = tracing::info_span!("import_construction").entered();
-                construction::import_from_xlsx_bytes(engine, xlsx_data, do_recalc)?
-            };
-            let result = {
-                let _span = tracing::info_span!("import_mutation_result").entered();
-                services::mutation_handlers::build_mutation_result_for_hydration(
-                    &engine.stores,
-                    &engine.cell_store,
-                    recalc,
-                )
-            };
-            Ok(result)
-        });
-        if result.is_ok() {
-            self.clear_history();
-        }
-        result
+        self.import_xlsx_with_policy(
+            xlsx_data,
+            if do_recalc {
+                construction::XlsxRecalculation::Always
+            } else {
+                construction::XlsxRecalculation::Never
+            },
+        )
     }
 
     /// Construct a `ComputeEngine` directly from raw XLSX bytes (no recalc).
@@ -88,7 +77,7 @@ impl ComputeEngine {
     /// Stream-load XLSX bytes, invoking `on_chunk` as cells land in the live store.
     pub fn from_xlsx_bytes_with_progress(
         xlsx_data: &[u8],
-        on_chunk: impl FnMut(&xlsx_parser::StreamLoadStats, &crate::cells::CellStore) + 'static,
+        on_chunk: impl FnMut(&xlsx_parser::StreamLoadStats, &crate::cells::CellStore),
     ) -> Result<(Self, RecalcResult), ComputeError> {
         construction::from_xlsx_bytes_with_progress(xlsx_data, on_chunk)
     }
@@ -110,7 +99,11 @@ impl ComputeEngine {
         xlsx_data: &[u8],
     ) -> Result<RecalcResult, ComputeError> {
         let result = self.without_history(|engine| {
-            construction::import_from_xlsx_bytes(engine, xlsx_data, false)
+            construction::import_from_xlsx_bytes(
+                engine,
+                xlsx_data,
+                construction::XlsxRecalculation::Never,
+            )
         });
         if result.is_ok() {
             self.clear_history();
@@ -118,93 +111,24 @@ impl ComputeEngine {
         result
     }
 
-    /// Stream-load an XLSX workbook. Completing deferred hydration is a no-op
-    /// because every sheet is already materialized.
+    /// Compatibility entry point for stream loading an XLSX workbook.
+    ///
+    /// Every sheet is materialized before return. Workbook calculation-on-load
+    /// flags are honored here; completing deferred hydration is a no-op.
     #[bridge::write]
     #[tracing::instrument(name = "engine_import_from_xlsx_bytes_deferred", skip_all)]
     pub fn import_from_xlsx_bytes_deferred(
         &mut self,
         xlsx_data: &[u8],
     ) -> Result<MutationResult, ComputeError> {
-        let result = self.without_history(|engine| {
-            construction::import_from_xlsx_bytes(engine, xlsx_data, false)?;
-            let result = services::mutation_handlers::build_mutation_result_for_hydration(
-                &engine.stores,
-                &engine.cell_store,
-                RecalcResult::empty(),
-            );
-            Ok(result)
-        });
-        if result.is_ok() {
-            self.clear_history();
-        }
-        result
+        self.import_xlsx_with_policy(xlsx_data, construction::XlsxRecalculation::OnLoad)
     }
 
     /// No-op after stream load: every worksheet is already in the live store.
     #[bridge::write]
     #[tracing::instrument(name = "engine_complete_deferred_hydration", skip_all)]
     pub fn complete_deferred_hydration(&mut self) -> Result<MutationResult, ComputeError> {
-        self.without_history(|engine| {
-            let deferred_filter_created_keys = if engine.deferred_hydration.is_some() {
-                collect_deferred_filter_created_keys(engine)
-            } else {
-                Default::default()
-            };
-            let Some(mut completion) = construction::stage_deferred_hydration(engine)? else {
-                let result = services::mutation_handlers::build_mutation_result_for_hydration(
-                    &engine.stores,
-                    &engine.cell_store,
-                    RecalcResult::empty(),
-                );
-                return Ok(result);
-            };
-
-            let mut recalc = if completion.calculation.full_calc_on_load
-                || completion.calculation.force_full_calc
-            {
-                let calculation = completion.calculation.clone();
-                let options = snapshot_types::RecalcOptions {
-                    iterative: Some(calculation.iterate),
-                    max_iterations: Some(calculation.iterate_count),
-                    max_change: Some(
-                        value_types::FiniteF64::new(calculation.iterate_delta)
-                            .unwrap_or_else(|| value_types::FiniteF64::must(0.001)),
-                    ),
-                    timestamp_serial: None,
-                };
-                Self::materialize_all_pivots_for_import_open(
-                    &mut completion.stores,
-                    &mut completion.cell_store,
-                );
-                crate::storage::engine::cell_metadata::refresh(
-                    &completion.stores.storage,
-                    &mut completion.cell_store,
-                    completion.stores.layout_metrics,
-                );
-                let result = completion
-                    .stores
-                    .compute
-                    .full_recalc_with_options(&mut completion.cell_store, &options)?;
-                completion.stores.compute.clear_dirty();
-                result
-            } else {
-                RecalcResult::empty()
-            };
-
-            construction::commit_deferred_hydration(engine, completion);
-            engine.postprocess_import_open_recalc(&mut recalc);
-            let mut result = services::mutation_handlers::build_mutation_result_for_hydration(
-                &engine.stores,
-                &engine.cell_store,
-                recalc,
-            );
-            suppress_deferred_duplicate_filter_created_changes(
-                &mut result,
-                &deferred_filter_created_keys,
-            );
-            Ok(result)
-        })
+        Ok(MutationResult::empty())
     }
 
     // -------------------------------------------------------------------
@@ -324,35 +248,61 @@ impl ComputeEngine {
     }
 }
 
-fn collect_deferred_filter_created_keys(
-    engine: &ComputeEngine,
-) -> std::collections::HashSet<(String, String)> {
-    engine
-        .stores
-        .grid_indexes
-        .keys()
-        .flat_map(|sheet_id| {
-            let sheet_id_str = sheet_id.to_uuid_string();
-            crate::storage::sheet::filters::get_filters_in_sheet(&engine.stores.storage, sheet_id)
-                .into_iter()
-                .map(move |filter| (sheet_id_str.clone(), filter.id))
-        })
-        .collect()
-}
-
-fn suppress_deferred_duplicate_filter_created_changes(
-    result: &mut MutationResult,
-    deferred_filter_created_keys: &std::collections::HashSet<(String, String)>,
-) {
-    if deferred_filter_created_keys.is_empty() {
-        return;
+impl ComputeEngine {
+    fn import_xlsx_with_policy(
+        &mut self,
+        xlsx_data: &[u8],
+        recalculation: construction::XlsxRecalculation,
+    ) -> Result<MutationResult, ComputeError> {
+        let result = self.without_history(|engine| {
+            let recalc = {
+                let _span = tracing::info_span!("import_construction").entered();
+                construction::import_from_xlsx_bytes(engine, xlsx_data, recalculation)?
+            };
+            let result = {
+                let _span = tracing::info_span!("import_mutation_result").entered();
+                services::mutation_handlers::build_mutation_result_for_hydration(
+                    &engine.stores,
+                    &engine.cell_store,
+                    recalc,
+                )
+            };
+            Ok(result)
+        });
+        if result.is_ok() {
+            self.clear_history();
+        }
+        result
     }
 
-    result.filter_changes.retain(|change| {
-        let duplicate_created = change.kind == ChangeKind::Set
-            && change.action.as_deref() == Some("created")
-            && deferred_filter_created_keys
-                .contains(&(change.sheet_id.clone(), change.filter_id.clone()));
-        !duplicate_created
-    });
+    /// Honor Excel's calculation-on-load flags before committing an import.
+    pub(in crate::storage::engine) fn recalculate_on_import_open(
+        &mut self,
+    ) -> Result<RecalcResult, ComputeError> {
+        let calculation = self.get_calculation_settings();
+        let mut recalc = if calculation.full_calc_on_load || calculation.force_full_calc {
+            Self::materialize_all_pivots_for_import_open(&mut self.stores, &mut self.cell_store);
+            super::cell_metadata::refresh(
+                &self.stores.storage,
+                &mut self.cell_store,
+                self.stores.layout_metrics,
+            );
+            let options = snapshot_types::RecalcOptions {
+                iterative: Some(calculation.enable_iterative_calculation),
+                max_iterations: Some(calculation.max_iterations),
+                max_change: Some(calculation.max_change),
+                timestamp_serial: None,
+            };
+            let result = self
+                .stores
+                .compute
+                .full_recalc_with_options(&mut self.cell_store, &options)?;
+            self.stores.compute.clear_dirty();
+            result
+        } else {
+            RecalcResult::empty()
+        };
+        self.postprocess_import_open_recalc(&mut recalc);
+        Ok(recalc)
+    }
 }

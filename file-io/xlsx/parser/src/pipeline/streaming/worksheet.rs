@@ -5,118 +5,37 @@
 //! small). Cell XML is parsed from inflate chunks and discarded.
 
 use crate::domain::cells::{
-    CellData, CellExtrasInput, ParseExtras, apply_fast_row_attrs, collect_cell_extras,
+    CellExtrasInput, ParseExtras, apply_fast_row_attrs, collect_cell_extras,
     collect_formula_extras, parse_row_number, scan_cell, start_tag_at,
 };
 use crate::infra::scanner::{find_gt_simd, find_lt_simd, find_tag_simd};
 use crate::zip::constants::MAX_WORKSHEET_CELLS;
 use crate::zip::{CompressedEntry, ZipError};
 
-use super::cell_xml::matches_tag;
+use crate::domain::cells::matches_tag;
 use super::deflate::{DEFAULT_BUFFER_SIZE, StreamingDeflate};
 use ooxml_types::worksheet::RowHeight;
 
-use std::cell::{Cell, RefCell};
+use crate::output::results::FullCellData;
+use crate::output::to_parse_output::cell_context::CellConversionContext;
 
-thread_local! {
-    static LAST_STREAM_STATS: RefCell<StreamLoadStats> = RefCell::new(StreamLoadStats::default());
-    static STREAM_CELL_HOOK: RefCell<Option<StreamCellHook>> = RefCell::new(None);
-    static STREAM_RESOLVED_HOOK: RefCell<Option<StreamResolvedHook>> = RefCell::new(None);
-    static CURRENT_STREAM_SHEET: Cell<usize> = const { Cell::new(0) };
-    static STREAM_RETAIN_CELLS: Cell<bool> = const { Cell::new(true) };
-}
+/// A native consumer for decoded worksheet cells. Returning `true` retains the
+/// cell's import metadata in the parse result; the consumer already owns its value.
+/// Collection-only callers use the same parser without a sink.
+pub trait XlsxCellSink {
+    fn cell(&mut self, sheet: usize, cell: domain_types::CellData, stats: &StreamLoadStats)
+    -> bool;
 
-type StreamCellHook = Box<dyn FnMut(usize, &CellData, &[u8], &StreamLoadStats)>;
-type StreamResolvedHook = Box<
-    dyn FnMut(
-        usize,
-        u32,
-        u32,
-        Option<&str>,
-        Option<&str>,
-        u8,
-        Option<&str>,
-        bool,
-        Option<&ooxml_types::worksheet::CellFormula>,
-    ),
->;
+    /// Restore authored cells in array/data-table regions from the consumer's
+    /// store, so cross-cell metadata can be resolved even for out-of-order XML.
+    fn retain_range_cells(
+        &mut self,
+        sheet: usize,
+        cells: &mut Vec<FullCellData>,
+        ranges: &[(u32, u32, u32, u32)],
+    );
 
-/// Install a cell observer for the duration of `f`.
-///
-/// The observer is invoked from `stream_parse_worksheet` as each cell is
-/// parsed from an inflate chunk, with the current worksheet index.
-pub fn with_stream_cell_hook<R>(
-    hook: impl FnMut(usize, &CellData, &[u8], &StreamLoadStats) + 'static,
-    f: impl FnOnce() -> R,
-) -> R {
-    STREAM_CELL_HOOK.with(|slot| *slot.borrow_mut() = Some(Box::new(hook)));
-    CURRENT_STREAM_SHEET.with(|idx| idx.set(0));
-    let result = f();
-    STREAM_CELL_HOOK.with(|slot| *slot.borrow_mut() = None);
-    STREAM_RESOLVED_HOOK.with(|slot| *slot.borrow_mut() = None);
-    STREAM_RETAIN_CELLS.with(|flag| flag.set(true));
-    result
-}
-
-pub fn set_stream_resolved_hook(
-    hook: impl FnMut(
-        usize,
-        u32,
-        u32,
-        Option<&str>,
-        Option<&str>,
-        u8,
-        Option<&str>,
-        bool,
-        Option<&ooxml_types::worksheet::CellFormula>,
-    ) + 'static,
-) {
-    STREAM_RESOLVED_HOOK.with(|slot| *slot.borrow_mut() = Some(Box::new(hook)));
-}
-
-pub(crate) fn notify_stream_resolved(
-    row: u32,
-    col: u32,
-    value: Option<&str>,
-    formula: Option<&str>,
-    cached_value_type: u8,
-    array_ref: Option<&str>,
-    has_empty_cached_value: bool,
-    cell_formula: Option<&ooxml_types::worksheet::CellFormula>,
-) {
-    STREAM_RESOLVED_HOOK.with(|slot| {
-        if let Some(hook) = slot.borrow_mut().as_mut() {
-            let sheet_idx = CURRENT_STREAM_SHEET.with(|idx| idx.get());
-            hook(
-                sheet_idx,
-                row,
-                col,
-                value,
-                formula,
-                cached_value_type,
-                array_ref,
-                has_empty_cached_value,
-                cell_formula,
-            );
-        }
-    });
-}
-
-pub(crate) fn stream_retain_cells() -> bool {
-    STREAM_RETAIN_CELLS.with(|flag| flag.get())
-}
-
-pub(crate) fn set_current_stream_sheet(sheet_idx: usize) {
-    CURRENT_STREAM_SHEET.with(|idx| idx.set(sheet_idx));
-}
-
-pub(crate) fn notify_stream_cell(cell: &CellData, strings: &[u8], stats: &StreamLoadStats) {
-    STREAM_CELL_HOOK.with(|slot| {
-        if let Some(hook) = slot.borrow_mut().as_mut() {
-            let sheet_idx = CURRENT_STREAM_SHEET.with(|idx| idx.get());
-            hook(sheet_idx, cell, strings, stats);
-        }
-    });
+    fn sheet_complete(&mut self, sheet: usize, stats: &StreamLoadStats);
 }
 
 /// Observed inflate/parse counters for a single worksheet stream.
@@ -136,10 +55,14 @@ pub struct StreamLoadStats {
     pub cells_emitted_before_last_chunk: usize,
     /// Total cells parsed from this sheet.
     pub cells_parsed: usize,
+    /// Largest per-cell text scratch buffer; released before the next cell.
+    pub max_cell_text_buffer: usize,
+    /// Retained cells requiring import metadata, distinct from the live grid.
+    pub retained_metadata_cells: usize,
 }
 
 impl StreamLoadStats {
-    fn merge_from(&mut self, other: &Self) {
+    pub fn merge_from(&mut self, other: &Self) {
         self.max_inflate_buffer = self.max_inflate_buffer.max(other.max_inflate_buffer);
         self.inflate_chunk_size = self.inflate_chunk_size.max(other.inflate_chunk_size);
         self.bytes_decompressed = self
@@ -153,22 +76,11 @@ impl StreamLoadStats {
             .cells_emitted_before_last_chunk
             .saturating_add(other.cells_emitted_before_last_chunk);
         self.cells_parsed = self.cells_parsed.saturating_add(other.cells_parsed);
+        self.max_cell_text_buffer = self.max_cell_text_buffer.max(other.max_cell_text_buffer);
+        self.retained_metadata_cells = self
+            .retained_metadata_cells
+            .saturating_add(other.retained_metadata_cells);
     }
-}
-
-/// Clear thread-local stream counters before a workbook parse.
-pub fn reset_stream_load_stats() {
-    LAST_STREAM_STATS.with(|stats| *stats.borrow_mut() = StreamLoadStats::default());
-}
-
-/// Merge one worksheet's counters into the thread-local workbook totals.
-pub fn record_stream_load_stats(stats: &StreamLoadStats) {
-    LAST_STREAM_STATS.with(|slot| slot.borrow_mut().merge_from(stats));
-}
-
-/// Totals from the most recent workbook parse on this thread.
-pub fn last_stream_load_stats() -> StreamLoadStats {
-    LAST_STREAM_STATS.with(|stats| stats.borrow().clone())
 }
 
 /// Streamed worksheet payload: cells plus the small head/tail XML regions.
@@ -176,8 +88,7 @@ pub fn last_stream_load_stats() -> StreamLoadStats {
 pub struct StreamedWorksheet {
     pub pre_sheet_data: Vec<u8>,
     pub post_sheet_data: Vec<u8>,
-    pub cells: Vec<CellData>,
-    pub strings: Vec<u8>,
+    pub cells: Vec<FullCellData>,
     pub extras: ParseExtras,
     pub row_heights: Vec<RowHeight>,
     pub explicit_blank_cells: Vec<(u32, u32)>,
@@ -191,13 +102,18 @@ enum Phase {
     Post,
 }
 
-struct WorksheetStreamParser<'a> {
-    shared_strings: &'a [&'a str],
+struct WorksheetStreamParser<'a, 'b, 'c> {
+    shared_strings: &'a [String],
+    shared_string_refs: Vec<&'a str>,
+    context: &'a CellConversionContext<'a>,
+    sheet_index: usize,
+    sink: &'b mut Option<&'c mut dyn XlsxCellSink>,
+    stats: StreamLoadStats,
     phase: Phase,
     pending: Vec<u8>,
     pre: Vec<u8>,
     post: Vec<u8>,
-    cells: Vec<CellData>,
+    cells: Vec<FullCellData>,
     strings: Vec<u8>,
     extras: ParseExtras,
     row_heights: Vec<RowHeight>,
@@ -207,16 +123,31 @@ struct WorksheetStreamParser<'a> {
     max_window: usize,
 }
 
-impl<'a> WorksheetStreamParser<'a> {
-    fn new(shared_strings: &'a [&'a str], cell_hint: usize) -> Self {
+impl<'a, 'b, 'c> WorksheetStreamParser<'a, 'b, 'c> {
+    fn new(
+        shared_strings: &'a [String],
+        context: &'a CellConversionContext<'a>,
+        sheet_index: usize,
+        sink: &'b mut Option<&'c mut dyn XlsxCellSink>,
+        uncompressed_size: usize,
+    ) -> Self {
         Self {
+            shared_string_refs: shared_strings.iter().map(String::as_str).collect(),
             shared_strings,
+            context,
+            sheet_index,
+            sink,
+            stats: StreamLoadStats {
+                inflate_chunk_size: DEFAULT_BUFFER_SIZE,
+                uncompressed_size,
+                ..Default::default()
+            },
             phase: Phase::Pre,
             pending: Vec::new(),
             pre: Vec::new(),
             post: Vec::new(),
-            cells: Vec::with_capacity(cell_hint.min(MAX_WORKSHEET_CELLS)),
-            strings: Vec::with_capacity(cell_hint.saturating_mul(8).min(1 << 20)),
+            cells: Vec::new(),
+            strings: Vec::new(),
             extras: ParseExtras::default(),
             row_heights: Vec::new(),
             explicit_blank_cells: Vec::new(),
@@ -254,6 +185,9 @@ impl<'a> WorksheetStreamParser<'a> {
             let pending = std::mem::take(&mut self.pending);
             self.consume(&pending)?;
         }
+        if self.phase == Phase::Cells {
+            return Err("Truncated worksheet XML: incomplete cell or sheetData element".into());
+        }
         if self.phase != Phase::Post && !self.pending.is_empty() {
             // Trailing markup without `</sheetData>` still belongs to the tail
             // when sheetData was never closed; otherwise it is leftover pre.
@@ -262,18 +196,44 @@ impl<'a> WorksheetStreamParser<'a> {
                 Phase::Cells | Phase::Post => self.post.append(&mut self.pending),
             }
         }
+        let mut ranges: Vec<_> = self
+            .cells
+            .iter()
+            .filter_map(|cell| {
+                crate::output::to_parse_output::stream_range(cell.array_ref.as_deref()?)
+            })
+            .collect();
+        ranges.extend(
+            self.extras
+                .data_tables
+                .iter()
+                .map(|dt| (dt.start_row, dt.start_col, dt.end_row, dt.end_col)),
+        );
+        if let Some(sink) = self.sink.as_deref_mut() {
+            if !ranges.is_empty() {
+                sink.retain_range_cells(self.sheet_index, &mut self.cells, &ranges);
+            }
+        }
+        crate::domain::cells::apply_parse_extras(
+            &mut self.cells,
+            &self.extras,
+            &[],
+            &[],
+            self.shared_strings,
+        );
+        self.stats.max_inflate_buffer = self.max_window.max(DEFAULT_BUFFER_SIZE);
+        self.stats.retained_metadata_cells = self.cells.len();
+        if let Some(sink) = self.sink.as_deref_mut() {
+            sink.sheet_complete(self.sheet_index, &self.stats);
+        }
         Ok(StreamedWorksheet {
             pre_sheet_data: self.pre,
             post_sheet_data: self.post,
             cells: self.cells,
-            strings: self.strings,
             extras: self.extras,
             row_heights: self.row_heights,
             explicit_blank_cells: self.explicit_blank_cells,
-            stats: StreamLoadStats {
-                max_inflate_buffer: self.max_window,
-                ..StreamLoadStats::default()
-            },
+            stats: self.stats,
         })
     }
 
@@ -337,8 +297,8 @@ impl<'a> WorksheetStreamParser<'a> {
 
             if data[lt + 1] == b'/' {
                 if matches_tag(data, lt + 2, b"sheetData") {
-                    self.phase = Phase::Post;
                     if let Some(gt) = find_gt_simd(data, lt) {
+                        self.phase = Phase::Post;
                         let after = gt + 1;
                         if after < data.len() {
                             self.post.extend_from_slice(&data[after..]);
@@ -373,11 +333,12 @@ impl<'a> WorksheetStreamParser<'a> {
             }
 
             if start_tag_at(data, lt, b"c").is_some() {
+                self.strings.clear();
                 let Some(scanned) = scan_cell(
                     data,
                     lt,
                     self.current_row,
-                    self.shared_strings,
+                    &self.shared_string_refs,
                     &mut self.strings,
                     self.current_row_style,
                     &[],
@@ -391,7 +352,7 @@ impl<'a> WorksheetStreamParser<'a> {
                 }
 
                 if let Some(cell_data) = scanned.cell {
-                    if self.cells.len() >= MAX_WORKSHEET_CELLS {
+                    if self.stats.cells_parsed >= MAX_WORKSHEET_CELLS {
                         return Err(format!(
                             "worksheet cell count exceeds XLSX parser safety limit {MAX_WORKSHEET_CELLS}"
                         ));
@@ -402,11 +363,10 @@ impl<'a> WorksheetStreamParser<'a> {
                         self.explicit_blank_cells
                             .push((cell_data.row, cell_data.col));
                     }
-                    self.cells.push(cell_data);
-                    let last_idx = self.cells.len() - 1;
+                    let mut cell_extras = ParseExtras::default();
                     collect_cell_extras(
-                        &mut self.extras,
-                        last_idx,
+                        &mut cell_extras,
+                        0,
                         cell_data,
                         &self.strings,
                         CellExtrasInput {
@@ -420,14 +380,47 @@ impl<'a> WorksheetStreamParser<'a> {
                     );
                     if !scanned.is_self_closing {
                         collect_formula_extras(
-                            &mut self.extras,
-                            last_idx,
+                            &mut cell_extras,
+                            0,
                             cell_data,
                             &data[lt..scanned.end],
                             &mut self.strings,
                             scanned.has_xml_space_v,
                         );
                     }
+                    let mut full = crate::domain::cells::convert_cell_data(
+                        &cell_data,
+                        &self.strings,
+                        &mut Vec::new(),
+                    );
+                    crate::domain::cells::apply_parse_extras(
+                        std::slice::from_mut(&mut full),
+                        &cell_extras,
+                        std::slice::from_ref(&cell_data),
+                        &self.strings,
+                        self.shared_strings,
+                    );
+                    self.extras.sf_masters.extend(cell_extras.sf_masters);
+                    self.extras.sf_refs.extend(cell_extras.sf_refs);
+                    self.extras.data_tables.extend(cell_extras.data_tables);
+                    self.stats.cells_parsed += 1;
+                    self.stats.max_cell_text_buffer =
+                        self.stats.max_cell_text_buffer.max(self.strings.len());
+                    if self.stats.bytes_decompressed < self.stats.uncompressed_size {
+                        self.stats.cells_emitted_before_last_chunk += 1;
+                    }
+                    let retain = match self.sink.as_deref_mut() {
+                        Some(sink) => sink.cell(
+                            self.sheet_index,
+                            self.context.convert(&full, Default::default()),
+                            &self.stats,
+                        ),
+                        None => true,
+                    };
+                    if retain {
+                        self.cells.push(full);
+                    }
+                    self.strings.clear();
                 }
                 pos = scanned.end;
                 continue;
@@ -465,145 +458,69 @@ fn has_attr(tag: &[u8], name: &[u8]) -> bool {
     })
 }
 
-/// Inflate a worksheet ZIP entry in bounded chunks and parse cells as bytes arrive.
-///
-/// `on_cell` fires for each cell as soon as its XML is parsed from an inflate
-/// chunk — before the rest of the sheet (or workbook) is materialized.
-/// `on_chunk` fires after each inflate/copy chunk is consumed.
-pub fn stream_parse_worksheet(
+/// Inflate worksheet XML in bounded chunks and resolve each cell exactly once
+/// before publishing it. Only requested metadata survives in the returned sheet.
+pub(crate) fn stream_parse_worksheet(
     entry: &CompressedEntry<'_>,
-    shared_strings: &[&str],
-    mut on_cell: impl FnMut(&CellData, &[u8], &StreamLoadStats),
-    mut on_chunk: impl FnMut(&StreamLoadStats),
+    shared_strings: &[String],
+    context: &CellConversionContext<'_>,
+    sheet_index: usize,
+    sink: &mut Option<&mut dyn XlsxCellSink>,
 ) -> Result<StreamedWorksheet, String> {
-    let cell_hint = (entry.uncompressed_size / 50).max(64);
-    let mut parser = WorksheetStreamParser::new(shared_strings, cell_hint);
-    let mut stats = StreamLoadStats {
-        inflate_chunk_size: DEFAULT_BUFFER_SIZE,
-        uncompressed_size: entry.uncompressed_size,
-        ..StreamLoadStats::default()
-    };
-
+    let mut parser = WorksheetStreamParser::new(
+        shared_strings,
+        context,
+        sheet_index,
+        sink,
+        entry.uncompressed_size,
+    );
     if entry.is_stored() {
-        stream_stored(entry, &mut parser, &mut stats, &mut on_cell, &mut on_chunk)?;
+        if entry.data.len() != entry.uncompressed_size {
+            return Err(ZipError::DataCorruptionDetail(format!(
+                "{}: stored entry length does not match uncompressed size",
+                entry.name
+            ))
+            .to_string());
+        }
+        std::str::from_utf8(entry.data).map_err(|err| {
+            ZipError::DataCorruptionDetail(format!(
+                "{} contains malformed UTF-8 at byte {}",
+                entry.name,
+                err.valid_up_to()
+            ))
+            .to_string()
+        })?;
+        let mut hasher = crc32fast::Hasher::new();
+        for chunk in entry.data.chunks(DEFAULT_BUFFER_SIZE) {
+            hasher.update(chunk);
+            parser.stats.chunks_processed += 1;
+            parser.stats.bytes_decompressed += chunk.len();
+            parser.push_chunk(chunk)?;
+        }
+        if hasher.finalize() != entry.crc32 {
+            return Err(
+                ZipError::DataCorruptionDetail(format!("{}: CRC mismatch", entry.name)).to_string(),
+            );
+        }
     } else if entry.is_deflate() {
-        stream_deflate(entry, &mut parser, &mut stats, &mut on_cell, &mut on_chunk)?;
+        let mut deflate = StreamingDeflate::new(
+            entry.data,
+            DEFAULT_BUFFER_SIZE,
+            entry.uncompressed_size,
+            entry.output_limit,
+            entry.crc32,
+        )
+        .map_err(|e| e.to_string())?;
+        while let Some(chunk) = deflate.next_chunk().map_err(|e| e.to_string())? {
+            parser.stats.chunks_processed += 1;
+            parser.stats.bytes_decompressed += chunk.len();
+            parser.push_chunk(chunk)?;
+        }
     } else {
         return Err(format!(
             "Unsupported compression method: {}",
             entry.compression_method
         ));
     }
-
-    let mut streamed = parser.finish()?;
-    stats.max_inflate_buffer = stats
-        .max_inflate_buffer
-        .max(streamed.stats.max_inflate_buffer)
-        .max(DEFAULT_BUFFER_SIZE);
-    stats.cells_parsed = streamed.cells.len();
-    streamed.stats = stats;
-    Ok(streamed)
-}
-
-fn stream_deflate(
-    entry: &CompressedEntry<'_>,
-    parser: &mut WorksheetStreamParser<'_>,
-    stats: &mut StreamLoadStats,
-    on_cell: &mut impl FnMut(&CellData, &[u8], &StreamLoadStats),
-    on_chunk: &mut impl FnMut(&StreamLoadStats),
-) -> Result<(), String> {
-    let mut deflate = StreamingDeflate::new(
-        entry.data,
-        DEFAULT_BUFFER_SIZE,
-        entry.uncompressed_size,
-        entry.output_limit,
-        entry.crc32,
-    )
-    .map_err(|e| e.to_string())?;
-
-    loop {
-        let cells_before = parser.cells.len();
-        let chunk = match deflate.next_chunk().map_err(|e| e.to_string())? {
-            Some(chunk) => chunk.to_vec(),
-            None => break,
-        };
-        stats.chunks_processed += 1;
-        stats.max_inflate_buffer = stats.max_inflate_buffer.max(chunk.len());
-        parser.push_chunk(&chunk)?;
-        stats.bytes_decompressed = deflate.bytes_decompressed();
-        stats.cells_parsed = parser.cells.len();
-        if !deflate.is_finished() {
-            stats.cells_emitted_before_last_chunk = parser.cells.len().max(cells_before);
-        }
-        emit_new_cells(parser, cells_before, stats, on_cell);
-        on_chunk(stats);
-    }
-    stats.bytes_decompressed = deflate.bytes_decompressed();
-    Ok(())
-}
-
-fn emit_new_cells(
-    parser: &WorksheetStreamParser<'_>,
-    cells_before: usize,
-    stats: &StreamLoadStats,
-    on_cell: &mut impl FnMut(&CellData, &[u8], &StreamLoadStats),
-) {
-    for cell in &parser.cells[cells_before..] {
-        on_cell(cell, &parser.strings, stats);
-    }
-}
-
-fn stream_stored(
-    entry: &CompressedEntry<'_>,
-    parser: &mut WorksheetStreamParser<'_>,
-    stats: &mut StreamLoadStats,
-    on_cell: &mut impl FnMut(&CellData, &[u8], &StreamLoadStats),
-    on_chunk: &mut impl FnMut(&StreamLoadStats),
-) -> Result<(), String> {
-    if entry.data.len() != entry.uncompressed_size {
-        return Err(ZipError::DataCorruptionDetail(format!(
-            "{}: stored entry length {} does not match uncompressed size {}",
-            entry.name,
-            entry.data.len(),
-            entry.uncompressed_size
-        ))
-        .to_string());
-    }
-    if let Err(err) = std::str::from_utf8(entry.data) {
-        return Err(ZipError::DataCorruptionDetail(format!(
-            "{} contains malformed UTF-8 at byte {}",
-            entry.name,
-            err.valid_up_to()
-        ))
-        .to_string());
-    }
-    let mut hasher = crc32fast::Hasher::new();
-    let mut offset = 0;
-    while offset < entry.data.len() {
-        let end = (offset + DEFAULT_BUFFER_SIZE).min(entry.data.len());
-        let chunk = &entry.data[offset..end];
-        hasher.update(chunk);
-        stats.chunks_processed += 1;
-        stats.bytes_decompressed = end;
-        stats.max_inflate_buffer = stats.max_inflate_buffer.max(chunk.len());
-        let last = end == entry.data.len();
-        let cells_before = parser.cells.len();
-        parser.push_chunk(chunk)?;
-        stats.cells_parsed = parser.cells.len();
-        if !last {
-            stats.cells_emitted_before_last_chunk = parser.cells.len();
-        }
-        emit_new_cells(parser, cells_before, stats, on_cell);
-        on_chunk(stats);
-        offset = end;
-    }
-    let actual = hasher.finalize();
-    if actual != entry.crc32 {
-        return Err(ZipError::DataCorruptionDetail(format!(
-            "{}: CRC mismatch, expected {:08x}, got {:08x}",
-            entry.name, entry.crc32, actual
-        ))
-        .to_string());
-    }
-    Ok(())
+    parser.finish()
 }

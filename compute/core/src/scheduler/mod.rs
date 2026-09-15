@@ -233,8 +233,6 @@ pub struct ComputeCore {
     /// graph hasn't been built yet — `ensure_graph_built()` must be called
     /// before any recalc or mutation that depends on the graph.
     deferred_formula_cells: Option<Vec<(CellId, SheetId, String)>>,
-    /// Some worksheet payloads are still unloaded; graph construction must wait.
-    workbook_load_pending: bool,
 }
 
 impl Default for ComputeCore {
@@ -274,7 +272,6 @@ impl ComputeCore {
             pending_manual_dirty_cells: FxHashSet::default(),
             spill_blockers: FxHashMap::default(),
             deferred_formula_cells: None,
-            workbook_load_pending: false,
         }
     }
 

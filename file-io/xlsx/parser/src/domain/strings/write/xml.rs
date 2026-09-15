@@ -15,14 +15,22 @@ impl SharedStringsWriter {
     /// Any reorder on this path silently corrupts text cells, because
     /// cell `<v>` values are stored before the XML is produced.
     pub fn to_xml(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        self.write_to(&mut bytes)
+            .expect("writing XML to a Vec cannot fail");
+        bytes
+    }
+
+    /// Emit shared strings incrementally, buffering at most a chunk plus one item.
+    pub fn write_to(&self, sink: &mut (impl std::io::Write + ?Sized)) -> std::io::Result<()> {
         if self.is_empty() {
-            return self.write_empty_xml();
+            return sink.write_all(&self.write_empty_xml());
         }
 
         let total_count = self.total_count();
         let unique_count = self.len();
 
-        let mut xml = Vec::with_capacity(64 + unique_count * 64);
+        let mut xml = Vec::with_capacity(64 * 1024);
 
         xml.extend_from_slice(b"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n");
         xml.extend_from_slice(
@@ -35,14 +43,17 @@ impl SharedStringsWriter {
 
         for entry in &self.entries {
             write_string_item(entry, &mut xml);
+            if xml.len() >= 64 * 1024 {
+                sink.write_all(&xml)?;
+                xml.clear();
+            }
         }
 
+        sink.write_all(&xml)?;
         if let Some(ext_lst_xml) = &self.root_ext_lst_xml {
-            xml.extend_from_slice(ext_lst_xml);
+            sink.write_all(ext_lst_xml)?;
         }
-
-        xml.extend_from_slice(b"</sst>");
-        xml
+        sink.write_all(b"</sst>")
     }
 
     /// Write empty SST XML.
@@ -118,4 +129,43 @@ pub(super) fn write_text_element(text: &str, xml: &mut Vec<u8>) {
 
     escape_xml_content(text, xml);
     xml.extend_from_slice(b"</t>");
+}
+
+#[cfg(test)]
+mod streaming_tests {
+    use super::SharedStringsWriter;
+
+    #[test]
+    fn shared_strings_stream_in_original_index_order() {
+        #[derive(Default)]
+        struct Sink {
+            bytes: Vec<u8>,
+            largest_write: usize,
+            writes: usize,
+        }
+        impl std::io::Write for Sink {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.largest_write = self.largest_write.max(bytes.len());
+                self.writes += 1;
+                self.bytes.extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let mut writer = SharedStringsWriter::new();
+        for idx in 0..4096 {
+            assert_eq!(writer.add(&format!("{idx}: {} & <", "x".repeat(100))), idx);
+        }
+        let mut sink = Sink::default();
+        writer.write_to(&mut sink).unwrap();
+        assert!(sink.writes > 8);
+        assert!(sink.largest_write < 65_800);
+        let xml = String::from_utf8(sink.bytes).unwrap();
+        assert_eq!(xml.matches("<si>").count(), 4096);
+        assert!(xml.find("<t>0:").unwrap() < xml.find("<t>4095:").unwrap());
+        assert!(xml.contains(" &amp; &lt;"));
+        assert!(xml.ends_with("</si></sst>"));
+    }
 }

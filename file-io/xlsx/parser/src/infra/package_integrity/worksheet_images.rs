@@ -31,9 +31,9 @@ pub(super) fn validate_worksheet_images(
         return;
     }
     let referenced = archive
-        .read_file(worksheet_path)
+        .xml_reader(worksheet_path)
         .ok()
-        .and_then(|xml| owned_image_ids(&xml, relationships))
+        .and_then(|xml| owned_image_ids(xml, relationships))
         .unwrap_or_default();
     for rel in relationships.iter().filter(|rel| rel.rel_type == REL_IMAGE) {
         if !referenced.contains(&rel.id) {
@@ -55,7 +55,10 @@ struct Element {
     live_owner: bool,
 }
 
-fn owned_image_ids(xml: &[u8], relationships: &[OpcRelationship]) -> Option<HashSet<String>> {
+fn owned_image_ids(
+    xml: impl std::io::BufRead,
+    relationships: &[OpcRelationship],
+) -> Option<HashSet<String>> {
     let rel_types: HashMap<_, _> = relationships
         .iter()
         .map(|rel| (rel.id.as_str(), rel.rel_type.as_str()))

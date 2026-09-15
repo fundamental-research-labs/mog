@@ -1,5 +1,4 @@
 use super::super::ComputeEngine;
-use super::super::construction;
 use super::super::services;
 use crate::snapshot::{FloatingObjectChange, MutationResult, RecalcResult};
 use cell_types::SheetId;
@@ -12,8 +11,6 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         change: &StructureChange,
     ) -> Result<MutationResult, ComputeError> {
-        self.complete_deferred_hydration_for_structure_change()?;
-
         // Pass 1: Suppress observer, apply structural ops + merge rebuild + formula recalc.
         let apply_result = services::structural::apply_structure_change(
             &mut self.stores,
@@ -25,21 +22,6 @@ impl ComputeEngine {
         let recalc = apply_result?;
 
         self.finish_structure_change(sheet_id, recalc, Some(change))
-    }
-
-    fn complete_deferred_hydration_for_structure_change(&mut self) -> Result<(), ComputeError> {
-        let Some(mut completion) = construction::stage_deferred_hydration(self)? else {
-            return Ok(());
-        };
-
-        if completion.calculation.full_calc_on_load || completion.calculation.force_full_calc {
-            Self::materialize_all_pivots_for_import_open(
-                &mut completion.stores,
-                &mut completion.cell_store,
-            );
-        }
-        construction::commit_deferred_hydration(self, completion);
-        Ok(())
     }
 
     pub(super) fn finish_structure_change(

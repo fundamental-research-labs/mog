@@ -15,7 +15,8 @@ use crate::write::pivot_writer::PivotWriteData;
 use crate::write::{CompressionMethod, ControlsWriter, SheetWriter, ZipWriter};
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn write_zip_package(
+pub(super) fn write_zip_package<W: std::io::Write>(
+    sink: W,
     output: &ParseOutput,
     package_graph: &ResolvedPackageGraph,
     pivot_data: &PivotWriteData,
@@ -25,7 +26,8 @@ pub(super) fn write_zip_package(
     workbook_xml: Vec<u8>,
     workbook_rels_xml: Vec<u8>,
     styles_xml: Vec<u8>,
-    shared_strings_xml: Vec<u8>,
+    mut shared_strings: crate::domain::strings::write::SharedStringsWriter,
+    style_remapper: &super::style_remap::StyleExportRemapper,
     has_referenced_shared_strings: bool,
     theme_xml: Option<Vec<u8>>,
     core_props_xml: Option<Vec<u8>>,
@@ -44,11 +46,9 @@ pub(super) fn write_zip_package(
     worksheet_ole_vml_relationships: &[WorksheetOleVmlGraphEntry],
     worksheet_drawing_relationships: &[WorksheetDrawingGraphEntry],
     worksheet_threaded_comments_relationships: &[WorksheetThreadedCommentsGraphEntry],
-) -> Result<Vec<u8>, WriteError> {
+) -> Result<W, WriteError> {
     // Build content types from the resolved package graph. Imported manifest
     // hints may update graph-required rows, but cannot add stale rows.
-    let _total_table_count: usize = sheet_extras.iter().map(|e| e.tables.len()).sum();
-
     let mut content_types = ContentTypesManager::new();
     package_graph.add_content_types_to(&mut content_types);
     package_graph.apply_content_type_preferences_to(&mut content_types);
@@ -70,22 +70,13 @@ pub(super) fn write_zip_package(
     let root_rels_xml = root_rels.to_xml();
 
     // ── 7. Assemble ZIP ─────────────────────────────────────────────────
-    let mut zip = ZipWriter::with_compression(CompressionMethod::Deflate(1));
+    let mut zip = ZipWriter::with_sink(sink, CompressionMethod::Deflate(1));
 
     zip.add_file("[Content_Types].xml", content_types_xml);
     zip.add_file("_rels/.rels", root_rels_xml);
     add_registered_part(package_graph, &mut zip, "xl/workbook.xml", workbook_xml)?;
     zip.add_file("xl/_rels/workbook.xml.rels", workbook_rels_xml);
     add_registered_part(package_graph, &mut zip, "xl/styles.xml", styles_xml)?;
-
-    if has_referenced_shared_strings {
-        add_registered_part(
-            package_graph,
-            &mut zip,
-            "xl/sharedStrings.xml",
-            shared_strings_xml,
-        )?;
-    }
 
     // Theme
     if let Some(ref theme) = theme_xml {
@@ -204,28 +195,31 @@ pub(super) fn write_zip_package(
         add_registered_part(package_graph, &mut zip, "xl/connections.xml", xml)?;
     }
 
-    // Pre-generate all sheet XMLs (parallel when the "parallel" feature is enabled).
-    #[cfg(feature = "parallel")]
-    let sheet_xmls: Vec<Vec<u8>> = {
-        use rayon::prelude::*;
-        sheet_writers
-            .into_par_iter()
-            .map(|sw| sw.to_xml())
-            .collect()
-    };
-    #[cfg(not(feature = "parallel"))]
-    let sheet_xmls: Vec<Vec<u8>> = sheet_writers.into_iter().map(|sw| sw.to_xml()).collect();
-
     let mut zip_ctrl_prop_idx: usize = 0;
     let mut written_vml_relationships = std::collections::BTreeSet::new();
     let mut written_custom_property_parts = std::collections::BTreeSet::new();
-    for (idx, sheet_xml) in sheet_xmls.into_iter().enumerate() {
+    // Keep only one worksheet's converted cells alive during emission. The
+    // shared-string prepass fixed the slots; recount actual emitted references.
+    shared_strings.reset_reference_counts();
+    let emit_cell_metadata_refs = super::metadata::metadata_xml_would_export(output);
+    for (idx, mut sheet_writer) in sheet_writers.into_iter().enumerate() {
+        let (body_positions, table_regions) =
+            super::sheet_parts::sheet_data_table_context(output, idx);
+        super::sheet_cells::apply_cells(
+            &mut sheet_writer,
+            &output.sheets[idx],
+            &mut shared_strings,
+            &body_positions,
+            &table_regions,
+            emit_cell_metadata_refs,
+            style_remapper,
+        );
         let sheet_num = idx + 1;
-        add_registered_part(
+        add_registered_part_stream(
             package_graph,
             &mut zip,
             &format!("xl/worksheets/sheet{}.xml", sheet_num),
-            sheet_xml,
+            |sink| sheet_writer.write_to(sink),
         )?;
 
         // Sheet rels
@@ -676,6 +670,12 @@ pub(super) fn write_zip_package(
         }
     }
 
+    if has_referenced_shared_strings {
+        add_registered_part_stream(package_graph, &mut zip, "xl/sharedStrings.xml", |sink| {
+            shared_strings.write_to(sink)
+        })?;
+    }
+
     // ChartEx XML files + auxiliary files (style, colors, .rels)
     {
         for (sheet_idx, chart_ex_entries) in all_chart_ex_entries.iter().enumerate() {
@@ -784,8 +784,11 @@ pub(super) fn write_zip_package(
         }
     }
 
-    let xlsx_bytes = zip.finish().map_err(WriteError::from)?;
-    let archive = crate::XlsxArchive::new(&xlsx_bytes)
+    zip.finish().map_err(WriteError::from)
+}
+
+pub(super) fn validate_exported_archive(xlsx_bytes: &[u8]) -> Result<(), WriteError> {
+    let archive = crate::XlsxArchive::new(xlsx_bytes)
         .map_err(|e| WriteError::PackageIntegrity(format!("exported ZIP is invalid: {e}")))?;
     if let Err(errors) =
         crate::infra::package_integrity::validate_archive_package_integrity(&archive)
@@ -803,7 +806,7 @@ pub(super) fn write_zip_package(
             return Err(WriteError::PackageIntegrity(message));
         }
     }
-    Ok(xlsx_bytes)
+    Ok(())
 }
 
 fn export_validation_error_is_quarantined(
@@ -851,11 +854,20 @@ fn pivot_cache_rels_path(definition_path: &str) -> String {
     format!("{dir}/_rels/{file_name}.rels")
 }
 
-fn add_registered_part(
+fn add_registered_part<W: std::io::Write>(
     package_graph: &ResolvedPackageGraph,
-    zip: &mut ZipWriter,
+    zip: &mut ZipWriter<W>,
     path: &str,
     data: Vec<u8>,
+) -> Result<(), WriteError> {
+    add_registered_part_stream(package_graph, zip, path, |sink| sink.write_all(&data))
+}
+
+fn add_registered_part_stream<W: std::io::Write>(
+    package_graph: &ResolvedPackageGraph,
+    zip: &mut ZipWriter<W>,
+    path: &str,
+    write: impl FnOnce(&mut dyn std::io::Write) -> std::io::Result<()>,
 ) -> Result<(), WriteError> {
     if !package_graph.contains_part(path) {
         return Err(WriteError::PackageIntegrity(format!(
@@ -863,7 +875,7 @@ fn add_registered_part(
             path.trim_start_matches('/')
         )));
     }
-    zip.add_file(path, data);
+    zip.add_file_stream(path, write)?;
     Ok(())
 }
 
@@ -924,9 +936,9 @@ fn comment_vml_xml_for_export(
     )
 }
 
-fn write_vml_relationships_once(
+fn write_vml_relationships_once<W: std::io::Write>(
     package_graph: &ResolvedPackageGraph,
-    zip: &mut ZipWriter,
+    zip: &mut ZipWriter<W>,
     written: &mut std::collections::BTreeSet<String>,
     vml_path: &str,
 ) {

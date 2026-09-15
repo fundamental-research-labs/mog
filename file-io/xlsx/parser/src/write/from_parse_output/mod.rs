@@ -69,8 +69,7 @@ use crate::infra::opc::REL_CUSTOM_PROPERTY;
 use crate::write::relationships::{RelationshipManager, create_sheet_rels};
 use crate::write::{
     ControlsWriter, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CTRL_PROP, REL_DRAWING,
-    REL_HYPERLINK, REL_SLICER, REL_TABLE,
-    REL_THREADED_COMMENT, REL_VML_DRAWING,
+    REL_HYPERLINK, REL_SLICER, REL_TABLE, REL_THREADED_COMMENT, REL_VML_DRAWING,
 };
 
 use assembly::{
@@ -242,12 +241,43 @@ impl DrawingPathAllocator {
 ///
 /// Modeled workbook state is generated from domain types.
 pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, WriteError> {
-    reject_unsupported_package_profile(output)?;
+    write_xlsx_from_owned_parse_output(output.clone())
+}
+
+/// Export an owned projection without cloning the workbook during preflight.
+pub fn write_xlsx_from_owned_parse_output(output: ParseOutput) -> Result<Vec<u8>, WriteError> {
+    let bytes = write_xlsx_from_owned_parse_output_to(output, Vec::new())?;
+    validate_xlsx_export(&bytes)?;
+    Ok(bytes)
+}
+
+/// Validate the serialized package, including cross-part relationship references.
+pub fn validate_xlsx_export(bytes: &[u8]) -> Result<(), WriteError> {
+    zip_assembly::validate_exported_archive(bytes)
+}
+
+/// Stream the package into a sequential sink. The package graph is checked before
+/// writing; callers needing serialized-package validation can validate the result
+/// with `validate_xlsx_export` (the bytes and file entry points do this).
+pub fn write_xlsx_from_parse_output_to<W: std::io::Write>(
+    output: &ParseOutput,
+    sink: W,
+) -> Result<W, WriteError> {
+    write_xlsx_from_owned_parse_output_to(output.clone(), sink)
+}
+
+/// Stream an owned projection, applying export remaps in place.
+pub fn write_xlsx_from_owned_parse_output_to<W: std::io::Write>(
+    output: ParseOutput,
+    sink: W,
+) -> Result<W, WriteError> {
+    reject_unsupported_package_profile(&output)?;
 
     let export_context::WorkbookPreflight {
         output: remapped_output,
         styles_writer,
         shared_strings,
+        style_remapper,
         mut sheet_writers,
         sheet_extras,
         all_chart_entries,
@@ -2179,9 +2209,9 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     // the index returned by `add()` is the slot at which the entry lands in
     // <sst>. This is load-bearing for cells, which carry positional SST indices.
     let has_referenced_shared_strings = shared_strings.has_part_content();
-    let shared_strings_xml = shared_strings.to_xml();
 
     zip_assembly::write_zip_package(
+        sink,
         output,
         &package_graph,
         &pivot_data,
@@ -2191,7 +2221,8 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         workbook_xml,
         workbook_rels_xml,
         styles_xml,
-        shared_strings_xml,
+        shared_strings,
+        &style_remapper,
         has_referenced_shared_strings,
         theme_xml,
         core_props_xml,

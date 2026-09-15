@@ -139,9 +139,10 @@ impl Workbook {
             .and_then(|result| result.map_err(ComputeApiError::from))
     }
 
-    /// Export the workbook to an xlsx file on disk.
+    /// Stream the workbook to an xlsx file on disk.
+    /// Replaces the destination only after export and package validation succeed.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn to_xlsx_path(&self, path: &str) -> Result<(), ComputeApiError> {
-        let bytes = self.to_xlsx_bytes()?;
         if let Some(parent) = std::path::Path::new(path).parent()
             && !parent.as_os_str().is_empty()
         {
@@ -149,8 +150,10 @@ impl Workbook {
                 ComputeApiError::InvalidOperation(format!("create {parent:?}: {e}"))
             })?;
         }
-        std::fs::write(path, bytes)
-            .map_err(|e| ComputeApiError::InvalidOperation(format!("write {path}: {e}")))
+        let path = std::path::PathBuf::from(path);
+        self.dispatch
+            .query_engine(move |engine| engine.export_to_xlsx_path(&path))
+            .and_then(|result| result.map_err(ComputeApiError::from))
     }
 
     // -----------------------------------------------------------------

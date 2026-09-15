@@ -5,7 +5,7 @@ use super::form_control_export_plan::build_form_control_export_plan;
 use super::form_controls::convert_unified_form_controls;
 use super::header_footer_images::build_header_footer_image_export;
 use super::ole_objects::convert_unified_ole_objects;
-use super::sheet_builder::{apply_outline_groups_rows_only, build_sheet};
+use super::sheet_builder::{apply_outline_groups_rows_only, build_sheet_structure};
 use super::sheet_ext_merge::merge_ext_lst_entries;
 use super::style_remap::StyleExportRemapper;
 use super::{chart_replay, sheet_preservation, table_export_plan, worksheet_custom_properties};
@@ -21,15 +21,6 @@ pub(super) struct BuiltSheetParts {
     pub(super) all_chart_entries: Vec<Vec<ChartEntry>>,
     pub(super) all_chart_ex_entries: Vec<Vec<ChartExEntry>>,
     pub(super) all_image_blobs: Vec<(String, Vec<u8>)>,
-}
-
-pub(super) fn build_shared_strings(output: &domain_types::ParseOutput) -> SharedStringsWriter {
-    let capacity = output
-        .sheets
-        .iter()
-        .map(|sheet| sheet.cells.len())
-        .sum::<usize>();
-    SharedStringsWriter::with_capacity(capacity)
 }
 
 pub(super) fn build_sheet_parts(
@@ -70,47 +61,18 @@ pub(super) fn build_sheet_parts(
             .collect();
         let has_external_hyperlinks = !external_hyperlinks.is_empty();
 
-        // Collect Data Table body-cell positions for this sheet. Body cells
-        // carry a synthesized formula in the data model but the OOXML writer
-        // must emit `<v>`-only for them (only the master cell carries
-        // `<f t="dataTable">`). See `sheet_builder::build_sheet` for the
-        // sanitization detail.
-        let data_table_body_positions: std::collections::HashSet<(u32, u32)> = output
-            .data_table_regions
-            .iter()
-            .filter(|r| r.sheet_index as usize == sheet_idx)
-            .flat_map(|r| {
-                let (start_row, start_col) = (r.start_row, r.start_col);
-                let (end_row, end_col) = (r.end_row, r.end_col);
-                (start_row..=end_row).flat_map(move |row| {
-                    (start_col..=end_col).filter_map(move |col| {
-                        // Master is (start_row, start_col) — exclude it; only
-                        // body cells need formula suppression.
-                        if row == start_row && col == start_col {
-                            None
-                        } else {
-                            Some((row, col))
-                        }
-                    })
-                })
-            })
-            .collect();
-        let sheet_data_table_regions: Vec<_> = output
-            .data_table_regions
-            .iter()
-            .filter(|r| r.sheet_index as usize == sheet_idx)
-            .cloned()
-            .collect();
-
-        // Build the base SheetWriter (cells, merges, views, etc.)
-        let mut sheet_writer = build_sheet(
+        let (data_table_body_positions, sheet_data_table_regions) =
+            sheet_data_table_context(output, sheet_idx);
+        super::sheet_cells::visit_cells(
             sheet_data,
             shared_strings,
             &data_table_body_positions,
             &sheet_data_table_regions,
             emit_cell_metadata_refs,
             style_remapper,
+            |_| {},
         );
+        let mut sheet_writer = build_sheet_structure(sheet_data, style_remapper);
         if !sheet_data.worksheet_root_namespaces.is_empty() {
             sheet_writer
                 .set_root_namespaces(NamespaceMap::from(&sheet_data.worksheet_root_namespaces));
@@ -927,4 +889,31 @@ fn legend_position_to_chart_ex(position: &str) -> Option<&'static str> {
         "center" => Some("ctr"),
         _ => None,
     }
+}
+
+/// Data Table followers emit only their cache; only the master emits its formula.
+pub(super) fn sheet_data_table_context(
+    output: &domain_types::ParseOutput,
+    sheet_idx: usize,
+) -> (
+    std::collections::HashSet<(u32, u32)>,
+    Vec<domain_types::DataTableRegion>,
+) {
+    let regions: Vec<_> = output
+        .data_table_regions
+        .iter()
+        .filter(|region| region.sheet_index as usize == sheet_idx)
+        .cloned()
+        .collect();
+    let positions = regions
+        .iter()
+        .flat_map(|region| {
+            (region.start_row..=region.end_row).flat_map(move |row| {
+                (region.start_col..=region.end_col).filter_map(move |col| {
+                    ((row, col) != (region.start_row, region.start_col)).then_some((row, col))
+                })
+            })
+        })
+        .collect();
+    (positions, regions)
 }

@@ -37,7 +37,6 @@ use compute_document::hex::hex_to_id;
 
 mod assembly;
 mod csv;
-mod deferred;
 mod indexes;
 mod named_ranges;
 mod range_styles;
@@ -53,7 +52,6 @@ pub(super) use assembly::{
     assemble_engine, from_snapshot, from_snapshot_with_layout_metrics, rebuild_engine_from_snapshot,
 };
 pub(super) use csv::{from_csv_bytes, import_from_csv_bytes};
-pub(super) use deferred::{commit_deferred_hydration, stage_deferred_hydration};
 pub(super) use indexes::{build_grid_indexes, build_merge_indexes, build_pixel_layout_for_sheet};
 pub(super) use named_ranges::{defined_names_to_named_range_defs, normalize_named_range_refs};
 pub(super) use range_styles::{build_imported_range_style_plan, range_style_formats_enabled};
@@ -69,9 +67,7 @@ pub(in crate::storage::engine) use table_auto_filter_projection::{
     materialize_table_auto_filters_for_sheets, materialize_table_auto_filters_from_preserved_specs,
     table_filter_spec_to_column_filter,
 };
-pub(super) use types::{
-    DeferredHydrationCompletion, DeferredHydrationData, XlsxHydrateResult, XlsxStreamHydrateResult,
-};
+pub(super) use types::{XlsxHydrateResult, XlsxRecalculation, XlsxStreamHydrateResult};
 pub(super) use xlsx::{from_xlsx_bytes, from_xlsx_bytes_with_progress, import_from_xlsx_bytes};
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "native"))]

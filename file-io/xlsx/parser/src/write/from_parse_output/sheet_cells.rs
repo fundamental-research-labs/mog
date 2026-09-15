@@ -23,6 +23,30 @@ pub(super) fn apply_cells(
     emit_cell_metadata_refs: bool,
     style_remapper: &StyleExportRemapper,
 ) {
+    visit_cells(
+        sheet_data,
+        shared_strings,
+        data_table_body_positions,
+        data_table_regions,
+        emit_cell_metadata_refs,
+        style_remapper,
+        |cell| {
+            writer.add_cell(cell);
+        },
+    );
+    apply_authored_style_runs(writer, sheet_data, style_remapper);
+}
+
+/// Use the same canonical conversion for SST planning and worksheet emission.
+pub(super) fn visit_cells(
+    sheet_data: &SheetData,
+    shared_strings: &mut SharedStringsWriter,
+    data_table_body_positions: &HashSet<(u32, u32)>,
+    data_table_regions: &[DataTableRegion],
+    emit_cell_metadata_refs: bool,
+    style_remapper: &StyleExportRemapper,
+    mut visit: impl FnMut(CellData),
+) {
     let data_table_master_formulas = data_table_master_formula_map(data_table_regions);
     let shared_formula_plan = shared_formula_export_plan(&sheet_data.cells);
     let _shared_formula_diagnostics = &shared_formula_plan.diagnostics;
@@ -85,8 +109,15 @@ pub(super) fn apply_cells(
                 style_remapper,
             )
         };
-        writer.add_cell(writer_cell);
+        visit(writer_cell);
     }
+}
+
+fn apply_authored_style_runs(
+    writer: &mut SheetWriter,
+    sheet_data: &SheetData,
+    style_remapper: &StyleExportRemapper,
+) {
     for run in &sheet_data.authored_style_runs {
         if let Some(style_id) = style_remapper
             .emitted_cell_xf_id(run.style_id)

@@ -2,6 +2,10 @@ use crate::infra::opc::relationship_owner_from_rels_path;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackageIntegrityError {
+    UnreadableXmlPart {
+        part_path: String,
+        reason: String,
+    },
     MissingRelationshipOwner {
         rels_path: String,
         owner_path: String,
@@ -53,6 +57,9 @@ pub enum PackageIntegrityError {
 impl std::fmt::Display for PackageIntegrityError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::UnreadableXmlPart { part_path, reason } => {
+                write!(f, "cannot validate XML part {part_path}: {reason}")
+            }
             Self::MissingRelationshipOwner {
                 rels_path,
                 owner_path,

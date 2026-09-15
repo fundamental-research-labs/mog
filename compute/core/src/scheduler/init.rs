@@ -328,51 +328,6 @@ impl ComputeCore {
         Ok(RecalcResult::empty())
     }
 
-    /// Ultra-minimal init for deferred-hydration XLSX import.
-    /// Seeds formula text for materialized cells but defers graph construction.
-    /// Builds CellStore from the sparse first-paint snapshot, which includes
-    /// all sheet headers but only the critical sheet's materialized cells.
-    pub fn init_from_snapshot_viewport_only(
-        &mut self,
-        cell_store: &mut CellStore,
-        snapshot: WorkbookSnapshot,
-    ) -> Result<RecalcResult, ComputeError> {
-        self.iterative_calc = snapshot.iterative_calc;
-        self.max_iterations = snapshot.max_iterations;
-        self.max_change = snapshot.max_change.get();
-        self.calc_mode = snapshot
-            .calculation_settings
-            .as_ref()
-            .map_or(CalcMode::Auto, |settings| settings.calc_mode);
-
-        self.sheet_order = snapshot
-            .sheets
-            .iter()
-            .enumerate()
-            .filter_map(|(idx, sheet)| SheetId::from_uuid_str(&sheet.id).ok().map(|sid| (sid, idx)))
-            .collect();
-        self.rebuild_ordered_sheets_cache();
-
-        let materialized_formula_cells = Self::extract_formula_cells_from_snapshot(&snapshot);
-        self.cell_formula_text = FxHashMap::with_capacity_and_hasher(
-            materialized_formula_cells.len(),
-            Default::default(),
-        );
-        self.seed_cell_formula_text(&materialized_formula_cells);
-
-        // Store the viewport-only marker so graph/recalc callers can reject
-        // partial workbook graph construction until full hydration completes.
-        // Readback does not depend on this marker.
-        self.workbook_load_pending = true;
-
-        let char_code_page = cell_store.char_code_page;
-        *cell_store = CellStore::from_snapshot(snapshot)?;
-        cell_store.char_code_page = char_code_page;
-        cell_store.set_id_alloc(self.id_alloc.clone());
-
-        Ok(RecalcResult::empty())
-    }
-
     /// Build the dependency graph if it hasn't been built yet (deferred from minimal init).
     ///
     /// Called automatically before any recalc or mutation that needs the graph.
@@ -394,27 +349,8 @@ impl ComputeCore {
             self.register_all_variables(cell_store);
             return Ok(());
         }
-        self.ensure_graph_construction_ready()?;
 
         Ok(())
-    }
-
-    pub(crate) fn ensure_graph_construction_ready(&self) -> Result<(), ComputeError> {
-        // Viewport-only XLSX import does not carry complete workbook graph
-        // context: cross-sheet references, names, and later-sheet cells can be
-        // absent. Formula readback is seeded separately, but graph construction
-        // must wait for full deferred hydration.
-        if self.workbook_load_pending {
-            return Err(Self::deferred_graph_construction_error());
-        }
-
-        Ok(())
-    }
-
-    fn deferred_graph_construction_error() -> ComputeError {
-        ComputeError::InvalidInput {
-            message: "dependency graph construction requires deferred XLSX hydration to complete before reading a viewport-only workbook snapshot".to_string(),
-        }
     }
 
     pub(super) fn seed_cell_formula_text(&mut self, formula_cells: &[(CellId, SheetId, String)]) {

@@ -85,7 +85,7 @@ impl CellStore {
     }
 
     /// Create an empty sheet used while XLSX cells stream in during inflate.
-    pub fn open_stream_sheet(&mut self, name: &str) -> SheetId {
+    pub(crate) fn open_stream_sheet(&mut self, name: &str) -> SheetId {
         let sheet_id = self.id_alloc.next_sheet_id();
         let snap = snapshot_types::SheetSnapshot {
             id: format!("{:032x}", sheet_id.as_u128()),
@@ -95,36 +95,74 @@ impl CellStore {
             cells: Vec::new(),
             ranges: Vec::new(),
             identities: Vec::new(),
-            row_axis: None,
-            col_axis: None,
+            row_axis: Some(cell_types::AxisIdentityStore::from_runs([self
+                .id_alloc
+                .next_axis_run(1)])),
+            col_axis: Some(cell_types::AxisIdentityStore::from_runs([self
+                .id_alloc
+                .next_axis_run(1)])),
         };
         let _ = self.add_sheet(snap);
         sheet_id
     }
 
-    /// Write a packed worksheet cell into the live store as it is parsed.
-    ///
-    /// Used by XLSX stream load so cells land in `CellStore` during inflate,
-    /// before the rest of the sheet XML is consumed.
-    pub fn ingest_streamed_xlsx_cell(
+    /// Insert one decoded imported value using its stable authored identity.
+    pub(crate) fn ingest_streamed_xlsx_cell(
         &mut self,
         sheet: &SheetId,
-        cell: &xlsx_parser::domain::cells::CellData,
-        strings: &[u8],
-    ) -> Option<(CellId, Option<String>)> {
-        if !self.sheets.contains_key(sheet) {
-            return None;
+        row: u32,
+        col: u32,
+        value: CellValue,
+    ) -> CellId {
+        let pos = SheetPos::new(row, col);
+        // Reserve compact identity runs geometrically. Growing and rebuilding
+        // the axis indexes for every new row makes sequential imports quadratic.
+        if let Some(s) = self.sheets.get(sheet) {
+            if s.row_id_at(row).is_none() || s.col_id_at(col).is_none() {
+                let mut grid = compute_document::identity::GridIndex::from_shared_axes(
+                    *sheet,
+                    s.row_axis.clone(),
+                    s.col_axis.clone(),
+                    self.id_alloc.clone(),
+                );
+                let reserve = |position: u32| {
+                    position
+                        .saturating_add(1)
+                        .checked_next_power_of_two()
+                        .unwrap_or(u32::MAX)
+                        .saturating_sub(1)
+                };
+                grid.ensure_capacity(reserve(row), reserve(col));
+                self.install_sheet_axes(*sheet, grid.row_axis(), grid.col_axis());
+            }
         }
-        let value = packed_xlsx_cell_value(cell, strings);
-        let formula = packed_xlsx_cell_formula(cell, strings);
-        let cell_id = self.id_alloc.next_cell_id();
-        self.insert_cell(
+        let cell_id = self
+            .get_sheet(sheet)
+            .and_then(|sheet| sheet.authored_cell_id_at(pos))
+            .unwrap_or_else(|| self.id_alloc.next_cell_id());
+        self.insert_cell(sheet, cell_id, pos, CellEntry { value });
+        cell_id
+    }
+
+    /// Discard unused import capacity while preserving authored identities and
+    /// the actual worksheet extent before metadata hydration allocates axes.
+    pub(crate) fn finish_stream_sheet(&mut self, sheet: SheetId) {
+        let Some(s) = self.sheets.get(&sheet) else {
+            return;
+        };
+        let (rows, cols) = (s.rows.max(1), s.cols.max(1));
+        let mut grid = compute_document::identity::GridIndex::from_shared_axes(
             sheet,
-            cell_id,
-            SheetPos::new(cell.row, cell.col),
-            CellEntry { value },
+            s.row_axis.clone(),
+            s.col_axis.clone(),
+            self.id_alloc.clone(),
         );
-        Some((cell_id, formula))
+        grid.truncate_rows(rows);
+        grid.truncate_cols(cols);
+        self.install_sheet_axes(sheet, grid.row_axis(), grid.col_axis());
+        let s = self.sheets.get_mut(&sheet).expect("streamed sheet");
+        s.identity_rows = rows;
+        s.identity_cols = cols;
     }
 
     fn insert_cell_with_formula(
@@ -308,69 +346,4 @@ impl CellStore {
             );
         }
     }
-}
-
-fn packed_xlsx_cell_value(
-    cell: &xlsx_parser::domain::cells::CellData,
-    strings: &[u8],
-) -> CellValue {
-    use value_types::CellError;
-    use xlsx_parser::domain::cells::{
-        CELL_TYPE_BOOL, CELL_TYPE_DATE, CELL_TYPE_ERROR, CELL_TYPE_FORMULA_STRING,
-        CELL_TYPE_NUMBER, CELL_TYPE_STRING, VALUE_TYPE_FORMULA,
-    };
-
-    let text = if cell.value_len > 0 {
-        let start = cell.value_offset as usize;
-        let end = start
-            .saturating_add(cell.value_len as usize)
-            .min(strings.len());
-        std::str::from_utf8(&strings[start..end]).ok()
-    } else {
-        None
-    };
-    if cell.value_type == VALUE_TYPE_FORMULA {
-        return CellValue::Null;
-    }
-    match cell.cell_type {
-        CELL_TYPE_NUMBER => text
-            .and_then(|s| s.parse::<f64>().ok())
-            .map(CellValue::number)
-            .unwrap_or(CellValue::Null),
-        CELL_TYPE_BOOL => match text {
-            Some("1") | Some("TRUE") | Some("true") => CellValue::Boolean(true),
-            Some("0") | Some("FALSE") | Some("false") => CellValue::Boolean(false),
-            _ => CellValue::Null,
-        },
-        CELL_TYPE_STRING | CELL_TYPE_FORMULA_STRING | CELL_TYPE_DATE => {
-            CellValue::from(text.unwrap_or("").to_string())
-        }
-        CELL_TYPE_ERROR => text
-            .and_then(|s| s.parse::<CellError>().ok())
-            .map(CellValue::from)
-            .unwrap_or(CellValue::Null),
-        _ => text
-            .and_then(|s| s.parse::<f64>().ok())
-            .map(CellValue::number)
-            .or_else(|| text.map(|s| CellValue::from(s.to_string())))
-            .unwrap_or(CellValue::Null),
-    }
-}
-
-pub(crate) fn packed_xlsx_cell_formula(
-    cell: &xlsx_parser::domain::cells::CellData,
-    strings: &[u8],
-) -> Option<String> {
-    use xlsx_parser::domain::cells::VALUE_TYPE_FORMULA;
-    if cell.value_type != VALUE_TYPE_FORMULA || cell.value_len == 0 {
-        return None;
-    }
-    let start = cell.value_offset as usize;
-    let end = start
-        .saturating_add(cell.value_len as usize)
-        .min(strings.len());
-    std::str::from_utf8(&strings[start..end])
-        .ok()
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
 }

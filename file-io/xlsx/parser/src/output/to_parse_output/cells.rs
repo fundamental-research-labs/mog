@@ -61,7 +61,7 @@ impl SharedStringProvenanceCompaction {
 // =============================================================================
 
 /// Parse an A1-style range reference into 0-based (start_row, start_col, end_row, end_col).
-pub(super) fn parse_range_ref(s: &str) -> Option<(u32, u32, u32, u32)> {
+pub(crate) fn parse_range_ref(s: &str) -> Option<(u32, u32, u32, u32)> {
     // Array formula `ref` values are rectangular cell ranges. The generic A1
     // parser also accepts whole-row/whole-column ranges, which would let a
     // malformed array declaration claim an entire sheet. A degenerate

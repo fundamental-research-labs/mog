@@ -1,10 +1,15 @@
 //! Sheet building: SheetData to SheetWriter.
 
+#[cfg(test)]
 use std::collections::HashSet;
 
-use domain_types::{AuthoredStyleRun, DataTableRegion, OutlineGroup, SheetData};
+#[cfg(test)]
+use domain_types::DataTableRegion;
+use domain_types::{AuthoredStyleRun, OutlineGroup, SheetData};
 
+#[cfg(test)]
 use super::super::SharedStringsWriter;
+#[cfg(test)]
 use super::sheet_cells;
 use super::sheet_columns;
 use super::sheet_outlines;
@@ -23,12 +28,31 @@ use crate::write::sheet::{SheetFormatPr, SheetWriter};
 /// asymmetric for compactness: only the master emits `<f t="dataTable">`,
 /// while body cells round-trip as `<v>`-only. Body-cell formula text is
 /// suppressed here at the write boundary so the asymmetry is restored.
+#[cfg(test)]
 pub(super) fn build_sheet(
     sheet_data: &SheetData,
     shared_strings: &mut SharedStringsWriter,
     data_table_body_positions: &HashSet<(u32, u32)>,
     data_table_regions: &[DataTableRegion],
     emit_cell_metadata_refs: bool,
+    style_remapper: &StyleExportRemapper,
+) -> SheetWriter {
+    let mut writer = build_sheet_structure(sheet_data, style_remapper);
+    sheet_cells::apply_cells(
+        &mut writer,
+        sheet_data,
+        shared_strings,
+        data_table_body_positions,
+        data_table_regions,
+        emit_cell_metadata_refs,
+        style_remapper,
+    );
+    writer
+}
+
+/// Plan worksheet structure before cells are converted during ZIP emission.
+pub(super) fn build_sheet_structure(
+    sheet_data: &SheetData,
     style_remapper: &StyleExportRemapper,
 ) -> SheetWriter {
     let mut writer = SheetWriter::new();
@@ -43,15 +67,7 @@ pub(super) fn build_sheet(
     apply_sheet_format(&mut writer, sheet_data);
     sheet_columns::apply_columns(&mut writer, sheet_data, style_remapper);
     sheet_rows::apply_rows(&mut writer, sheet_data, style_remapper);
-    sheet_cells::apply_cells(
-        &mut writer,
-        sheet_data,
-        shared_strings,
-        data_table_body_positions,
-        data_table_regions,
-        emit_cell_metadata_refs,
-        style_remapper,
-    );
+
     apply_merges(&mut writer, sheet_data);
     sheet_views::apply_sheet_views(&mut writer, sheet_data);
 
@@ -177,14 +193,6 @@ fn apply_merges(writer: &mut SheetWriter, sheet_data: &SheetData) {
             merge.end_col,
         );
     }
-}
-
-#[cfg(test)]
-pub(super) fn convert_cell(
-    cell: &domain_types::CellData,
-    shared_strings: &mut SharedStringsWriter,
-) -> crate::write::sheet::CellData {
-    sheet_cells::convert_cell(cell, shared_strings)
 }
 
 pub(super) fn apply_outline_groups_rows_only(writer: &mut SheetWriter, groups: &[OutlineGroup]) {

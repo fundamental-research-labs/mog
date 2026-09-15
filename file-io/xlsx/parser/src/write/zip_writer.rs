@@ -1,59 +1,24 @@
-//! ZIP archive writer for XLSX files
+//! Incremental ZIP writer for XLSX files.
 //!
-//! This module provides a ZIP archive writer with configurable compression,
-//! designed for creating XLSX files. It supports both STORE (no compression)
-//! and DEFLATE compression with configurable levels.
-//!
-//! # ZIP Format
-//!
-//! Per PKWARE APPNOTE, a ZIP archive has this structure:
-//! ```text
-//! [Local File Header 1]
-//! [File Data 1]
-//! [Local File Header 2]
-//! [File Data 2]
-//! ...
-//! [Central Directory Header 1]
-//! [Central Directory Header 2]
-//! ...
-//! [End of Central Directory Record]
-//! ```
-//!
-//! # Example
-//!
-//! ```rust,ignore
-//! use xlsx_parser::write::{ZipWriter, CompressionMethod};
-//!
-//! let xlsx_bytes = ZipWriter::with_compression(CompressionMethod::Deflate(6))
-//!     .add_file("[Content_Types].xml", content_types_xml)
-//!     .add_file("_rels/.rels", rels_xml)
-//!     .add_file("xl/workbook.xml", workbook_xml)
-//!     .finish()?;
-//! ```
+//! Entries are deflated directly into a `Write` sink. Only central-directory
+//! metadata is retained; ZIP data descriptors carry sizes and CRCs once each
+//! entry finishes. The default sink collects the final compressed archive.
 
 use crc32fast::Hasher;
-use miniz_oxide::deflate::compress_to_vec;
+use flate2::{Compression, write::DeflateEncoder};
+use std::collections::HashSet;
+use std::io::{self, Write};
 
-#[cfg(feature = "parallel")]
-use rayon::prelude::*;
-
-// ZIP file format constants
 const LOCAL_FILE_HEADER_SIGNATURE: u32 = 0x04034b50;
 const CENTRAL_DIR_HEADER_SIGNATURE: u32 = 0x02014b50;
 const END_OF_CENTRAL_DIR_SIGNATURE: u32 = 0x06054b50;
-
-// Compression method constants
+const DATA_DESCRIPTOR_SIGNATURE: u32 = 0x08074b50;
 const COMPRESSION_STORE: u16 = 0;
 const COMPRESSION_DEFLATE: u16 = 8;
-
-// Version constants
-const VERSION_NEEDED_STORE: u16 = 10; // Version 1.0 for stored files
-const VERSION_NEEDED_DEFLATE: u16 = 20; // Version 2.0 for deflate
-const VERSION_MADE_BY: u16 = 0x031E; // Unix, version 3.0
-
-// Size limits
-const MAX_FILE_SIZE: usize = 0xFFFFFFFF; // 4GB limit for standard ZIP
+const VERSION_NEEDED_DEFLATE: u16 = 20;
+const VERSION_MADE_BY: u16 = 0x031E;
 const MAX_FILENAME_LENGTH: usize = 65535;
+const STREAM_FLAGS: u16 = (1 << 3) | (1 << 11);
 
 /// Compression method for ZIP entries
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,14 +43,6 @@ impl CompressionMethod {
             CompressionMethod::Deflate(_) => COMPRESSION_DEFLATE,
         }
     }
-
-    /// Get the minimum version needed to extract
-    fn version_needed(&self) -> u16 {
-        match self {
-            CompressionMethod::Store => VERSION_NEEDED_STORE,
-            CompressionMethod::Deflate(_) => VERSION_NEEDED_DEFLATE,
-        }
-    }
 }
 
 /// Error types for ZIP write operations
@@ -93,6 +50,8 @@ impl CompressionMethod {
 pub enum ZipWriteError {
     /// Compression operation failed
     CompressionFailed,
+    /// The output sink failed.
+    Io(String),
     /// File exceeds the 4GB limit for standard ZIP
     FileTooLarge,
     /// Filename is invalid (empty, too long, or contains invalid characters)
@@ -106,6 +65,7 @@ pub enum ZipWriteError {
 impl std::fmt::Display for ZipWriteError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            ZipWriteError::Io(message) => write!(f, "I/O error: {message}"),
             ZipWriteError::CompressionFailed => write!(f, "Compression failed"),
             ZipWriteError::FileTooLarge => write!(f, "File exceeds 4GB limit"),
             ZipWriteError::InvalidFilename => write!(f, "Invalid filename"),
@@ -116,28 +76,6 @@ impl std::fmt::Display for ZipWriteError {
 }
 
 impl std::error::Error for ZipWriteError {}
-
-/// A single entry to be written to the ZIP archive
-#[derive(Debug, Clone)]
-pub struct ZipWriteEntry {
-    /// File name (path within the archive)
-    pub name: String,
-    /// File data (uncompressed)
-    pub data: Vec<u8>,
-    /// Compression method for this entry
-    pub method: CompressionMethod,
-}
-
-impl ZipWriteEntry {
-    /// Create a new ZIP entry
-    pub fn new(name: impl Into<String>, data: Vec<u8>, method: CompressionMethod) -> Self {
-        Self {
-            name: name.into(),
-            data,
-            method,
-        }
-    }
-}
 
 /// Internal structure for tracking written entries
 #[derive(Debug)]
@@ -156,17 +94,14 @@ struct WrittenEntry {
     method: CompressionMethod,
 }
 
-/// ZIP archive writer with configurable compression
-///
-/// Builds a ZIP archive in memory with support for STORE and DEFLATE compression.
-/// Files are written in the order they are added, which is important for XLSX
-/// files where `[Content_Types].xml` should typically come first.
+/// ZIP archive writer that emits each entry immediately.
 #[derive(Debug)]
-pub struct ZipWriter {
-    /// Entries to be written
-    entries: Vec<ZipWriteEntry>,
-    /// Default compression method for new entries
+pub struct ZipWriter<W: Write = Vec<u8>> {
+    output: PositionWriter<W>,
+    entries: Vec<WrittenEntry>,
+    names: HashSet<String>,
     default_method: CompressionMethod,
+    error: Option<ZipWriteError>,
 }
 
 impl Default for ZipWriter {
@@ -176,351 +111,229 @@ impl Default for ZipWriter {
 }
 
 impl ZipWriter {
-    /// Create a new ZIP writer with default compression (DEFLATE level 6)
     pub fn new() -> Self {
-        Self {
-            entries: Vec::new(),
-            default_method: CompressionMethod::default(),
-        }
+        Self::with_compression(CompressionMethod::default())
     }
 
-    /// Create a new ZIP writer with the specified compression method
     pub fn with_compression(method: CompressionMethod) -> Self {
+        Self::with_sink(Vec::new(), method)
+    }
+}
+
+impl<W: Write> ZipWriter<W> {
+    /// Create an archive backed by any sequential output sink; seeking is unnecessary.
+    pub fn with_sink(sink: W, method: CompressionMethod) -> Self {
         Self {
+            output: PositionWriter {
+                inner: sink,
+                position: 0,
+            },
             entries: Vec::new(),
+            names: HashSet::new(),
             default_method: method,
+            error: None,
         }
     }
 
-    /// Add a file to the archive using the default compression method
-    ///
-    /// # Arguments
-    /// * `name` - Path within the archive (e.g., "xl/workbook.xml")
-    /// * `data` - File contents (uncompressed)
-    ///
-    /// # Returns
-    /// Self for method chaining
-    pub fn add_file(&mut self, name: &str, data: Vec<u8>) -> &mut Self {
-        self.entries.push(ZipWriteEntry::new(
-            name.to_string(),
-            data,
-            self.default_method,
-        ));
-        self
+    /// Write an existing part immediately. Errors are retained and returned by `finish`.
+    pub fn add_file(&mut self, name: &str, data: impl AsRef<[u8]>) -> &mut Self {
+        self.add_file_with(name, data, self.default_method)
     }
 
-    /// Add a file with a specific compression method
-    ///
-    /// # Arguments
-    /// * `name` - Path within the archive
-    /// * `data` - File contents (uncompressed)
-    /// * `method` - Compression method to use for this file
-    ///
-    /// # Returns
-    /// Self for method chaining
     pub fn add_file_with(
         &mut self,
         name: &str,
-        data: Vec<u8>,
+        data: impl AsRef<[u8]>,
         method: CompressionMethod,
     ) -> &mut Self {
-        self.entries
-            .push(ZipWriteEntry::new(name.to_string(), data, method));
+        let _ = self.write_file(name, method, |sink| sink.write_all(data.as_ref()));
         self
     }
 
-    /// Add multiple files at once using the default compression method
-    ///
-    /// # Arguments
-    /// * `files` - Iterator of (name, data) pairs
-    ///
-    /// # Returns
-    /// Self for method chaining
     pub fn add_files(&mut self, files: impl IntoIterator<Item = (String, Vec<u8>)>) -> &mut Self {
         for (name, data) in files {
-            self.entries
-                .push(ZipWriteEntry::new(name, data, self.default_method));
+            self.add_file(&name, data);
         }
         self
     }
 
-    /// Get the number of entries in the archive
+    /// Serialize a part directly into the compressor, without collecting its XML.
+    /// Duplicate paths keep the first entry, matching structured/opaque precedence.
+    pub fn add_file_stream(
+        &mut self,
+        name: &str,
+        write: impl FnOnce(&mut dyn Write) -> io::Result<()>,
+    ) -> Result<(), ZipWriteError> {
+        self.write_file(name, self.default_method, write)
+    }
+
+    fn write_file(
+        &mut self,
+        name: &str,
+        method: CompressionMethod,
+        write: impl FnOnce(&mut dyn Write) -> io::Result<()>,
+    ) -> Result<(), ZipWriteError> {
+        if let Some(error) = &self.error {
+            return Err(error.clone());
+        }
+        if self.names.contains(name) {
+            return Ok(());
+        }
+        let result = self.write_entry(name, method, write);
+        if let Err(error) = &result {
+            self.error = Some(error.clone());
+        }
+        result
+    }
+
+    fn write_entry(
+        &mut self,
+        name: &str,
+        method: CompressionMethod,
+        write: impl FnOnce(&mut dyn Write) -> io::Result<()>,
+    ) -> Result<(), ZipWriteError> {
+        if name.is_empty() || name.len() > MAX_FILENAME_LENGTH {
+            return Err(ZipWriteError::InvalidFilename);
+        }
+        if self.entries.len() == u16::MAX as usize {
+            return Err(ZipWriteError::TooManyEntries);
+        }
+        let local_header_offset = self.output.position;
+        let mut header = Vec::with_capacity(30 + name.len());
+        header.extend_from_slice(&LOCAL_FILE_HEADER_SIGNATURE.to_le_bytes());
+        header.extend_from_slice(&VERSION_NEEDED_DEFLATE.to_le_bytes());
+        header.extend_from_slice(&STREAM_FLAGS.to_le_bytes());
+        header.extend_from_slice(&method.method_code().to_le_bytes());
+        header.extend_from_slice(&0u16.to_le_bytes());
+        header.extend_from_slice(&(((2024 - 1980) << 9 | 1 << 5 | 1) as u16).to_le_bytes());
+        header.extend_from_slice(&[0; 12]); // CRC and sizes follow the entry data.
+        header.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        header.extend_from_slice(&0u16.to_le_bytes());
+        header.extend_from_slice(name.as_bytes());
+        self.output.write_all(&header)?;
+        let data_start = self.output.position;
+        let (crc32, uncompressed_size) = match method {
+            CompressionMethod::Store => {
+                let mut entry = CheckedEntryWriter::new(&mut self.output);
+                write(&mut entry)?;
+                (entry.crc.finalize(), entry.size)
+            }
+            CompressionMethod::Deflate(level) => {
+                let encoder = DeflateEncoder::new(
+                    &mut self.output,
+                    Compression::new(u32::from(level.min(9))),
+                );
+                let mut entry = CheckedEntryWriter::new(encoder);
+                write(&mut entry)?;
+                entry.inner.finish()?;
+                (entry.crc.finalize(), entry.size)
+            }
+        };
+        let compressed_size = self.output.position - data_start;
+        let mut descriptor = Vec::with_capacity(16);
+        descriptor.extend_from_slice(&DATA_DESCRIPTOR_SIGNATURE.to_le_bytes());
+        descriptor.extend_from_slice(&crc32.to_le_bytes());
+        descriptor.extend_from_slice(&compressed_size.to_le_bytes());
+        descriptor.extend_from_slice(&uncompressed_size.to_le_bytes());
+        self.output.write_all(&descriptor)?;
+        self.names.insert(name.to_owned());
+        self.entries.push(WrittenEntry {
+            name: name.to_owned(),
+            local_header_offset,
+            crc32,
+            compressed_size,
+            uncompressed_size,
+            method,
+        });
+        Ok(())
+    }
+
     pub fn entry_count(&self) -> usize {
         self.entries.len()
     }
 
-    /// Finalize the archive and return the ZIP bytes
-    ///
-    /// This writes:
-    /// 1. Local file headers and compressed data for each entry
-    /// 2. Central directory headers for each entry
-    /// 3. End of central directory record
-    ///
-    /// # Returns
-    /// * `Ok(Vec<u8>)` - The complete ZIP archive bytes
-    /// * `Err(ZipWriteError)` - If any error occurs during writing
-    pub fn finish(self) -> Result<Vec<u8>, ZipWriteError> {
-        // Deduplicate entries: if the same path appears multiple times (e.g., from both
-        // structured writes and binary passthrough), keep only the FIRST occurrence.
-        // The structured pipeline writes first, then binary passthrough — so first wins
-        // means structured output takes priority over passthrough.
-        let entries = {
-            let mut seen = std::collections::HashSet::with_capacity(self.entries.len());
-            let mut deduped = Vec::with_capacity(self.entries.len());
-            for entry in self.entries {
-                if seen.insert(entry.name.clone()) {
-                    deduped.push(entry);
-                }
-            }
-            deduped
-        };
-
-        // Validate entry count
-        if entries.len() > u16::MAX as usize {
-            return Err(ZipWriteError::TooManyEntries);
+    /// Append the central directory, flush the sink, and return it.
+    pub fn finish(mut self) -> Result<W, ZipWriteError> {
+        if let Some(error) = self.error {
+            return Err(error);
         }
+        let offset = self.output.position;
+        let mut header = Vec::new();
+        for entry in &self.entries {
+            header.clear();
+            write_central_dir_header(&mut header, entry)?;
+            self.output.write_all(&header)?;
+        }
+        let size = self.output.position - offset;
+        header.clear();
+        write_eocd(&mut header, self.entries.len() as u16, size, offset);
+        self.output.write_all(&header)?;
+        self.output.flush()?;
+        Ok(self.output.inner)
+    }
+}
 
-        #[cfg(feature = "parallel")]
+impl From<io::Error> for ZipWriteError {
+    fn from(error: io::Error) -> Self {
+        if let Some(error) = error
+            .get_ref()
+            .and_then(|inner| inner.downcast_ref::<ZipWriteError>())
         {
-            finish_parallel(entries)
+            return error.clone();
         }
-        #[cfg(not(feature = "parallel"))]
-        {
-            finish_sequential(entries)
+        Self::Io(error.to_string())
+    }
+}
+
+#[derive(Debug)]
+struct PositionWriter<W> {
+    inner: W,
+    position: u32,
+}
+
+impl<W: Write> Write for PositionWriter<W> {
+    fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+        if data.len() as u64 + u64::from(self.position) > u64::from(u32::MAX) {
+            return Err(io::Error::other(ZipWriteError::ArchiveTooLarge));
+        }
+        let written = self.inner.write(data)?;
+        self.position += written as u32;
+        Ok(written)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+struct CheckedEntryWriter<W> {
+    inner: W,
+    crc: Hasher,
+    size: u32,
+}
+
+impl<W> CheckedEntryWriter<W> {
+    fn new(inner: W) -> Self {
+        Self {
+            inner,
+            crc: Hasher::new(),
+            size: 0,
         }
     }
 }
 
-/// Sequential finish — compresses and writes entries one at a time.
-#[allow(dead_code)]
-fn finish_sequential(entries: Vec<ZipWriteEntry>) -> Result<Vec<u8>, ZipWriteError> {
-    let estimated_size: usize = entries
-        .iter()
-        .map(|e| e.data.len() + e.name.len() + 76)
-        .sum();
-    let mut output = Vec::with_capacity(estimated_size);
-    let mut written_entries: Vec<WrittenEntry> = Vec::with_capacity(entries.len());
-
-    for entry in entries {
-        let written = write_entry(&mut output, entry)?;
-        written_entries.push(written);
-    }
-
-    assemble_central_directory(&mut output, &written_entries)
-}
-
-/// Parallel finish — compresses all entries concurrently using rayon,
-/// then assembles the archive sequentially.
-#[cfg(feature = "parallel")]
-fn finish_parallel(entries: Vec<ZipWriteEntry>) -> Result<Vec<u8>, ZipWriteError> {
-    // Step 1: compress all entries in parallel (CRC32 + deflate).
-    let compressed: Vec<CompressedEntry> = entries
-        .into_par_iter()
-        .map(|entry| compress_entry(entry))
-        .collect::<Result<Vec<_>, _>>()?;
-
-    // Step 2: assemble the ZIP archive sequentially (headers need offsets).
-    let estimated_size: usize = compressed
-        .iter()
-        .map(|e| e.compressed_data.len() + e.name.len() + 76)
-        .sum();
-    let mut output = Vec::with_capacity(estimated_size);
-    let mut written_entries: Vec<WrittenEntry> = Vec::with_capacity(compressed.len());
-
-    let dos_time: u16 = 0;
-    let dos_date: u16 = (2024 - 1980) << 9 | 1 << 5 | 1;
-
-    for entry in compressed {
-        let local_header_offset = output.len();
-        #[allow(clippy::absurd_extreme_comparisons)]
-        if local_header_offset > MAX_FILE_SIZE {
-            return Err(ZipWriteError::ArchiveTooLarge);
+impl<W: Write> Write for CheckedEntryWriter<W> {
+    fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+        if data.len() as u64 + u64::from(self.size) > u64::from(u32::MAX) {
+            return Err(io::Error::other(ZipWriteError::FileTooLarge));
         }
-
-        let name_bytes = entry.name.as_bytes();
-
-        // Write local file header
-        output.extend_from_slice(&LOCAL_FILE_HEADER_SIGNATURE.to_le_bytes());
-        output.extend_from_slice(&entry.actual_method.version_needed().to_le_bytes());
-        output.extend_from_slice(&0u16.to_le_bytes());
-        output.extend_from_slice(&entry.actual_method.method_code().to_le_bytes());
-        output.extend_from_slice(&dos_time.to_le_bytes());
-        output.extend_from_slice(&dos_date.to_le_bytes());
-        output.extend_from_slice(&entry.crc32.to_le_bytes());
-        output.extend_from_slice(&entry.compressed_size.to_le_bytes());
-        output.extend_from_slice(&entry.uncompressed_size.to_le_bytes());
-        output.extend_from_slice(&(name_bytes.len() as u16).to_le_bytes());
-        output.extend_from_slice(&0u16.to_le_bytes());
-        output.extend_from_slice(name_bytes);
-        output.extend_from_slice(&entry.compressed_data);
-
-        written_entries.push(WrittenEntry {
-            name: entry.name,
-            local_header_offset: local_header_offset as u32,
-            crc32: entry.crc32,
-            compressed_size: entry.compressed_size,
-            uncompressed_size: entry.uncompressed_size,
-            method: entry.actual_method,
-        });
+        let written = self.inner.write(data)?;
+        self.crc.update(&data[..written]);
+        self.size += written as u32;
+        Ok(written)
     }
-
-    assemble_central_directory(&mut output, &written_entries)
-}
-
-/// Assemble the central directory and EOCD record at the end of the archive.
-fn assemble_central_directory(
-    output: &mut Vec<u8>,
-    written_entries: &[WrittenEntry],
-) -> Result<Vec<u8>, ZipWriteError> {
-    let central_dir_offset = output.len();
-    #[allow(clippy::absurd_extreme_comparisons)]
-    if central_dir_offset > MAX_FILE_SIZE {
-        return Err(ZipWriteError::ArchiveTooLarge);
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
     }
-
-    for entry in written_entries {
-        write_central_dir_header(output, entry)?;
-    }
-
-    let central_dir_size = output.len() - central_dir_offset;
-    #[allow(clippy::absurd_extreme_comparisons)]
-    if central_dir_size > MAX_FILE_SIZE {
-        return Err(ZipWriteError::ArchiveTooLarge);
-    }
-
-    write_eocd(
-        output,
-        written_entries.len() as u16,
-        central_dir_size as u32,
-        central_dir_offset as u32,
-    );
-
-    Ok(std::mem::take(output))
-}
-
-/// Pre-compressed entry — result of parallel compression, ready for sequential assembly.
-#[cfg(feature = "parallel")]
-struct CompressedEntry {
-    name: String,
-    crc32: u32,
-    compressed_size: u32,
-    uncompressed_size: u32,
-    compressed_data: Vec<u8>,
-    actual_method: CompressionMethod,
-}
-
-/// Compress a single ZIP entry (CRC32 + deflate). Pure function, no shared state.
-#[cfg(feature = "parallel")]
-fn compress_entry(entry: ZipWriteEntry) -> Result<CompressedEntry, ZipWriteError> {
-    if entry.name.is_empty() || entry.name.len() > MAX_FILENAME_LENGTH {
-        return Err(ZipWriteError::InvalidFilename);
-    }
-    #[allow(clippy::absurd_extreme_comparisons)]
-    if entry.data.len() > MAX_FILE_SIZE {
-        return Err(ZipWriteError::FileTooLarge);
-    }
-
-    let crc32 = calculate_crc32(&entry.data);
-    let uncompressed_size = entry.data.len() as u32;
-
-    let (compressed_data, compressed_size, actual_method) = match entry.method {
-        CompressionMethod::Store => (entry.data, uncompressed_size, CompressionMethod::Store),
-        CompressionMethod::Deflate(level) => {
-            let compressed = compress_to_vec(&entry.data, level.min(10));
-            if compressed.len() < entry.data.len() {
-                let size = compressed.len() as u32;
-                (compressed, size, entry.method)
-            } else {
-                (entry.data, uncompressed_size, CompressionMethod::Store)
-            }
-        }
-    };
-
-    Ok(CompressedEntry {
-        name: entry.name,
-        crc32,
-        compressed_size,
-        uncompressed_size,
-        compressed_data,
-        actual_method,
-    })
-}
-
-/// Write a single entry (local file header + data) to the output
-#[allow(dead_code)]
-fn write_entry(output: &mut Vec<u8>, entry: ZipWriteEntry) -> Result<WrittenEntry, ZipWriteError> {
-    // Validate filename
-    if entry.name.is_empty() || entry.name.len() > MAX_FILENAME_LENGTH {
-        return Err(ZipWriteError::InvalidFilename);
-    }
-
-    // Validate file size (4GB limit for standard ZIP format)
-    // Note: On 64-bit platforms where usize > 32 bits, we need this check
-    // even though it may always be false on 32-bit platforms
-    #[allow(clippy::absurd_extreme_comparisons)]
-    if entry.data.len() > MAX_FILE_SIZE {
-        return Err(ZipWriteError::FileTooLarge);
-    }
-
-    // Calculate CRC32 of uncompressed data
-    let crc32 = calculate_crc32(&entry.data);
-    let uncompressed_size = entry.data.len() as u32;
-
-    // Compress data if using DEFLATE
-    let (compressed_data, actual_method) = match entry.method {
-        CompressionMethod::Store => (entry.data, CompressionMethod::Store),
-        CompressionMethod::Deflate(level) => {
-            let compressed = compress_to_vec(&entry.data, level.min(10));
-            // Only use compression if it actually saves space
-            if compressed.len() < entry.data.len() {
-                (compressed, entry.method)
-            } else {
-                // Fall back to store if compression doesn't help
-                (entry.data, CompressionMethod::Store)
-            }
-        }
-    };
-    let compressed_size = compressed_data.len() as u32;
-
-    // Record local header offset (4GB limit for standard ZIP format)
-    let local_header_offset = output.len();
-    #[allow(clippy::absurd_extreme_comparisons)]
-    if local_header_offset > MAX_FILE_SIZE {
-        return Err(ZipWriteError::ArchiveTooLarge);
-    }
-
-    // Get DOS date/time (use a fixed value for reproducibility)
-    // This represents 2024-01-01 00:00:00
-    let dos_time: u16 = 0; // 00:00:00
-    let dos_date: u16 = (2024 - 1980) << 9 | 1 << 5 | 1; // 2024-01-01
-
-    let name_bytes = entry.name.as_bytes();
-
-    // Write local file header (30 bytes + filename)
-    output.extend_from_slice(&LOCAL_FILE_HEADER_SIGNATURE.to_le_bytes());
-    output.extend_from_slice(&actual_method.version_needed().to_le_bytes());
-    output.extend_from_slice(&0u16.to_le_bytes()); // General purpose bit flag
-    output.extend_from_slice(&actual_method.method_code().to_le_bytes());
-    output.extend_from_slice(&dos_time.to_le_bytes());
-    output.extend_from_slice(&dos_date.to_le_bytes());
-    output.extend_from_slice(&crc32.to_le_bytes());
-    output.extend_from_slice(&compressed_size.to_le_bytes());
-    output.extend_from_slice(&uncompressed_size.to_le_bytes());
-    output.extend_from_slice(&(name_bytes.len() as u16).to_le_bytes());
-    output.extend_from_slice(&0u16.to_le_bytes()); // Extra field length
-    output.extend_from_slice(name_bytes);
-
-    // Write file data
-    output.extend_from_slice(&compressed_data);
-
-    Ok(WrittenEntry {
-        name: entry.name,
-        local_header_offset: local_header_offset as u32,
-        crc32,
-        compressed_size,
-        uncompressed_size,
-        method: actual_method,
-    })
 }
 
 /// Write a central directory header for an entry
@@ -540,8 +353,8 @@ fn write_central_dir_header(
     // Write central directory file header (46 bytes + filename)
     output.extend_from_slice(&CENTRAL_DIR_HEADER_SIGNATURE.to_le_bytes());
     output.extend_from_slice(&VERSION_MADE_BY.to_le_bytes());
-    output.extend_from_slice(&entry.method.version_needed().to_le_bytes());
-    output.extend_from_slice(&0u16.to_le_bytes()); // General purpose bit flag
+    output.extend_from_slice(&VERSION_NEEDED_DEFLATE.to_le_bytes());
+    output.extend_from_slice(&STREAM_FLAGS.to_le_bytes()); // Data descriptor and UTF-8 names
     output.extend_from_slice(&entry.method.method_code().to_le_bytes());
     output.extend_from_slice(&dos_time.to_le_bytes());
     output.extend_from_slice(&dos_date.to_le_bytes());
@@ -574,6 +387,7 @@ fn write_eocd(output: &mut Vec<u8>, entry_count: u16, cd_size: u32, cd_offset: u
 }
 
 /// Calculate CRC32 checksum using crc32fast
+#[cfg(test)]
 fn calculate_crc32(data: &[u8]) -> u32 {
     let mut hasher = Hasher::new();
     hasher.update(data);
@@ -584,6 +398,123 @@ fn calculate_crc32(data: &[u8]) -> u32 {
 mod tests {
     use super::*;
     use crate::zip::XlsxArchive;
+
+    #[test]
+    fn deflate_reaches_sink_before_producer_finishes() {
+        use std::{cell::Cell, rc::Rc};
+        struct ObservedSink {
+            data: Vec<u8>,
+            written: Rc<Cell<usize>>,
+        }
+        impl Write for ObservedSink {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                // Exercise short writes as well as incremental compression.
+                let length = bytes.len().min(257);
+                self.data.extend_from_slice(&bytes[..length]);
+                self.written.set(self.data.len());
+                Ok(length)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        let written = Rc::new(Cell::new(0));
+        let sink = ObservedSink {
+            data: Vec::new(),
+            written: written.clone(),
+        };
+        let mut zip = ZipWriter::with_sink(sink, CompressionMethod::Deflate(6));
+        let mut expected = Vec::new();
+        zip.add_file_stream("large.bin", |entry| {
+            let mut state = 0x12345678u32;
+            let mut block = [0; 4096];
+            for _ in 0..128 {
+                for byte in &mut block {
+                    state ^= state << 13;
+                    state ^= state >> 17;
+                    state ^= state << 5;
+                    *byte = state as u8;
+                }
+                expected.extend_from_slice(&block);
+                entry.write_all(&block)?;
+            }
+            // Far beyond the local header: compressed data was written before
+            // the producer returned and before the archive was finalized.
+            assert!(written.get() > 100_000);
+            Ok(())
+        })
+        .unwrap();
+        let result = zip.finish().unwrap();
+        let archive = XlsxArchive::new(&result.data).unwrap();
+        let entry = archive.find_entry("large.bin").unwrap();
+        assert_eq!(entry.compression_method, 8);
+        assert_eq!(entry.crc32, calculate_crc32(&expected));
+        assert_eq!(archive.read_file("large.bin").unwrap(), expected);
+    }
+
+    #[test]
+    fn failed_stream_cannot_be_finished_as_a_valid_archive() {
+        let mut zip = ZipWriter::new();
+        assert!(
+            zip.add_file_stream("broken.xml", |entry| {
+                entry.write_all(b"partial")?;
+                Err(io::Error::other("producer failed"))
+            })
+            .is_err()
+        );
+        zip.add_file("later.xml", b"must not mask failure");
+        assert!(
+            matches!(zip.finish(), Err(ZipWriteError::Io(message)) if message.contains("producer failed"))
+        );
+    }
+
+    #[test]
+    fn sink_failure_is_returned_even_by_infallible_add_file_api() {
+        struct BrokenSink;
+        impl Write for BrokenSink {
+            fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+                Err(io::Error::other("disk full"))
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        let mut zip = ZipWriter::with_sink(BrokenSink, CompressionMethod::Store);
+        zip.add_file("file.xml", b"data");
+        assert!(
+            matches!(zip.finish(), Err(ZipWriteError::Io(message)) if message.contains("disk full"))
+        );
+    }
+
+    #[test]
+    fn finishing_propagates_flush_failure() {
+        struct FlushFailure(Vec<u8>);
+        impl Write for FlushFailure {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                self.0.write(bytes)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Err(io::Error::other("flush failed"))
+            }
+        }
+        let mut zip = ZipWriter::with_sink(FlushFailure(Vec::new()), CompressionMethod::Store);
+        zip.add_file("part.xml", b"data");
+        assert!(
+            matches!(zip.finish(), Err(ZipWriteError::Io(message)) if message.contains("flush failed"))
+        );
+    }
+
+    #[test]
+    fn duplicate_parts_keep_first_without_running_second_producer() {
+        let mut zip = ZipWriter::new();
+        zip.add_file("part.xml", b"first");
+        zip.add_file_stream("part.xml", |_| panic!("duplicate producer ran"))
+            .unwrap();
+        let bytes = zip.finish().unwrap();
+        let archive = XlsxArchive::new(&bytes).unwrap();
+        assert_eq!(archive.entries().len(), 1);
+        assert_eq!(archive.read_file("part.xml").unwrap(), b"first");
+    }
 
     #[test]
     fn test_single_file_store() {
@@ -614,7 +545,8 @@ mod tests {
         assert_eq!(data, content);
 
         // Verify compression actually reduced size
-        assert!(zip_bytes.len() < content.len() + 100);
+        let entry = archive.find_entry("test.txt").unwrap();
+        assert!(entry.compressed_size < entry.uncompressed_size);
     }
 
     #[test]
@@ -876,11 +808,11 @@ mod tests {
     }
 
     #[test]
-    fn test_compression_fallback_when_not_beneficial() {
+    fn test_incompressible_deflate_roundtrip() {
         // Random data that doesn't compress well
         let random_data: Vec<u8> = (0..100).map(|i| ((i * 17 + 31) % 256) as u8).collect();
 
-        // Even with deflate, should fall back to store if compression doesn't help
+        // Streaming deflate retains the requested method for incompressible data.
         let mut writer = ZipWriter::with_compression(CompressionMethod::Deflate(9));
         writer.add_file("random.bin", random_data.clone());
         let zip_bytes = writer.finish().expect("Failed to create ZIP");
@@ -956,13 +888,5 @@ mod tests {
         let worksheet_names = archive.worksheet_names();
         assert!(worksheet_names.contains(&"sheet1.xml"));
         assert!(worksheet_names.contains(&"sheet2.xml"));
-    }
-
-    #[test]
-    fn test_zip_write_entry_new() {
-        let entry = ZipWriteEntry::new("test.txt", b"content".to_vec(), CompressionMethod::Store);
-        assert_eq!(entry.name, "test.txt");
-        assert_eq!(entry.data, b"content");
-        assert_eq!(entry.method, CompressionMethod::Store);
     }
 }

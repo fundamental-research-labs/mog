@@ -388,45 +388,6 @@ fn full_recalc_with_options_success_restores_settings_and_clears_pending_manual_
 }
 
 #[test]
-fn full_recalc_with_options_err_restores_settings_and_keeps_pending_manual_dirty() {
-    use snapshot_types::RecalcOptions;
-
-    let _guard = FULL_RECALC_WITH_OPTIONS_TEST_LOCK.lock().unwrap();
-    let mut core = ComputeCore::new();
-    let mut cell_store = CellStore::new();
-    core.init_from_snapshot_viewport_only(&mut cell_store, basic_snapshot())
-        .expect("viewport-only snapshot should initialize");
-    core.set_iterative_calc(false);
-    core.set_max_iterations(77);
-    core.set_max_change(0.25);
-    core.begin_recalc_clock(Some(46_272.5));
-    let dirty = cid(0xfeed);
-    core.pending_manual_dirty_cells.insert(dirty);
-
-    let err = core
-        .full_recalc_with_options(
-            &mut cell_store,
-            &RecalcOptions {
-                iterative: Some(true),
-                max_iterations: Some(3),
-                max_change: Some(value_types::FiniteF64::must(0.00001)),
-                timestamp_serial: Some(value_types::FiniteF64::must(46_273.75)),
-            },
-        )
-        .unwrap_err();
-
-    assert!(
-        err.to_string().contains("deferred XLSX hydration"),
-        "expected viewport-only full recalc error, got {err}"
-    );
-    assert!(!core.iterative_calc());
-    assert_eq!(core.max_iterations(), 77);
-    assert_eq!(core.max_change(), 0.25);
-    assert_eq!(core.recalc_clock().current_timestamp(), 46_272.5);
-    assert!(core.pending_manual_dirty_cells.contains(&dirty));
-}
-
-#[test]
 fn full_recalc_with_options_panic_restores_settings_and_keeps_pending_manual_dirty() {
     use snapshot_types::RecalcOptions;
 

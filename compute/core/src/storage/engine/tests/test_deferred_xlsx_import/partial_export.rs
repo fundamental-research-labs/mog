@@ -2,7 +2,7 @@ use super::support::*;
 use super::*;
 
 #[test]
-fn deferred_xlsx_export_rejects_partial_workbook_until_full_hydration() {
+fn stream_xlsx_export_includes_every_sheet_immediately() {
     let bytes = deferred_calc_fixture_xlsx(DeferredCalcFixtureMode::Control);
 
     let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
@@ -10,9 +10,15 @@ fn deferred_xlsx_export_rejects_partial_workbook_until_full_hydration() {
         .import_from_xlsx_bytes_deferred(&bytes)
         .expect("deferred XLSX import should succeed");
 
-    engine
-        .complete_deferred_hydration()
-        .expect("full deferred hydration should succeed");
+    assert!(
+        engine
+            .export_to_parse_output()
+            .unwrap()
+            .parse_output
+            .sheets
+            .len()
+            >= 2
+    );
     let exported = engine
         .export_to_xlsx_bytes()
         .expect("XLSX export should succeed after stream load");

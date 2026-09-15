@@ -1,4 +1,3 @@
-use super::super::adapters::{find_byte, find_sequence};
 use super::super::types::ParseExtras;
 use super::row_attrs::RowAttrs;
 use super::row_attrs::parse_row_attrs;
@@ -16,7 +15,7 @@ pub(crate) fn apply_fast_row_attrs(
     extras: Option<&mut ParseExtras>,
 ) -> AppliedRowAttrs {
     let attrs = parse_row_attrs(tag_bytes);
-    push_row_height_attrs(current_row, &attrs, row_heights, true);
+    push_row_height_attrs(current_row, &attrs, row_heights);
     apply_row_style(current_row, attrs.style, attrs.custom_format, row_heights);
     apply_row_extras(current_row, is_self_closing, &attrs, extras);
 
@@ -25,104 +24,14 @@ pub(crate) fn apply_fast_row_attrs(
     }
 }
 
-pub(super) fn apply_recovery_row_attrs(
-    tag_bytes: &[u8],
-    current_row: u32,
-    row_heights: &mut Vec<RowHeight>,
-) {
-    let (height, height_str) = match find_sequence(tag_bytes, b" ht=\"", 0) {
-        Some(ht_pos) => {
-            let vs = ht_pos + 5;
-            match find_byte(tag_bytes, b'"', vs) {
-                Some(qe) => {
-                    let raw = std::str::from_utf8(&tag_bytes[vs..qe]).ok();
-                    let val = raw.and_then(|s| s.parse::<f64>().ok());
-                    (val, raw.map(|s| s.to_string()))
-                }
-                None => (None, None),
-            }
-        }
-        None => (None, None),
-    };
-    let has_custom = find_sequence(tag_bytes, b"customHeight=\"1\"", 0).is_some();
-    let hidden_val: Option<bool> = find_sequence(tag_bytes, b"hidden=\"", 0).and_then(|hp| {
-        let vs = hp + 8;
-        find_byte(tag_bytes, b'"', vs).and_then(|qe| match &tag_bytes[vs..qe] {
-            b"1" | b"true" => Some(true),
-            b"0" | b"false" => Some(false),
-            _ => None,
-        })
-    });
-    let collapsed_val: Option<bool> =
-        find_sequence(tag_bytes, b" collapsed=\"", 0).and_then(|cp| {
-            let vs = cp + 12;
-            find_byte(tag_bytes, b'"', vs).and_then(|qe| match &tag_bytes[vs..qe] {
-                b"1" | b"true" => Some(true),
-                b"0" | b"false" => Some(false),
-                _ => None,
-            })
-        });
-    let has_thick_top = find_sequence(tag_bytes, b"thickTop=\"1\"", 0).is_some();
-    let has_thick_bot = find_sequence(tag_bytes, b"thickBot=\"1\"", 0).is_some();
-    let outline_lvl = find_sequence(tag_bytes, b"outlineLevel=\"", 0).and_then(|ol_pos| {
-        let vs = ol_pos + 14;
-        find_byte(tag_bytes, b'"', vs).and_then(|qe| {
-            std::str::from_utf8(&tag_bytes[vs..qe])
-                .ok()?
-                .parse::<u8>()
-                .ok()
-        })
-    });
-
-    let has_attrs = height.is_some()
-        || has_custom
-        || hidden_val.is_some()
-        || collapsed_val.is_some()
-        || has_thick_top
-        || has_thick_bot
-        || outline_lvl.is_some();
-    if has_attrs {
-        let mut rh = RowHeight::new(current_row, height.unwrap_or(0.0));
-        rh.height_str = height_str;
-        rh.custom_height = has_custom;
-        rh.hidden = hidden_val;
-        rh.collapsed = collapsed_val;
-        rh.thick_top = has_thick_top;
-        rh.thick_bot = has_thick_bot;
-        rh.outline_level = outline_lvl;
-        row_heights.push(rh);
-    }
-
-    let mut row_style: Option<u32> = None;
-    let has_custom_format = find_sequence(tag_bytes, b"customFormat=\"1\"", 0).is_some();
-    if has_custom_format {
-        if let Some(s_pos) = find_sequence(tag_bytes, b" s=\"", 0) {
-            let val_start = s_pos + 4;
-            if let Some(quote_end) = find_byte(tag_bytes, b'"', val_start) {
-                if let Ok(s_str) = std::str::from_utf8(&tag_bytes[val_start..quote_end]) {
-                    if let Ok(style) = s_str.parse::<u32>() {
-                        row_style = Some(style);
-                    }
-                }
-            }
-        }
-    }
-    apply_row_style(current_row, row_style, has_custom_format, row_heights);
-}
-
-fn push_row_height_attrs(
-    current_row: u32,
-    attrs: &RowAttrs<'_>,
-    row_heights: &mut Vec<RowHeight>,
-    include_fast_only_fields: bool,
-) {
+fn push_row_height_attrs(current_row: u32, attrs: &RowAttrs<'_>, row_heights: &mut Vec<RowHeight>) {
     let has_attrs = attrs.height.is_some()
         || attrs.custom_height
         || attrs.hidden.is_some()
         || attrs.collapsed.is_some()
         || attrs.thick_top
         || attrs.thick_bot
-        || (include_fast_only_fields && attrs.ph)
+        || attrs.ph
         || attrs.outline_level.is_some();
 
     if has_attrs {
@@ -136,13 +45,11 @@ fn push_row_height_attrs(
         rh.collapsed = attrs.collapsed;
         rh.thick_top = attrs.thick_top;
         rh.thick_bot = attrs.thick_bot;
-        if include_fast_only_fields {
-            rh.ph = attrs.ph;
-            rh.spans = attrs
-                .spans
-                .and_then(|b| std::str::from_utf8(b).ok())
-                .map(|s| s.to_string());
-        }
+        rh.ph = attrs.ph;
+        rh.spans = attrs
+            .spans
+            .and_then(|b| std::str::from_utf8(b).ok())
+            .map(|s| s.to_string());
         rh.outline_level = attrs.outline_level;
         row_heights.push(rh);
     }

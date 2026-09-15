@@ -80,6 +80,40 @@ struct RunEntry {
     cell_idx: usize,
 }
 
+/// Borrow values from their existing owner while classifying coordinates.
+trait ClassificationCells {
+    fn value(&self, index: usize) -> &CellValue;
+    fn has_formula(&self, index: usize) -> bool;
+    fn is_empty_null(&self, index: usize) -> bool {
+        self.value(index).is_null() && !self.has_formula(index)
+    }
+}
+
+impl ClassificationCells for [CellData] {
+    fn value(&self, index: usize) -> &CellValue {
+        &self[index].value
+    }
+    fn has_formula(&self, index: usize) -> bool {
+        self[index].formula.is_some() || self[index].identity_formula.is_some()
+    }
+}
+
+struct StoredCells<'a> {
+    store: &'a crate::cells::CellStore,
+    identities: &'a [(cell_types::CellId, u32, u32)],
+}
+
+impl ClassificationCells for StoredCells<'_> {
+    fn value(&self, index: usize) -> &CellValue {
+        self.store
+            .get_cell_value(&self.identities[index].0)
+            .unwrap_or(&CellValue::Null)
+    }
+    fn has_formula(&self, index: usize) -> bool {
+        self.store.get_formula(&self.identities[index].0).is_some()
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
@@ -137,34 +171,14 @@ fn classify_sheet_ranges_with_extra_anchors(
         col_runs.entry(cell.col).or_default().push((cell.row, idx));
     }
 
-    // 3. Sort column keys for deterministic RangeId allocation.
-    let mut sorted_cols: Vec<u32> = col_runs.keys().copied().collect();
-    sorted_cols.sort_unstable();
-
-    // Sort entries within each column by row.
-    for entries in col_runs.values_mut() {
-        entries.sort_unstable_by_key(|&(row, _)| row);
-    }
-
-    // 4. Classify each column and collect ranges + ranged cell indices.
-    let mut range_data: Vec<RangeData> = Vec::new();
-    let mut ranged_cell_indices: FxHashSet<usize> = FxHashSet::default();
-
-    for col in &sorted_cols {
-        if let Some(entries) = col_runs.get(col) {
-            classify_column(
-                *col,
-                entries,
-                &sheet.cells,
-                sheet_id,
-                sheet_row_axis,
-                sheet_col_axis,
-                allocator,
-                &mut range_data,
-                &mut ranged_cell_indices,
-            );
-        }
-    }
+    let (range_data, ranged_cell_indices) = classify_columns(
+        col_runs,
+        sheet.cells.as_slice(),
+        sheet_id,
+        sheet_row_axis,
+        sheet_col_axis,
+        allocator,
+    );
 
     // 5. Remove ranged cells from sheet.cells using swap_remove in reverse order.
     if !ranged_cell_indices.is_empty() {
@@ -194,66 +208,66 @@ pub(crate) fn classify_store_sheet_ranges(
     let Some(sheet_store) = store.get_sheet(&sheet_id) else {
         return (Vec::new(), FxHashSet::default());
     };
-    let sheet_name = sheet_store.name.clone();
-    let sheet_rows = sheet_store.rows;
-    let sheet_cols = sheet_store.cols;
-    let live_cells: Vec<_> = sheet_store.cells().collect();
-    let mut extra_anchored = extra_anchored.clone();
-    let mut cells = Vec::new();
-    for (cell_id, row, col) in live_cells {
-        let has_formula = store.get_formula(&cell_id).is_some();
-        if has_formula {
-            extra_anchored.insert((row, col));
-        }
-        cells.push(CellData {
-            cell_id: format!("{:032x}", cell_id.as_u128()),
-            row,
-            col,
-            value: store
-                .get_cell_value(&cell_id)
-                .cloned()
-                .unwrap_or(CellValue::Null),
-            formula: has_formula.then(String::new),
-            identity_formula: None,
-            array_ref: None,
-        });
-    }
-    let before: FxHashSet<(u32, u32)> = cells
-        .iter()
-        .filter(|cell| cell.formula.is_some() || !cell.value.is_null())
-        .map(|cell| (cell.row, cell.col))
-        .collect();
-    let mut sheet = SheetSnapshot {
-        identities: Vec::new(),
-        row_axis: None,
-        col_axis: None,
-        id: format!("{:032x}", sheet_id.as_u128()),
-        name: sheet_name,
-        rows: sheet_rows,
-        cols: sheet_cols,
-        cells,
-        ranges: Vec::new(),
+    let identities: Vec<_> = sheet_store.cells().collect();
+    let values = StoredCells {
+        store,
+        identities: &identities,
     };
-    classify_sheet_ranges_with_extra_anchors(
-        &mut sheet,
-        sheet_data,
-        snapshot,
-        None,
+    let mut anchored =
+        collect_anchored_positions(sheet_data, &sheet_id.to_uuid_string(), snapshot, None);
+    anchored.extend(extra_anchored.iter().copied());
+    let mut col_runs: FxHashMap<u32, Vec<(u32, usize)>> = FxHashMap::default();
+    for (index, &(id, row, col)) in identities.iter().enumerate() {
+        if !anchored.contains(&(row, col)) && store.get_formula(&id).is_none() {
+            col_runs.entry(col).or_default().push((row, index));
+        }
+    }
+    let (ranges, ranged_indices) = classify_columns(
+        col_runs,
+        &values,
+        sheet_id,
         sheet_row_axis,
         sheet_col_axis,
         allocator,
-        &extra_anchored,
     );
-    let after: FxHashSet<(u32, u32)> = sheet
-        .cells
-        .iter()
-        .map(|cell| (cell.row, cell.col))
-        .collect();
-    let ranged = before
+    let ranged = ranged_indices
         .into_iter()
-        .filter(|pos| !after.contains(pos))
+        .map(|index| {
+            let (_, row, col) = identities[index];
+            (row, col)
+        })
         .collect();
-    (sheet.ranges, ranged)
+    (ranges, ranged)
+}
+
+fn classify_columns(
+    mut columns: FxHashMap<u32, Vec<(u32, usize)>>,
+    cells: &(impl ClassificationCells + ?Sized),
+    sheet_id: SheetId,
+    rows: &AxisIdentityStore<RowId>,
+    cols: &AxisIdentityStore<ColId>,
+    allocator: &mut DefaultIdAllocator,
+) -> (Vec<RangeData>, FxHashSet<usize>) {
+    let mut sorted_cols: Vec<_> = columns.keys().copied().collect();
+    sorted_cols.sort_unstable();
+    let mut ranges = Vec::new();
+    let mut ranged = FxHashSet::default();
+    for col in sorted_cols {
+        let entries = columns.get_mut(&col).expect("classified column");
+        entries.sort_unstable_by_key(|&(row, _)| row);
+        classify_column(
+            col,
+            entries,
+            cells,
+            sheet_id,
+            rows,
+            cols,
+            allocator,
+            &mut ranges,
+            &mut ranged,
+        );
+    }
+    (ranges, ranged)
 }
 
 // ---------------------------------------------------------------------------
@@ -264,7 +278,7 @@ pub(crate) fn classify_store_sheet_ranges(
 fn classify_column(
     col: u32,
     entries: &[(u32, usize)],
-    cells: &[CellData],
+    cells: &(impl ClassificationCells + ?Sized),
     sheet_id: SheetId,
     sheet_row_axis: &AxisIdentityStore<RowId>,
     sheet_col_axis: &AxisIdentityStore<ColId>,
@@ -282,7 +296,7 @@ fn classify_column(
     let mut numeric_state = NumericRunState::new();
 
     for &(row, cell_idx) in entries {
-        let value = &cells[cell_idx].value;
+        let value = cells.value(cell_idx);
 
         match classify_value(value) {
             ValueClass::PromotableInt => {
@@ -482,7 +496,7 @@ fn flush_run(
     kind: RunKind,
     numeric_state: &NumericRunState,
     col: u32,
-    cells: &[CellData],
+    cells: &(impl ClassificationCells + ?Sized),
     sheet_id: SheetId,
     sheet_row_axis: &AxisIdentityStore<RowId>,
     sheet_col_axis: &AxisIdentityStore<ColId>,
@@ -494,10 +508,7 @@ fn flush_run(
         return;
     }
 
-    if matches!(kind, RunKind::Mixed)
-        && run
-            .iter()
-            .all(|entry| is_empty_null_cell(&cells[entry.cell_idx]))
+    if matches!(kind, RunKind::Mixed) && run.iter().all(|entry| cells.is_empty_null(entry.cell_idx))
     {
         return;
     }
@@ -567,26 +578,24 @@ fn flush_run(
 
     // Mark these cell indices for removal.
     for entry in run {
-        if !is_empty_null_cell(&cells[entry.cell_idx]) {
+        if !cells.is_empty_null(entry.cell_idx) {
             ranged_cell_indices.insert(entry.cell_idx);
         }
     }
-}
-
-fn is_empty_null_cell(cell: &CellData) -> bool {
-    matches!(cell.value, CellValue::Null)
-        && cell.formula.is_none()
-        && cell.identity_formula.is_none()
 }
 
 // ---------------------------------------------------------------------------
 // Payload encoding
 // ---------------------------------------------------------------------------
 
-fn encode_payload(encoding: PayloadEncoding, run: &[RunEntry], cells: &[CellData]) -> Vec<u8> {
+fn encode_payload(
+    encoding: PayloadEncoding,
+    run: &[RunEntry],
+    cells: &(impl ClassificationCells + ?Sized),
+) -> Vec<u8> {
     crate::cells::range_view::encode_values(
         encoding,
-        run.iter().map(|entry| &cells[entry.cell_idx].value),
+        run.iter().map(|entry| cells.value(entry.cell_idx)),
     )
 }
 

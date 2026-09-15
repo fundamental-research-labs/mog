@@ -3,9 +3,7 @@
 //! These provide a convenient API that matches the cell parser's needs,
 //! wrapping the underlying SIMD-optimized scanner functions.
 
-use crate::infra::scanner::{
-    find_any_simd, find_gt_simd, find_lt_simd, find_tag_simd, skip_whitespace_simd,
-};
+use crate::infra::scanner::{find_any_simd, find_gt_simd, find_lt_simd, find_tag_simd};
 
 /// Find a specific byte in the slice starting from `start`.
 #[inline]
@@ -101,17 +99,4 @@ pub(crate) fn find_closing_tag_position(xml: &[u8], tag: &[u8], start: usize) ->
         }
     }
     None
-}
-
-/// Find any of the specified bytes in the slice.
-#[inline]
-#[allow(dead_code)]
-pub(crate) fn find_any_of(xml: &[u8], chars: &[u8], start: usize) -> Option<usize> {
-    find_any_simd(xml, start, chars).map(|(pos, _)| pos)
-}
-
-/// Skip whitespace characters.
-#[inline]
-pub(crate) fn skip_whitespace(xml: &[u8], start: usize) -> usize {
-    skip_whitespace_simd(xml, start)
 }

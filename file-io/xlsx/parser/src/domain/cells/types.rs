@@ -167,7 +167,7 @@ pub struct EmptyFormulaMetadata {
     pub r2: Option<String>,
 }
 
-/// Side-channel data collected during `parse_worksheet_fast_with_extras`.
+/// Cell and row metadata collected by the unified worksheet stream.
 ///
 /// When passed to the parse function, shared formula info, cached formula values,
 /// and data table info are collected during the single parse pass, eliminating the

@@ -43,7 +43,11 @@ pub(super) fn calculate_dimension(sheet: &SheetWriter) -> Option<(u32, u32, u32,
     }
 }
 
-pub(super) fn write_sheet_data(w: &mut XmlWriter, sheet: &SheetWriter) {
+pub(super) fn write_sheet_data(
+    w: &mut XmlWriter,
+    sheet: &SheetWriter,
+    sink: &mut (impl std::io::Write + ?Sized),
+) -> std::io::Result<()> {
     w.start_element("sheetData").end_attrs();
 
     let mut runs: Vec<&AuthoredStyleRun> = sheet.authored_style_runs.iter().collect();
@@ -66,7 +70,7 @@ pub(super) fn write_sheet_data(w: &mut XmlWriter, sheet: &SheetWriter) {
         (None, Some(run)) => run.start_row,
         (None, None) => {
             w.end_element("sheetData");
-            return;
+            return Ok(());
         }
     };
 
@@ -90,7 +94,8 @@ pub(super) fn write_sheet_data(w: &mut XmlWriter, sheet: &SheetWriter) {
                 (&empty_row, &[][..])
             }
         };
-        write_row(w, current_row, row_def, cells, &active_runs);
+        write_row(w, current_row, row_def, cells, &active_runs, sink)?;
+        drain_cell_buffer(w, sink)?;
 
         let next_data_row = row_iter.peek().map(|(row, _)| **row);
         let next_run_row = runs.get(run_idx).map(|run| run.start_row);
@@ -113,6 +118,7 @@ pub(super) fn write_sheet_data(w: &mut XmlWriter, sheet: &SheetWriter) {
     }
 
     w.end_element("sheetData");
+    w.drain_to(sink)
 }
 
 fn write_row(
@@ -121,7 +127,8 @@ fn write_row(
     row_def: &RowDef,
     cells: &[CellData],
     authored_style_runs: &[&AuthoredStyleRun],
-) {
+    sink: &mut (impl std::io::Write + ?Sized),
+) -> std::io::Result<()> {
     let authored_style_cells = authored_style_cells_for_row(row_idx, cells, authored_style_runs);
     if cells.is_empty()
         && authored_style_cells.is_empty()
@@ -138,7 +145,7 @@ fn write_row(
         && row_def.spans.is_none()
         && !row_def.bare_empty
     {
-        return;
+        return Ok(());
     }
 
     w.start_element("row").attr_num("r", row_idx + 1);
@@ -201,18 +208,25 @@ fn write_row(
     } else {
         w.end_attrs();
 
-        write_ordered_cells(w, cells, &authored_style_cells);
+        write_ordered_cells(w, cells, &authored_style_cells, sink)?;
 
         w.end_element("row");
     }
+    Ok(())
 }
 
-fn write_ordered_cells(w: &mut XmlWriter, cells: &[CellData], authored_style_cells: &[CellData]) {
+fn write_ordered_cells(
+    w: &mut XmlWriter,
+    cells: &[CellData],
+    authored_style_cells: &[CellData],
+    sink: &mut (impl std::io::Write + ?Sized),
+) -> std::io::Result<()> {
     if authored_style_cells.is_empty() && cells_are_sorted_by_col(cells) {
         for cell in cells {
             cell::write_cell(w, cell);
+            drain_cell_buffer(w, sink)?;
         }
-        return;
+        return Ok(());
     }
 
     if !authored_style_cells.is_empty() && cells_are_sorted_by_col(cells) {
@@ -229,8 +243,9 @@ fn write_ordered_cells(w: &mut XmlWriter, cells: &[CellData], authored_style_cel
                 cell::write_cell(w, &authored_style_cells[authored_idx]);
                 authored_idx += 1;
             }
+            drain_cell_buffer(w, sink)?;
         }
-        return;
+        return Ok(());
     }
 
     let mut row_cells: Vec<&CellData> =
@@ -241,9 +256,21 @@ fn write_ordered_cells(w: &mut XmlWriter, cells: &[CellData], authored_style_cel
 
     for cell in row_cells {
         cell::write_cell(w, cell);
+        drain_cell_buffer(w, sink)?;
     }
+    Ok(())
 }
 
 fn cells_are_sorted_by_col(cells: &[CellData]) -> bool {
     cells.windows(2).all(|pair| pair[0].col <= pair[1].col)
+}
+
+fn drain_cell_buffer(
+    w: &mut XmlWriter,
+    sink: &mut (impl std::io::Write + ?Sized),
+) -> std::io::Result<()> {
+    if w.len() >= 64 * 1024 {
+        w.drain_to(sink)?;
+    }
+    Ok(())
 }

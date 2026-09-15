@@ -29,6 +29,15 @@ impl From<PackageIntegrityError> for PackageGraphViolation {
     fn from(error: PackageIntegrityError) -> Self {
         let message = error.to_string();
         match error {
+            PackageIntegrityError::UnreadableXmlPart { part_path, .. } => Self {
+                code: PackageGraphViolationCode::UnreadableXmlPart,
+                message,
+                rels_path: None,
+                part_path: Some(part_path),
+                relationship_id: None,
+                relationship_type: None,
+                target: None,
+            },
             PackageIntegrityError::MissingRelationshipOwner {
                 rels_path,
                 owner_path,

@@ -85,9 +85,3 @@ pub(super) fn format_resolution_error(err: OpcTargetResolutionError) -> String {
         }
     }
 }
-
-pub(super) fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack
-        .windows(needle.len())
-        .position(|window| window == needle)
-}

@@ -161,11 +161,6 @@ pub(crate) fn find_sheet_data_bounds(xml: &[u8], start: usize) -> Option<SheetDa
     })
 }
 
-#[inline]
-pub(crate) fn pre_sheet_data_region(xml: &[u8]) -> &[u8] {
-    find_sheet_data_bounds(xml, 0).map_or(xml, |bounds| &xml[..bounds.start])
-}
-
 #[cfg(test)]
 #[inline]
 pub(crate) fn post_sheet_data_region(xml: &[u8]) -> &[u8] {

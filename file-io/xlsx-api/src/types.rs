@@ -55,9 +55,7 @@ pub use xlsx_parser::{XlsxArchive, ZipEntry, ZipError};
 
 // --- Bridge types ---
 pub use xlsx_parser::bridge::error::XlsxBridgeError;
-pub use xlsx_parser::bridge::types::{
-    BridgeLazyParseResult, BridgeLazyParseResultWithErrors, BridgeParseTimings,
-};
+pub use xlsx_parser::bridge::types::BridgeParseTimings;
 
 // --- Write types ---
 pub use xlsx_parser::ZipWriter as ParserZipWriter;

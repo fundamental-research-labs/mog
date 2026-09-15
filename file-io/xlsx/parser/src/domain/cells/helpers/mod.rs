@@ -25,12 +25,11 @@ pub use formula_extras::extract_formula_extras_fused;
 pub use formula_refs::adjust_formula_references;
 pub(crate) use scan::{ScanResult, scan_cell};
 pub use shared_formula::extract_shared_formula_info;
-pub(crate) use tags::{
-    find_closing_tag_span, find_sheet_data_bounds, find_start_tag, pre_sheet_data_region,
-    start_tag_at,
-};
 #[cfg(test)]
 pub(crate) use tags::post_sheet_data_region;
+pub(crate) use tags::{
+    find_closing_tag_span, find_sheet_data_bounds, find_start_tag, start_tag_at,
+};
 pub use value::extract_cell_value_fast;
 pub(crate) use value::extract_inline_string_owned_forward;
 pub(crate) use worksheet_scan::{CellEnd, find_cell_end, parse_row_number};

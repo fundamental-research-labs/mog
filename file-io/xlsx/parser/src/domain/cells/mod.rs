@@ -41,12 +41,11 @@ pub(crate) use full_convert::{
     apply_parse_extras, build_col_style_ranges_from_widths, coalesce_authored_style_only_cells,
     col_style_range_at, convert_cell_data, data_table_info,
 };
-pub(crate) use helpers::{
-    find_closing_tag_span, find_start_tag, parse_row_number, pre_sheet_data_region, scan_cell,
-    start_tag_at,
-};
 #[cfg(test)]
 pub(crate) use helpers::post_sheet_data_region;
+pub(crate) use helpers::{
+    find_closing_tag_span, find_start_tag, parse_row_number, scan_cell, start_tag_at,
+};
 pub(crate) use parsing::{
     CellExtrasInput, apply_fast_row_attrs, collect_cell_extras, collect_formula_extras,
 };

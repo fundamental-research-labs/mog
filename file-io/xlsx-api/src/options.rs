@@ -38,10 +38,6 @@ pub struct ParseOptions {
     pub skip_conditional_formatting: bool,
     /// Only parse sheets with these names. None = parse all.
     pub sheet_filter: Option<Vec<String>>,
-    /// Maximum number of sheets to parse (cell data + auxiliary).
-    /// Remaining sheets get metadata only (name, dimensions, visibility).
-    /// None = parse all sheets.
-    pub max_sheets: Option<usize>,
     /// Skip formulas, return only cached/computed values.
     pub values_only: bool,
     /// Include microsecond-precision phase timings in the result.
@@ -67,7 +63,6 @@ impl ParseOptions {
             skip_data_validation: false,
             skip_conditional_formatting: false,
             sheet_filter: None,
-            max_sheets: None,
             values_only: false,
             profiled: false,
         }
@@ -136,13 +131,6 @@ impl ParseOptions {
     /// Only parse sheets with the given names.
     pub fn sheets(mut self, names: &[&str]) -> Self {
         self.sheet_filter = Some(names.iter().map(|s| s.to_string()).collect());
-        self
-    }
-
-    /// Only parse cell data for the first N sheets. Remaining sheets get
-    /// metadata only (name, dimensions, visibility, no cells).
-    pub fn max_sheets(mut self, n: usize) -> Self {
-        self.max_sheets = Some(n);
         self
     }
 

@@ -297,28 +297,38 @@ fn workbook_sheet_inventory_keeps_inert_active_tab_and_names_through_native_rebu
 }
 
 #[test]
-fn workbook_sheet_inventory_preserves_compact_selected_parse_mapping() {
-    let bytes = inventory_workbook();
-    let metadata = xlsx_parser::parse_deferred_workbook_metadata(&bytes).unwrap();
-    let (selected, _) =
-        xlsx_parser::parse_xlsx_to_output_selected_workbook_sheets(&bytes, &[2], &metadata)
-            .unwrap();
-    assert_eq!(selected.sheets.len(), 1);
-    assert_eq!(selected.sheets[0].name, "More");
-    let engine = engine_from_parse_output_normal(&selected);
+fn workbook_sheet_inventory_keeps_chart_and_dialog_tabs_on_full_parse() {
+    let engine = imported_engine();
     let output = engine.export_to_parse_output().unwrap().parse_output;
     assert_eq!(
-        output.parsed_workbook_sheet_indices,
-        [2].into_iter().collect()
+        output
+            .sheets
+            .iter()
+            .map(|sheet| sheet.name.as_str())
+            .collect::<Vec<_>>(),
+        ["Data", "More"]
     );
     assert_eq!(output.workbook_sheet_inventory.len(), 4);
+    assert_eq!(output.workbook_sheet_inventory[0].name, "Data");
     assert_eq!(
         output.workbook_sheet_inventory[0].editable_sheet_index,
-        None
-    );
-    assert_eq!(
-        output.workbook_sheet_inventory[2].editable_sheet_index,
         Some(0)
     );
-    assert_eq!(output.sheets[0].name, "More");
+    assert_eq!(
+        output.workbook_sheet_inventory[1].kind,
+        WorkbookSheetKind::Chartsheet
+    );
+    assert_eq!(
+        output.workbook_sheet_inventory[1].editable_sheet_index,
+        None
+    );
+    assert_eq!(output.workbook_sheet_inventory[2].name, "More");
+    assert_eq!(
+        output.workbook_sheet_inventory[2].editable_sheet_index,
+        Some(1)
+    );
+    assert_eq!(
+        output.workbook_sheet_inventory[3].kind,
+        WorkbookSheetKind::Dialogsheet
+    );
 }

@@ -124,7 +124,6 @@ fn build_hyperlinks_output(
 
 use super::external_links_phase::parse_external_links;
 use super::helpers::*;
-use super::metadata_only::append_metadata_only_sheets;
 use super::theme_discovery::discover_workbook_theme_part;
 use super::timing::WorksheetTimingAccumulators;
 
@@ -299,96 +298,6 @@ fn legacy_sheet_num_for_context(context: &SheetPackageContext) -> usize {
         .unwrap_or(context.workbook_order + 1)
 }
 
-#[derive(Debug, Clone)]
-pub(super) enum SheetParseSelection {
-    All,
-    Prefix(usize),
-    EditableIndices(std::collections::BTreeSet<usize>),
-    WorkbookIndices(std::collections::BTreeSet<u32>),
-    InitialActiveVisible,
-}
-
-impl SheetParseSelection {
-    fn compact_selected_only(&self) -> bool {
-        matches!(self, Self::WorkbookIndices(_))
-    }
-
-    fn selected_indices(
-        &self,
-        sheet_package_contexts: &[SheetPackageContext],
-        workbook_sheet_inventory: &[domain_types::WorkbookSheetPackageInfo],
-        workbook_views: &[ooxml_types::workbook::BookView],
-    ) -> std::collections::BTreeSet<usize> {
-        match self {
-            Self::All => (0..sheet_package_contexts.len()).collect(),
-            Self::Prefix(max_sheets) => {
-                (0..sheet_package_contexts.len().min(*max_sheets)).collect()
-            }
-            Self::EditableIndices(indices) => indices
-                .iter()
-                .copied()
-                .filter(|idx| *idx < sheet_package_contexts.len())
-                .collect(),
-            Self::WorkbookIndices(indices) => workbook_sheet_inventory
-                .iter()
-                .filter(|entry| indices.contains(&entry.workbook_order))
-                .filter_map(|entry| entry.editable_sheet_index)
-                .filter(|idx| *idx < sheet_package_contexts.len())
-                .collect(),
-            Self::InitialActiveVisible => select_initial_active_visible_editable_index(
-                workbook_sheet_inventory,
-                workbook_views,
-            )
-            .into_iter()
-            .collect(),
-        }
-    }
-}
-
-fn select_initial_active_visible_editable_index(
-    workbook_sheet_inventory: &[domain_types::WorkbookSheetPackageInfo],
-    workbook_views: &[ooxml_types::workbook::BookView],
-) -> Option<usize> {
-    let active_workbook_order = workbook_views
-        .first()
-        .map(|view| view.active_tab as usize)
-        .unwrap_or(0);
-
-    let visible_editable = |entry: &&domain_types::WorkbookSheetPackageInfo| {
-        entry.editable_sheet_index.is_some()
-            && entry.visibility == ooxml_types::workbook::SheetState::Visible
-    };
-
-    if let Some(entry) = workbook_sheet_inventory.iter().find(|entry| {
-        visible_editable(entry) && entry.workbook_order as usize == active_workbook_order
-    }) {
-        return entry.editable_sheet_index;
-    }
-
-    if let Some(entry) = workbook_sheet_inventory.iter().find(visible_editable) {
-        return entry.editable_sheet_index;
-    }
-
-    None
-}
-
-fn compact_inventory_to_selected_sheets(
-    inventory: &mut [domain_types::WorkbookSheetPackageInfo],
-    sheets: &[FullParsedSheet],
-) {
-    let compact_index_by_editable_index: std::collections::BTreeMap<usize, usize> = sheets
-        .iter()
-        .enumerate()
-        .map(|(compact_index, sheet)| (sheet.index, compact_index))
-        .collect();
-
-    for entry in inventory {
-        entry.editable_sheet_index = entry
-            .editable_sheet_index
-            .and_then(|idx| compact_index_by_editable_index.get(&idx).copied());
-    }
-}
-
 /// Parse an XLSX file from raw bytes and return a full structured result.
 ///
 /// This is the core parse pipeline shared between WASM entry points and native
@@ -411,7 +320,6 @@ fn compact_inventory_to_selected_sheets(
 pub(super) fn parse_xlsx_full_native_impl(
     xlsx_data: &[u8],
     timings: Option<&mut ParseTimings>,
-    sheet_selection: SheetParseSelection,
 ) -> Result<FullParseResult, String> {
     // Validate input
     if xlsx_data.is_empty() {
@@ -611,7 +519,7 @@ pub(super) fn parse_xlsx_full_native_impl(
         &content_type_defaults,
         &content_type_overrides,
     );
-    let mut workbook_sheet_inventory = workbook::build_workbook_sheet_inventory(
+    let workbook_sheet_inventory = workbook::build_workbook_sheet_inventory(
         &sheet_infos,
         &workbook_relationships,
         parsed_content_types.as_ref(),
@@ -681,32 +589,9 @@ pub(super) fn parse_xlsx_full_native_impl(
     // Parse each editable worksheet in workbook order. Workbook inventory keeps
     // non-worksheet sheet kinds and invalid tabs without turning them into
     // editable worksheet payloads.
-    let sheet_count = sheet_package_contexts.len();
-    let selected_sheet_indices = sheet_selection.selected_indices(
-        &sheet_package_contexts,
-        &workbook_sheet_inventory,
-        &workbook_views,
-    );
-    if matches!(sheet_selection, SheetParseSelection::InitialActiveVisible)
-        && selected_sheet_indices.is_empty()
-    {
-        return Err("XLSX workbook has no visible editable worksheet for deferred import".into());
-    }
-    let selected_sheet_contexts: Vec<(usize, &SheetPackageContext)> = sheet_package_contexts
-        .iter()
-        .enumerate()
-        .filter(|(idx, _)| selected_sheet_indices.contains(idx))
-        .collect();
-    let parsed_workbook_sheet_indices: std::collections::BTreeSet<u32> =
-        if sheet_selection.compact_selected_only() {
-            selected_sheet_contexts
-                .iter()
-                .map(|(_, context)| context.workbook_order as u32)
-                .collect()
-        } else {
-            Default::default()
-        };
-    let parse_cell_count = selected_sheet_contexts.len();
+    let selected_sheet_contexts: Vec<(usize, &SheetPackageContext)> =
+        sheet_package_contexts.iter().enumerate().collect();
+    let parsed_workbook_sheet_indices: std::collections::BTreeSet<u32> = Default::default();
     let mut total_cells: u32 = 0;
 
     let mut worksheet_timings = WorksheetTimingAccumulators::default();
@@ -716,7 +601,7 @@ pub(super) fn parse_xlsx_full_native_impl(
 
     // Stream-inflate worksheets one sheet at a time. The previous parallel path
     // pre-decompressed every worksheet XML document into memory first.
-    let mut sheets: Vec<FullParsedSheet> = parse_sheets_sequential(
+    let sheets: Vec<FullParsedSheet> = parse_sheets_sequential(
         &archive,
         &selected_sheet_contexts,
         &shared_strings,
@@ -738,18 +623,6 @@ pub(super) fn parse_xlsx_full_native_impl(
         return Err(msg);
     }
     ensure_no_archive_safety_error(&archive)?;
-
-    if parse_cell_count < sheet_count && !sheet_selection.compact_selected_only() {
-        append_metadata_only_sheets(
-            &archive,
-            &mut sheets,
-            &mut sheet_ext_namespaces,
-            &sheet_package_contexts,
-        )?;
-    }
-    if sheet_selection.compact_selected_only() {
-        compact_inventory_to_selected_sheets(&mut workbook_sheet_inventory, &sheets);
-    }
 
     let t5 = tick(&timings);
 
@@ -1030,9 +903,9 @@ fn parse_sheets_sequential(
 
         // --- Sub-phase: ZIP stream inflate + cell parse ---
         let ws_t0 = tick(timings);
-        let compressed = archive.get_compressed_data(sheet_path).map_err(|e| {
-            format!("Failed to read compressed worksheet {}: {}", sheet_path, e)
-        })?;
+        let compressed = archive
+            .get_compressed_data(sheet_path)
+            .map_err(|e| format!("Failed to read compressed worksheet {}: {}", sheet_path, e))?;
         archive
             .charge_uncompressed(compressed.uncompressed_size)
             .map_err(|e| e.to_string())?;
@@ -1045,17 +918,15 @@ fn parse_sheets_sequential(
             |_| {},
         )?;
         crate::pipeline::streaming::record_stream_load_stats(&streamed.stats);
-        ensure_count_limit(
-            "worksheet cell",
-            streamed.cells.len(),
-            MAX_WORKSHEET_CELLS,
-        )?;
+        ensure_count_limit("worksheet cell", streamed.cells.len(), MAX_WORKSHEET_CELLS)?;
         let ws_t1 = tick(timings);
         let ws_t2 = ws_t1;
 
         let pre_sd_early = streamed.pre_sheet_data.as_slice();
-        let worksheet_without_cells =
-            worksheet_markup_without_sheet_data(&streamed.pre_sheet_data, &streamed.post_sheet_data);
+        let worksheet_without_cells = worksheet_markup_without_sheet_data(
+            &streamed.pre_sheet_data,
+            &streamed.post_sheet_data,
+        );
         let cells_buffer = streamed.cells;
         let strings_buffer = streamed.strings;
         let extras = streamed.extras;

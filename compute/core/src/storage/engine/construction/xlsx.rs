@@ -19,13 +19,28 @@ pub(in crate::storage::engine) fn from_xlsx_bytes_with_progress(
     xlsx_data: &[u8],
     on_chunk: impl FnMut(&xlsx_parser::StreamLoadStats, &CellStore) + 'static,
 ) -> Result<(ComputeEngine, RecalcResult), ComputeError> {
+    from_xlsx_bytes_with_layout(
+        xlsx_data,
+        domain_types::units::LayoutMetrics::default(),
+        on_chunk,
+    )
+}
+
+fn from_xlsx_bytes_with_layout(
+    xlsx_data: &[u8],
+    layout_metrics: domain_types::units::LayoutMetrics,
+    on_chunk: impl FnMut(&xlsx_parser::StreamLoadStats, &CellStore) + 'static,
+) -> Result<(ComputeEngine, RecalcResult), ComputeError> {
     LOAD_PROGRESS.with(|slot| *slot.borrow_mut() = Some(Box::new(on_chunk)));
-    let result = from_xlsx_bytes_inner(xlsx_data);
+    let result = from_xlsx_bytes_inner(xlsx_data, layout_metrics);
     LOAD_PROGRESS.with(|slot| *slot.borrow_mut() = None);
     result
 }
 
-fn from_xlsx_bytes_inner(xlsx_data: &[u8]) -> Result<(ComputeEngine, RecalcResult), ComputeError> {
+fn from_xlsx_bytes_inner(
+    xlsx_data: &[u8],
+    layout_metrics: domain_types::units::LayoutMetrics,
+) -> Result<(ComputeEngine, RecalcResult), ComputeError> {
     let (storage, workbook_snap, import_report, imported_formats, mut cell_store, formula_cells) =
         parse_and_hydrate_xlsx(xlsx_data)?;
 
@@ -49,7 +64,13 @@ fn from_xlsx_bytes_inner(xlsx_data: &[u8]) -> Result<(ComputeEngine, RecalcResul
         (cell_store, compute, recalc_result)
     };
 
-    let mut engine = assemble_engine(storage, cell_store, compute, &workbook_snap)?;
+    let mut engine = super::assembly::assemble_engine_with_layout_metrics(
+        storage,
+        cell_store,
+        compute,
+        &workbook_snap,
+        layout_metrics,
+    )?;
     install_imported_formats(
         &mut engine.cell_store,
         &engine.stores.storage.metadata.style_palette,
@@ -93,7 +114,10 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes(
     xlsx_data: &[u8],
     do_recalc: bool,
 ) -> Result<RecalcResult, ComputeError> {
-    let (loaded, recalc) = from_xlsx_bytes(xlsx_data)?;
+    let char_code_page = engine.cell_store.char_code_page;
+    let (mut loaded, recalc) =
+        from_xlsx_bytes_with_layout(xlsx_data, engine.stores.layout_metrics, |_, _| {})?;
+    loaded.cell_store.char_code_page = char_code_page;
     engine.cell_store = loaded.cell_store;
     engine.stores = loaded.stores;
     engine.viewport = loaded.viewport;
@@ -129,6 +153,11 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         Vec::<(cell_types::CellId, SheetId, String)>::new(),
     ));
     let streamed_styles = Rc::new(RefCell::new(Vec::<Vec<(u32, u32, u32)>>::new()));
+    let streamed_array_refs = Rc::new(RefCell::new(Vec::<Vec<(u32, u32, String)>>::new()));
+    let streamed_formula_props = Rc::new(RefCell::new(Vec::<Vec<(u32, u32, u8, bool)>>::new()));
+    let streamed_cell_formulas = Rc::new(RefCell::new(Vec::<
+        Vec<(u32, u32, ooxml_types::worksheet::CellFormula)>,
+    >::new()));
     let parsed = {
         let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "parse");
         let store = live_store.clone();
@@ -161,8 +190,19 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
                 let store = live_store.clone();
                 let ids = stream_sheet_ids.clone();
                 let formulas = streamed_formulas.clone();
+                let array_refs = streamed_array_refs.clone();
+                let formula_props = streamed_formula_props.clone();
+                let cell_formulas = streamed_cell_formulas.clone();
                 xlsx_parser::set_stream_resolved_hook(
-                    move |sheet_idx, row, col, value, formula| {
+                    move |sheet_idx,
+                          row,
+                          col,
+                          value,
+                          formula,
+                          cached_value_type,
+                          array_ref,
+                          has_empty_cached_value,
+                          cell_formula| {
                         let mut store = store.borrow_mut();
                         let ids = ids.borrow();
                         let Some(&sheet_id) = ids.get(sheet_idx) else {
@@ -173,26 +213,67 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
                         }) else {
                             return;
                         };
-                        if let Some(value) = value {
-                            let current_null = store
-                                .get_cell_value(&cell_id)
-                                .is_none_or(value_types::CellValue::is_null);
-                            if current_null && !value.is_empty() {
-                                let parsed = if value.eq_ignore_ascii_case("true") {
-                                    value_types::CellValue::Boolean(true)
-                                } else if value.eq_ignore_ascii_case("false") {
-                                    value_types::CellValue::Boolean(false)
-                                } else if let Ok(err) = value.parse::<value_types::CellError>() {
-                                    value_types::CellValue::from(err)
-                                } else {
+                        if cached_value_type != 0 || has_empty_cached_value {
+                            let mut props = formula_props.borrow_mut();
+                            while props.len() <= sheet_idx {
+                                props.push(Vec::new());
+                            }
+                            props[sheet_idx].push((
+                                row,
+                                col,
+                                cached_value_type,
+                                has_empty_cached_value,
+                            ));
+                        }
+                        let current_null = store
+                            .get_cell_value(&cell_id)
+                            .is_none_or(value_types::CellValue::is_null);
+                        if current_null {
+                            let parsed = match cached_value_type {
+                                xlsx_parser::CELL_TYPE_FORMULA_STRING
+                                | xlsx_parser::CELL_TYPE_STRING => Some(
+                                    value_types::CellValue::from(value.unwrap_or("").to_string()),
+                                ),
+                                xlsx_parser::CELL_TYPE_BOOL => {
+                                    value.and_then(|value| match value {
+                                        "1" | "TRUE" | "true" => {
+                                            Some(value_types::CellValue::Boolean(true))
+                                        }
+                                        "0" | "FALSE" | "false" => {
+                                            Some(value_types::CellValue::Boolean(false))
+                                        }
+                                        _ => None,
+                                    })
+                                }
+                                xlsx_parser::CELL_TYPE_ERROR => value.map(|value| {
                                     value
-                                        .parse::<f64>()
+                                        .parse::<value_types::CellError>()
                                         .ok()
-                                        .map(value_types::CellValue::number)
+                                        .map(value_types::CellValue::from)
                                         .unwrap_or_else(|| {
                                             value_types::CellValue::from(value.to_string())
                                         })
-                                };
+                                }),
+                                _ => value.filter(|value| !value.is_empty()).map(|value| {
+                                    if value.eq_ignore_ascii_case("true") {
+                                        value_types::CellValue::Boolean(true)
+                                    } else if value.eq_ignore_ascii_case("false") {
+                                        value_types::CellValue::Boolean(false)
+                                    } else if let Ok(err) = value.parse::<value_types::CellError>()
+                                    {
+                                        value_types::CellValue::from(err)
+                                    } else {
+                                        value
+                                            .parse::<f64>()
+                                            .ok()
+                                            .map(value_types::CellValue::number)
+                                            .unwrap_or_else(|| {
+                                                value_types::CellValue::from(value.to_string())
+                                            })
+                                    }
+                                }),
+                            };
+                            if let Some(parsed) = parsed {
                                 store.set_value_mut(&cell_id, parsed);
                             }
                         }
@@ -202,6 +283,20 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
                                 sheet_id,
                                 compute_parser::normalize_xlsx_formula(formula),
                             ));
+                        }
+                        if let Some(array_ref) = array_ref {
+                            let mut refs = array_refs.borrow_mut();
+                            while refs.len() <= sheet_idx {
+                                refs.push(Vec::new());
+                            }
+                            refs[sheet_idx].push((row, col, array_ref.to_string()));
+                        }
+                        if let Some(cell_formula) = cell_formula {
+                            let mut formulas = cell_formulas.borrow_mut();
+                            while formulas.len() <= sheet_idx {
+                                formulas.push(Vec::new());
+                            }
+                            formulas[sheet_idx].push((row, col, cell_formula.clone()));
                         }
                     },
                 );
@@ -235,6 +330,18 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         Err(rc) => rc.borrow().clone(),
     };
     let streamed_styles = match Rc::try_unwrap(streamed_styles) {
+        Ok(cell) => cell.into_inner(),
+        Err(rc) => rc.borrow().clone(),
+    };
+    let streamed_array_refs = match Rc::try_unwrap(streamed_array_refs) {
+        Ok(cell) => cell.into_inner(),
+        Err(rc) => rc.borrow().clone(),
+    };
+    let streamed_formula_props = match Rc::try_unwrap(streamed_formula_props) {
+        Ok(cell) => cell.into_inner(),
+        Err(rc) => rc.borrow().clone(),
+    };
+    let streamed_cell_formulas = match Rc::try_unwrap(streamed_cell_formulas) {
         Ok(cell) => cell.into_inner(),
         Err(rc) => rc.borrow().clone(),
     };
@@ -327,7 +434,7 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
     {
         for (sheet_idx, sheet) in parse_output.sheets.iter().enumerate() {
             let sheet_id = allocations[sheet_idx].sheet_id;
-            let extra_anchored: rustc_hash::FxHashSet<(u32, u32)> = formula_cells
+            let mut extra_anchored: rustc_hash::FxHashSet<(u32, u32)> = formula_cells
                 .iter()
                 .filter(|(_, formula_sheet, _)| *formula_sheet == sheet_id)
                 .filter_map(|(cell_id, _, _)| {
@@ -337,6 +444,45 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
                         .map(|pos| (pos.row(), pos.col()))
                 })
                 .collect();
+            extra_anchored.extend(sheet.cells.iter().filter_map(|cell| {
+                let keep_identity = cell.vm.is_some()
+                    || cell.cell_metadata_index.is_some()
+                    || cell.array_ref.is_some()
+                    || cell.cell_formula.is_some()
+                    || cell.rich_string.is_some()
+                    || cell.imported_rich_error.is_some()
+                    || cell.formula.is_some();
+                keep_identity.then_some((cell.row, cell.col))
+            }));
+            for table in &sheet.tables {
+                if !table.has_headers {
+                    continue;
+                }
+                let Some(range) = compute_parser::parse_a1_range(&table.range_ref) else {
+                    continue;
+                };
+                let (
+                    formula_types::CellRef::Positional {
+                        row: start_row,
+                        col: start_col,
+                        ..
+                    },
+                    formula_types::CellRef::Positional {
+                        row: end_row,
+                        col: end_col,
+                        ..
+                    },
+                ) = (range.start, range.end)
+                else {
+                    continue;
+                };
+                let header_row = start_row.min(end_row);
+                let left = start_col.min(end_col);
+                let right = start_col.max(end_col);
+                for col in left..=right {
+                    extra_anchored.insert((header_row, col));
+                }
+            }
             let (ranges, ranged) =
                 import::parse_output_to_snapshot::classifier::classify_store_sheet_ranges(
                     &cell_store,
@@ -367,10 +513,20 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
                 allocations[sheet_idx].existing_identities = remaining;
             }
             if range_style_formats_enabled() {
-                let styles = streamed_styles
+                let parse_styles: Vec<(u32, u32, u32)> = sheet
+                    .cells
+                    .iter()
+                    .filter_map(|cell| cell.style_id.map(|style| (cell.row, cell.col, style)))
+                    .collect();
+                let streamed = streamed_styles
                     .get(sheet_idx)
                     .map(Vec::as_slice)
                     .unwrap_or(&[]);
+                let styles = if parse_styles.is_empty() {
+                    streamed
+                } else {
+                    parse_styles.as_slice()
+                };
                 let (style_positions, range_styles) = build_imported_range_style_plan(
                     styles,
                     &allocations[sheet_idx],
@@ -387,6 +543,14 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         }
     }
 
+    let formula_ids: rustc_hash::FxHashSet<cell_types::CellId> = formula_cells
+        .iter()
+        .map(|(cell_id, _, _)| *cell_id)
+        .collect();
+    let formula_by_id: rustc_hash::FxHashMap<cell_types::CellId, String> = formula_cells
+        .iter()
+        .map(|(cell_id, _, formula)| (*cell_id, formula.clone()))
+        .collect();
     for (sheet_idx, sheet) in parse_output.sheets.iter_mut().enumerate() {
         let style_map: std::collections::HashMap<(u32, u32), u32> = streamed_styles
             .get(sheet_idx)
@@ -394,16 +558,157 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
             .flatten()
             .map(|&(row, col, style)| ((row, col), style))
             .collect();
-        sheet.cells = allocations[sheet_idx]
-            .existing_identities
-            .iter()
-            .map(|(_, row, col)| domain_types::CellData {
-                row: *row,
-                col: *col,
-                style_id: style_map.get(&(*row, *col)).copied(),
-                ..Default::default()
-            })
+        let array_map: std::collections::HashMap<(u32, u32), String> = streamed_array_refs
+            .get(sheet_idx)
+            .into_iter()
+            .flatten()
+            .map(|(row, col, array_ref)| ((*row, *col), array_ref.clone()))
             .collect();
+        let formula_prop_map: std::collections::HashMap<(u32, u32), (u8, bool)> =
+            streamed_formula_props
+                .get(sheet_idx)
+                .into_iter()
+                .flatten()
+                .map(|&(row, col, cached_type, has_empty)| ((row, col), (cached_type, has_empty)))
+                .collect();
+        let cell_formula_map: std::collections::HashMap<
+            (u32, u32),
+            ooxml_types::worksheet::CellFormula,
+        > = streamed_cell_formulas
+            .get(sheet_idx)
+            .into_iter()
+            .flatten()
+            .map(|(row, col, formula)| ((*row, *col), formula.clone()))
+            .collect();
+        let mut parse_meta: rustc_hash::FxHashMap<(u32, u32), domain_types::CellData> = sheet
+            .cells
+            .drain(..)
+            .map(|cell| ((cell.row, cell.col), cell))
+            .collect();
+        let mut rebuilt = Vec::with_capacity(allocations[sheet_idx].existing_identities.len());
+        for (cell_id, row, col) in &allocations[sheet_idx].existing_identities {
+            let mut cell = parse_meta.remove(&(*row, *col)).unwrap_or_else(|| {
+                domain_types::CellData {
+                    row: *row,
+                    col: *col,
+                    ..Default::default()
+                }
+            });
+            cell.row = *row;
+            cell.col = *col;
+            if cell.style_id.is_none() {
+                cell.style_id = style_map.get(&(*row, *col)).copied();
+            }
+            if cell.array_ref.is_none() {
+                cell.array_ref = array_map.get(&(*row, *col)).cloned();
+            }
+            if cell.array_ref.is_some() && cell.formula.is_none() {
+                cell.formula = formula_by_id.get(cell_id).cloned();
+            }
+            if cell.cell_formula.is_none() {
+                cell.cell_formula = cell_formula_map.get(&(*row, *col)).cloned();
+            }
+            if let Some(&(cached_type, has_empty)) = formula_prop_map.get(&(*row, *col)) {
+                if cached_type != 0 {
+                    cell.formula_result_type = Some(cached_type);
+                }
+                cell.has_empty_cached_value |= has_empty;
+            }
+            let is_blank = cell_store
+                .get_cell_value(cell_id)
+                .is_none_or(value_types::CellValue::is_null)
+                && !formula_ids.contains(cell_id)
+                && cell.array_ref.is_none()
+                && !cell.has_empty_cached_value
+                && cell.formula_result_type.is_none();
+            if is_blank
+                && cell.original_value.is_none()
+                && cell.projection_role
+                    != domain_types::ImportedCellProjectionRole::DynamicArraySpillTarget
+            {
+                cell.original_value = Some(String::new());
+            }
+            if cell.projection_role
+                == domain_types::ImportedCellProjectionRole::DynamicArraySpillTarget
+            {
+                if cell.style_id.is_none() {
+                    cell.original_value = None;
+                    cell.has_empty_cached_value = false;
+                    cell.formula_result_type = None;
+                }
+            } else {
+                let store_null = cell_store
+                    .get_cell_value(cell_id)
+                    .is_none_or(value_types::CellValue::is_null);
+                if store_null || cell.imported_rich_error.is_some() {
+                    cell_store.set_value_mut(cell_id, cell.value.clone());
+                }
+            }
+            rebuilt.push(cell);
+        }
+        sheet.cells = rebuilt;
+    }
+
+    for (sheet_idx, sheet) in parse_output.sheets.iter().enumerate() {
+        let sheet_id = allocations[sheet_idx].sheet_id;
+        for (cell, (cell_id, _, _)) in sheet
+            .cells
+            .iter()
+            .zip(allocations[sheet_idx].existing_identities.iter())
+        {
+            if cell.projection_role
+                == domain_types::ImportedCellProjectionRole::DynamicArraySpillTarget
+            {
+                cell_store.remove_cell(cell_id);
+                cell_store.register_identity_position(
+                    sheet_id,
+                    cell_types::SheetPos::new(cell.row, cell.col),
+                    *cell_id,
+                );
+                continue;
+            }
+            let Some(array_ref) = cell.array_ref.as_deref() else {
+                continue;
+            };
+            let Some(range) = compute_parser::parse_a1_range(array_ref) else {
+                continue;
+            };
+            let (
+                formula_types::CellRef::Positional {
+                    row: start_row,
+                    col: start_col,
+                    ..
+                },
+                formula_types::CellRef::Positional {
+                    row: end_row,
+                    col: end_col,
+                    ..
+                },
+            ) = (range.start, range.end)
+            else {
+                continue;
+            };
+            let rows = start_row.abs_diff(end_row) + 1;
+            let cols = start_col.abs_diff(end_col) + 1;
+            if rows > 1 || cols > 1 {
+                cell_store.projection_registry.register(
+                    *cell_id,
+                    sheet_id,
+                    start_row.min(end_row),
+                    start_col.min(end_col),
+                    rows,
+                    cols,
+                );
+            } else {
+                cell_store.cse_single_cell.insert(*cell_id);
+            }
+            if cell.projection_role == domain_types::ImportedCellProjectionRole::DynamicArraySource
+            {
+                cell_store.cse_single_cell.remove(cell_id);
+            } else {
+                cell_store.cse_anchors.insert(*cell_id);
+            }
+        }
     }
 
     // ── Pass 3: Hydrate native metadata while sheet cells still exist ─
@@ -443,6 +748,17 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
     workbook_snap.tables.clear();
     allocator.stamp_snapshot_counters(&mut workbook_snap);
     cell_store.install_imported_workbook_defs(&workbook_snap);
+    for &(sheet_id, cell_id, row, col) in &id_map.identities {
+        let pos = cell_types::SheetPos::new(row, col);
+        if cell_store
+            .get_sheet(&sheet_id)
+            .and_then(|sheet| sheet.authored_cell_id_at(pos))
+            .is_some()
+        {
+            continue;
+        }
+        cell_store.register_identity_position(sheet_id, pos, cell_id);
+    }
     Ok((
         storage,
         workbook_snap,

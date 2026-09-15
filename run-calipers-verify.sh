@@ -18,9 +18,17 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 git -C "${root}" submodule update --init -- vendor/calipers
 
-mog_bin="${MOG_BIN:-${root}/target-native/debug/mog}"
+mog_bin="${MOG_BIN:-}"
+if [[ -z "${mog_bin}" ]]; then
+  if [[ -x "${root}/target-native/release/mog" ]]; then
+    mog_bin="${root}/target-native/release/mog"
+  else
+    mog_bin="${root}/target-native/debug/mog"
+  fi
+fi
 if [[ ! -x "${mog_bin}" ]]; then
-  (cd "${root}" && cargo build -p mog --locked)
+  (cd "${root}" && cargo build -p mog --locked --release)
+  mog_bin="${root}/target-native/release/mog"
 fi
 if [[ ! -x "${mog_bin}" ]]; then
   echo "mog: built binary not found at ${mog_bin}" >&2

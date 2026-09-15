@@ -27,7 +27,19 @@ thread_local! {
 }
 
 type StreamCellHook = Box<dyn FnMut(usize, &CellData, &[u8], &StreamLoadStats)>;
-type StreamResolvedHook = Box<dyn FnMut(usize, u32, u32, Option<&str>, Option<&str>)>;
+type StreamResolvedHook = Box<
+    dyn FnMut(
+        usize,
+        u32,
+        u32,
+        Option<&str>,
+        Option<&str>,
+        u8,
+        Option<&str>,
+        bool,
+        Option<&ooxml_types::worksheet::CellFormula>,
+    ),
+>;
 
 /// Install a cell observer for the duration of `f`.
 ///
@@ -39,7 +51,6 @@ pub fn with_stream_cell_hook<R>(
 ) -> R {
     STREAM_CELL_HOOK.with(|slot| *slot.borrow_mut() = Some(Box::new(hook)));
     CURRENT_STREAM_SHEET.with(|idx| idx.set(0));
-    STREAM_RETAIN_CELLS.with(|flag| flag.set(false));
     let result = f();
     STREAM_CELL_HOOK.with(|slot| *slot.borrow_mut() = None);
     STREAM_RESOLVED_HOOK.with(|slot| *slot.borrow_mut() = None);
@@ -48,7 +59,17 @@ pub fn with_stream_cell_hook<R>(
 }
 
 pub fn set_stream_resolved_hook(
-    hook: impl FnMut(usize, u32, u32, Option<&str>, Option<&str>) + 'static,
+    hook: impl FnMut(
+        usize,
+        u32,
+        u32,
+        Option<&str>,
+        Option<&str>,
+        u8,
+        Option<&str>,
+        bool,
+        Option<&ooxml_types::worksheet::CellFormula>,
+    ) + 'static,
 ) {
     STREAM_RESOLVED_HOOK.with(|slot| *slot.borrow_mut() = Some(Box::new(hook)));
 }
@@ -58,11 +79,25 @@ pub(crate) fn notify_stream_resolved(
     col: u32,
     value: Option<&str>,
     formula: Option<&str>,
+    cached_value_type: u8,
+    array_ref: Option<&str>,
+    has_empty_cached_value: bool,
+    cell_formula: Option<&ooxml_types::worksheet::CellFormula>,
 ) {
     STREAM_RESOLVED_HOOK.with(|slot| {
         if let Some(hook) = slot.borrow_mut().as_mut() {
             let sheet_idx = CURRENT_STREAM_SHEET.with(|idx| idx.get());
-            hook(sheet_idx, row, col, value, formula);
+            hook(
+                sheet_idx,
+                row,
+                col,
+                value,
+                formula,
+                cached_value_type,
+                array_ref,
+                has_empty_cached_value,
+                cell_formula,
+            );
         }
     });
 }
@@ -107,8 +142,12 @@ impl StreamLoadStats {
     fn merge_from(&mut self, other: &Self) {
         self.max_inflate_buffer = self.max_inflate_buffer.max(other.max_inflate_buffer);
         self.inflate_chunk_size = self.inflate_chunk_size.max(other.inflate_chunk_size);
-        self.bytes_decompressed = self.bytes_decompressed.saturating_add(other.bytes_decompressed);
-        self.uncompressed_size = self.uncompressed_size.saturating_add(other.uncompressed_size);
+        self.bytes_decompressed = self
+            .bytes_decompressed
+            .saturating_add(other.bytes_decompressed);
+        self.uncompressed_size = self
+            .uncompressed_size
+            .saturating_add(other.uncompressed_size);
         self.chunks_processed = self.chunks_processed.saturating_add(other.chunks_processed);
         self.cells_emitted_before_last_chunk = self
             .cells_emitted_before_last_chunk
@@ -421,8 +460,9 @@ fn is_explicit_blank_tag(tag: &[u8]) -> bool {
 }
 
 fn has_attr(tag: &[u8], name: &[u8]) -> bool {
-    tag.windows(name.len() + 2)
-        .any(|window| window.starts_with(name) && window[name.len()] == b'=' && window[name.len() + 1] == b'"')
+    tag.windows(name.len() + 2).any(|window| {
+        window.starts_with(name) && window[name.len()] == b'=' && window[name.len() + 1] == b'"'
+    })
 }
 
 /// Inflate a worksheet ZIP entry in bounded chunks and parse cells as bytes arrive.
@@ -445,21 +485,9 @@ pub fn stream_parse_worksheet(
     };
 
     if entry.is_stored() {
-        stream_stored(
-            entry,
-            &mut parser,
-            &mut stats,
-            &mut on_cell,
-            &mut on_chunk,
-        )?;
+        stream_stored(entry, &mut parser, &mut stats, &mut on_cell, &mut on_chunk)?;
     } else if entry.is_deflate() {
-        stream_deflate(
-            entry,
-            &mut parser,
-            &mut stats,
-            &mut on_cell,
-            &mut on_chunk,
-        )?;
+        stream_deflate(entry, &mut parser, &mut stats, &mut on_cell, &mut on_chunk)?;
     } else {
         return Err(format!(
             "Unsupported compression method: {}",
@@ -538,6 +566,14 @@ fn stream_stored(
             entry.name,
             entry.data.len(),
             entry.uncompressed_size
+        ))
+        .to_string());
+    }
+    if let Err(err) = std::str::from_utf8(entry.data) {
+        return Err(ZipError::DataCorruptionDetail(format!(
+            "{} contains malformed UTF-8 at byte {}",
+            entry.name,
+            err.valid_up_to()
         ))
         .to_string());
     }

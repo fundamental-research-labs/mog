@@ -6,6 +6,8 @@ use ooxml_types::charts::{
     self, ChartLines, ChartSurface, ChartText, DataLabel, DataLabelOptions, DataLabelPosition,
     DataTableConfig, ExtensionEntry, LegendPosition, NumFmt, StrData, StrPoint, StrRef, View3D,
 };
+#[cfg(test)]
+use ooxml_types::drawings::TextRunContent;
 use ooxml_types::drawings::{
     ColorTransform, DrawingColor, EffectList, EffectProperties, OuterShadow, Paragraph,
     ParagraphProperties, ShapeProperties, StAngle, StPositiveCoordinate, TextAlign, TextAnchor,

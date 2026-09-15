@@ -994,15 +994,19 @@ fn parse_sheets_sequential(
             &strings_buffer,
             shared_strings,
         );
+        for cell in &cells {
+            crate::pipeline::streaming::notify_stream_resolved(
+                cell.row,
+                cell.col,
+                cell.value.as_deref(),
+                cell.formula.as_deref(),
+                cell.cached_value_type,
+                cell.array_ref.as_deref(),
+                cell.has_empty_cached_value,
+                cell.cell_formula.as_ref(),
+            );
+        }
         if !crate::pipeline::streaming::stream_retain_cells() {
-            for cell in &cells {
-                crate::pipeline::streaming::notify_stream_resolved(
-                    cell.row,
-                    cell.col,
-                    cell.value.as_deref(),
-                    cell.formula.as_deref(),
-                );
-            }
             cells.clear();
         }
         let ws_t4 = tick(timings);

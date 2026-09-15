@@ -316,7 +316,8 @@ fn packed_xlsx_cell_value(
 ) -> CellValue {
     use value_types::CellError;
     use xlsx_parser::domain::cells::{
-        CELL_TYPE_BOOL, CELL_TYPE_ERROR, CELL_TYPE_NUMBER, CELL_TYPE_STRING, VALUE_TYPE_FORMULA,
+        CELL_TYPE_BOOL, CELL_TYPE_DATE, CELL_TYPE_ERROR, CELL_TYPE_FORMULA_STRING,
+        CELL_TYPE_NUMBER, CELL_TYPE_STRING, VALUE_TYPE_FORMULA,
     };
 
     let text = if cell.value_len > 0 {
@@ -341,9 +342,9 @@ fn packed_xlsx_cell_value(
             Some("0") | Some("FALSE") | Some("false") => CellValue::Boolean(false),
             _ => CellValue::Null,
         },
-        CELL_TYPE_STRING => text
-            .map(|s| CellValue::from(s.to_string()))
-            .unwrap_or(CellValue::Null),
+        CELL_TYPE_STRING | CELL_TYPE_FORMULA_STRING | CELL_TYPE_DATE => {
+            CellValue::from(text.unwrap_or("").to_string())
+        }
         CELL_TYPE_ERROR => text
             .and_then(|s| s.parse::<CellError>().ok())
             .map(CellValue::from)

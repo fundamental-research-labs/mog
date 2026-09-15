@@ -127,15 +127,3 @@ parallel = ["native", "rayon"]
 corpus-gen = []
 # Slow corpus-walk tests that should not run in default focused test commands.
 slow-tests = []
-
-[profile.release]
-# Maximum optimization level
-opt-level = 3
-# Enable Link Time Optimization for smaller binaries
-lto = true
-# Single codegen unit for better optimization
-codegen-units = 1
-# Strip debug symbols
-debug = false
-# Abort on panic for smaller binaries
-panic = "abort"

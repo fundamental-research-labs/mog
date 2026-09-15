@@ -16,7 +16,9 @@ mod table_styles;
 mod workbook;
 
 pub(crate) use self::sheet::hydrate_sheet;
-pub(crate) use self::sheet::{SheetIdAllocation, allocate_sheet_ids};
+pub(crate) use self::sheet::{
+    SheetIdAllocation, allocate_sheet_ids, allocate_sheet_ids_after_sheet_id,
+};
 pub(crate) use self::styles::{
     ImportedRangeStyle, hydrate_cell_styles, merge_style_palette_incremental, remap_sheet_style_ids,
 };

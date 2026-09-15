@@ -442,6 +442,74 @@ impl CellStore {
         Ok(())
     }
 
+    /// Install classified compact ranges onto a sheet that already holds streamed cells.
+    pub(crate) fn install_imported_ranges(
+        &mut self,
+        sheet_id: SheetId,
+        ranges: &[snapshot_types::RangeData],
+    ) -> Result<(), ComputeError> {
+        {
+            let Some(sheet_store) = self.sheets.get_mut(&sheet_id) else {
+                return Ok(());
+            };
+            for range_data in ranges {
+                use super::range_view::RangeOffsets;
+                use super::range_view::RangeView;
+
+                let row_offset_by_id = match &range_data.row_axis {
+                    Some(reference) => RangeOffsets::from_axis_ref(
+                        sheet_id,
+                        reference,
+                        sheet_store.row_axis.store(),
+                    )
+                    .ok_or_else(|| ComputeError::Deserialize {
+                        message: "invalid range row axis".into(),
+                    })?,
+                    None => range_data
+                        .row_ids
+                        .iter()
+                        .enumerate()
+                        .map(|(i, id)| (*id, i as u32))
+                        .collect(),
+                };
+                let col_offset_by_id = match &range_data.col_axis {
+                    Some(reference) => RangeOffsets::from_axis_ref(
+                        sheet_id,
+                        reference,
+                        sheet_store.col_axis.store(),
+                    )
+                    .ok_or_else(|| ComputeError::Deserialize {
+                        message: "invalid range column axis".into(),
+                    })?,
+                    None => range_data
+                        .col_ids
+                        .iter()
+                        .enumerate()
+                        .map(|(i, id)| (*id, i as u32))
+                        .collect(),
+                };
+
+                let rv = RangeView {
+                    range_id: range_data.range_id,
+                    kind: range_data.kind,
+                    anchor: range_data.anchor.clone(),
+                    encoding: range_data.encoding,
+                    values: RangeView::decode_payload(
+                        range_data.encoding,
+                        &range_data.payload,
+                        row_offset_by_id.len() * col_offset_by_id.len(),
+                    ),
+                    payload_cols: col_offset_by_id.len() as u32,
+                    row_offset_by_id,
+                    col_offset_by_id,
+                };
+                sheet_store.range_views.insert(range_data.range_id, rv);
+            }
+        }
+        self.finalize_sheet_range_hydration(sheet_id);
+        Ok(())
+    }
+
     /// Test-only helper: add a pre-built SheetStore directly.
     #[cfg(test)]
     pub fn add_sheet_store(
@@ -851,7 +919,12 @@ mod tests {
         assert_eq!(values.rows(), 100);
         assert_eq!(values.get(5, 0), Some(&CellValue::number(42.0)));
         assert_eq!(values.get(99, 0), Some(&CellValue::Null));
-        assert_eq!(cell_store.get_column_view(&sheet.id, 2).map(|col| col.len()), Some(6));
+        assert_eq!(
+            cell_store
+                .get_column_view(&sheet.id, 2)
+                .map(|col| col.len()),
+            Some(6)
+        );
     }
 }
 

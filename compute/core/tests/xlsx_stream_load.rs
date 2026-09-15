@@ -4,7 +4,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use cell_types::SheetPos;
+use cell_types::{SheetId, SheetPos};
 use compute_core::storage::engine::ComputeEngine;
 use value_types::{CellValue, FiniteF64};
 use xlsx_parser::ZipWriter;
@@ -134,7 +134,9 @@ fn from_xlsx_bytes_streams_large_sheet_into_live_store() {
 fn cells_land_in_live_store_before_last_inflate_chunk() {
     let bytes = large_worksheet_xlsx();
     let saw_cell_before_last_chunk = Rc::new(Cell::new(false));
+    let captured_sheet = Rc::new(Cell::new(None::<SheetId>));
     let flag = saw_cell_before_last_chunk.clone();
+    let sheet_slot = captured_sheet.clone();
     let (engine, _) = ComputeEngine::from_xlsx_bytes_with_progress(&bytes, move |stats, store| {
         if stats.bytes_decompressed < stats.uncompressed_size {
             let Some(sheet_id) = store.sheet_ids().next() else {
@@ -145,6 +147,9 @@ fn cells_land_in_live_store_before_last_inflate_chunk() {
                 .is_some()
             {
                 flag.set(true);
+                if sheet_slot.get().is_none() {
+                    sheet_slot.set(Some(*sheet_id));
+                }
             }
         }
     })
@@ -159,12 +164,32 @@ fn cells_land_in_live_store_before_last_inflate_chunk() {
         saw_cell_before_last_chunk.get(),
         "authored cells must exist on the live CellStore before the last inflate chunk"
     );
-    let sheet_id = *engine.cell_store().sheet_ids().next().expect("sheet");
+    let sheet_id = captured_sheet.get().expect("mid-stream sheet id");
+    assert!(
+        engine.cell_store().get_sheet(&sheet_id).is_some(),
+        "streamed SheetId must survive after load instead of being replaced"
+    );
     assert_eq!(
         engine
             .cell_store()
             .get_cell_value_at(&sheet_id, SheetPos::new(0, 0))
             .cloned(),
         Some(CellValue::Number(FiniteF64::must(1.0)))
+    );
+    assert_eq!(
+        engine
+            .cell_store()
+            .get_cell_value_at(&sheet_id, SheetPos::new(0, 1))
+            .cloned(),
+        Some(CellValue::Number(FiniteF64::must(2.0)))
+    );
+    let b1_id = engine
+        .cell_store()
+        .get_sheet(&sheet_id)
+        .and_then(|sheet| sheet.authored_cell_id_at(SheetPos::new(0, 1)))
+        .expect("B1 formula identity must survive classification");
+    assert!(
+        engine.cell_store().get_formula(&b1_id).is_some(),
+        "B1 should keep its imported formula in the live store"
     );
 }

@@ -39,6 +39,7 @@ pub fn with_stream_cell_hook<R>(
 ) -> R {
     STREAM_CELL_HOOK.with(|slot| *slot.borrow_mut() = Some(Box::new(hook)));
     CURRENT_STREAM_SHEET.with(|idx| idx.set(0));
+    STREAM_RETAIN_CELLS.with(|flag| flag.set(false));
     let result = f();
     STREAM_CELL_HOOK.with(|slot| *slot.borrow_mut() = None);
     STREAM_RESOLVED_HOOK.with(|slot| *slot.borrow_mut() = None);

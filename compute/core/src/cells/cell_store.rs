@@ -6,7 +6,7 @@ use crate::projection::{
     CellRender, MaterializedCellView, PlainCellView, ProjectionRegistry, ProjectionView,
     RegionKind, RegionRef,
 };
-use cell_types::{CellId, ColId, RowId, SheetId, SheetPos};
+use cell_types::{AxisIdentityStore, CellId, ColId, RowId, SheetId, SheetPos};
 use domain_types::domain::table::TableCatalogEntry as CanonicalTable;
 use formula_types::TableDef;
 use snapshot_types::{DataTableRegionDef, PivotTableDef};
@@ -111,6 +111,41 @@ impl CellStore {
         self.id_alloc = allocator;
     }
 
+    /// Allocator used while streaming XLSX cells into this store.
+    pub(crate) fn identity_allocator(&self) -> std::sync::Arc<cell_types::IdAllocator> {
+        self.id_alloc.clone()
+    }
+
+    /// Replace a streamed sheet's incrementally grown axes with compact import axes.
+    pub(crate) fn rebind_sheet_axes(
+        &mut self,
+        sheet_id: SheetId,
+        row_axis: AxisIdentityStore<RowId>,
+        col_axis: AxisIdentityStore<ColId>,
+    ) {
+        let Some(sheet) = self.sheets.get(&sheet_id) else {
+            return;
+        };
+        let cells: Vec<(CellId, u32, u32)> = sheet.cells().collect();
+        if let Some(sheet) = self.sheets.get_mut(&sheet_id) {
+            sheet.cell_by_axes.clear();
+            sheet.axes_by_cell.clear();
+        }
+        let rows = std::sync::Arc::new(compute_document::identity::AxisIndex::new(
+            sheet_id, row_axis,
+        ));
+        let cols = std::sync::Arc::new(compute_document::identity::AxisIndex::new(
+            sheet_id, col_axis,
+        ));
+        self.install_sheet_axes(sheet_id, rows, cols);
+        if let Some(sheet) = self.sheets.get_mut(&sheet_id) {
+            for (cell_id, row, col) in cells {
+                sheet.register_cell(cell_id, row, col);
+            }
+        }
+        self.refresh_axis_ownership(sheet_id);
+    }
+
     /// Total number of cells across all sheets.
     pub fn total_cell_count(&self) -> usize {
         self.cell_to_sheet.len()
@@ -164,7 +199,10 @@ impl CellStore {
     pub(super) fn take_sheet_payloads(
         &mut self,
         sheet_id: SheetId,
-    ) -> (FxHashMap<CellId, CellEntry>, FxHashMap<CellId, IdentityFormula>) {
+    ) -> (
+        FxHashMap<CellId, CellEntry>,
+        FxHashMap<CellId, IdentityFormula>,
+    ) {
         let ids: Vec<CellId> = self
             .cell_to_sheet
             .iter()
@@ -450,7 +488,9 @@ impl CellStore {
         if let Some(cell_id) = self.resolve_cell_id(sheet, SheetPos::new(row, col))
             && let Some(sheet_store) = self.sheets.get(sheet)
         {
-            if let Some(value) = sheet_store.value_at(SheetPos::new(row, col), &self.cells, &self.formulas) {
+            if let Some(value) =
+                sheet_store.value_at(SheetPos::new(row, col), &self.cells, &self.formulas)
+            {
                 return CellRender::Plain(PlainCellView {
                     cell_id,
                     value,

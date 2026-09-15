@@ -100,4 +100,6 @@ pub(crate) struct SheetIdAllocation {
     pub col_axis: AxisIdentityStore<ColId>,
     pub cell_ids: Vec<CellId>,
     pub identity_only_cells: Vec<AnchoredCellIdentity>,
+    /// Identities already present on the streamed live sheet, keyed by position.
+    pub existing_identities: Vec<(CellId, u32, u32)>,
 }

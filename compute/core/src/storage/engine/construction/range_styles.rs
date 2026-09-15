@@ -10,7 +10,7 @@ pub(in crate::storage::engine) fn range_style_formats_enabled() -> bool {
 }
 
 pub(in crate::storage::engine) fn build_imported_range_style_plan(
-    sheet_data: &domain_types::SheetData,
+    cell_styles: &[(u32, u32, u32)],
     alloc: &crate::storage::infra::hydration::SheetIdAllocation,
     ranges: &[snapshot_types::RangeData],
     allocator: &mut crate::storage::infra::hydration::DefaultIdAllocator,
@@ -19,13 +19,8 @@ pub(in crate::storage::engine) fn build_imported_range_style_plan(
     Vec<crate::storage::infra::hydration::ImportedRangeStyle>,
 ) {
     let mut styles_by_col: HashMap<u32, Vec<(u32, u32)>> = HashMap::new();
-    for cell in &sheet_data.cells {
-        if let Some(style) = cell.style_id {
-            styles_by_col
-                .entry(cell.col)
-                .or_default()
-                .push((cell.row, style));
-        }
+    for &(row, col, style) in cell_styles {
+        styles_by_col.entry(col).or_default().push((row, style));
     }
 
     let mut positions = std::collections::HashSet::new();

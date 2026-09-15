@@ -9,14 +9,14 @@ mod allocation;
 mod grid_index;
 mod identity;
 
-pub(crate) use allocation::allocate_sheet_ids;
+pub(crate) use allocation::{allocate_sheet_ids, allocate_sheet_ids_after_sheet_id};
 pub(crate) use identity::SheetIdAllocation;
 
+use super::IdAllocator;
 use super::features::{
     hydrate_auto_filter, hydrate_cells, hydrate_cells_with_ids, hydrate_comments,
     hydrate_floating_objects, hydrate_hyperlinks, hydrate_merges,
 };
-use super::IdAllocator;
 use grid_index::collect_identity_cells;
 use identity::{
     allocate_missing_anchored_identities, insert_missing_anchored_identities, sheet_identity_extent,
@@ -132,6 +132,7 @@ pub(crate) fn hydrate_sheet_with_allocation(
         ranged_positions,
         range_style_positions,
         &required_identity_positions,
+        &alloc.existing_identities,
     );
 
     insert_missing_anchored_identities(&mut pos_map, &alloc.identity_only_cells);

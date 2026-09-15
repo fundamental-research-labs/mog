@@ -50,14 +50,11 @@ mod types;
 mod xlsx;
 
 pub(super) use assembly::{
-    assemble_engine, from_snapshot, from_snapshot_with_layout_metrics,
-    rebuild_engine_from_snapshot,
+    assemble_engine, from_snapshot, from_snapshot_with_layout_metrics, rebuild_engine_from_snapshot,
 };
 pub(super) use csv::{from_csv_bytes, import_from_csv_bytes};
 pub(super) use deferred::{commit_deferred_hydration, stage_deferred_hydration};
-pub(super) use indexes::{
-    build_grid_indexes, build_merge_indexes, build_pixel_layout_for_sheet,
-};
+pub(super) use indexes::{build_grid_indexes, build_merge_indexes, build_pixel_layout_for_sheet};
 pub(super) use named_ranges::{defined_names_to_named_range_defs, normalize_named_range_refs};
 pub(super) use range_styles::{build_imported_range_style_plan, range_style_formats_enabled};
 pub(in crate::storage::engine) use rebuild::build_finalized_store_from_snapshot;
@@ -198,8 +195,13 @@ mod tests {
             ],
         };
 
+        let cell_styles: Vec<(u32, u32, u32)> = sheet
+            .cells
+            .iter()
+            .filter_map(|cell| cell.style_id.map(|style| (cell.row, cell.col, style)))
+            .collect();
         let (_positions, styles) =
-            build_imported_range_style_plan(&sheet, &alloc, &[range], &mut allocator);
+            build_imported_range_style_plan(&cell_styles, &alloc, &[range], &mut allocator);
 
         let rects: Vec<_> = styles
             .iter()
@@ -321,8 +323,13 @@ mod tests {
             ],
         };
 
+        let cell_styles: Vec<(u32, u32, u32)> = sheet
+            .cells
+            .iter()
+            .filter_map(|cell| cell.style_id.map(|style| (cell.row, cell.col, style)))
+            .collect();
         let (positions, styles) =
-            build_imported_range_style_plan(&sheet, &alloc, &[range], &mut allocator);
+            build_imported_range_style_plan(&cell_styles, &alloc, &[range], &mut allocator);
 
         assert_eq!(positions.len(), 6);
         let rects: Vec<_> = styles

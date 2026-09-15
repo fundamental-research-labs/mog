@@ -61,8 +61,12 @@ pub(super) fn hydrate_cells_with_ids(
     ranged_positions: &std::collections::HashSet<(u32, u32)>,
     range_style_positions: &std::collections::HashSet<(u32, u32)>,
     required_identity_positions: &std::collections::HashSet<(u32, u32)>,
+    existing_identities: &[(CellId, u32, u32)],
 ) -> PositionMap {
-    let mut pos_map = PositionMap::with_capacity(cells.len() / 2);
+    let mut pos_map = PositionMap::with_capacity(cells.len() / 2 + existing_identities.len());
+    for (cell_id, row, col) in existing_identities {
+        pos_map.insert((*row, *col), id_to_hex(cell_id.as_u128()).to_string());
+    }
     for (i, cell) in cells.iter().enumerate() {
         let is_dynamic_array_spill_target =
             cell.projection_role == ImportedCellProjectionRole::DynamicArraySpillTarget;
@@ -299,6 +303,7 @@ mod tests {
             &ranged_positions,
             &range_style_positions,
             &std::collections::HashSet::new(),
+            &[],
         );
 
         assert!(pos_map.is_empty());
@@ -320,6 +325,7 @@ mod tests {
             &ranged_positions,
             &range_style_positions,
             &std::collections::HashSet::new(),
+            &[],
         );
 
         assert_eq!(pos_map.get(&(4, 2)), Some(&id_to_hex(0xA).to_string()));
@@ -338,6 +344,7 @@ mod tests {
             &ranged_positions,
             &std::collections::HashSet::new(),
             &ranged_positions,
+            &[],
         );
         assert_eq!(pos_map.get(&(4, 2)), Some(&id_to_hex(0xA).to_string()));
         assert!(metadata.is_empty());

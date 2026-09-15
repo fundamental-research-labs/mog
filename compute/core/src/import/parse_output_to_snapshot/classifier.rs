@@ -97,10 +97,33 @@ pub(crate) fn classify_sheet_ranges(
     sheet_col_axis: &AxisIdentityStore<ColId>,
     allocator: &mut DefaultIdAllocator,
 ) {
+    classify_sheet_ranges_with_extra_anchors(
+        sheet,
+        sheet_data,
+        snapshot,
+        cell_id_to_pos,
+        sheet_row_axis,
+        sheet_col_axis,
+        allocator,
+        &FxHashSet::default(),
+    );
+}
+
+fn classify_sheet_ranges_with_extra_anchors(
+    sheet: &mut SheetSnapshot,
+    sheet_data: &SheetData,
+    snapshot: &WorkbookSnapshot,
+    cell_id_to_pos: Option<&FxHashMap<String, (u32, u32)>>,
+    sheet_row_axis: &AxisIdentityStore<RowId>,
+    sheet_col_axis: &AxisIdentityStore<ColId>,
+    allocator: &mut DefaultIdAllocator,
+    extra_anchored: &FxHashSet<(u32, u32)>,
+) {
     let sheet_id =
         SheetId::from_uuid_str(&sheet.id).expect("classified sheet has a native identity");
     // 1. Collect anchored positions (cells that must not be ranged).
-    let anchored = collect_anchored_positions(sheet_data, &sheet.id, snapshot, cell_id_to_pos);
+    let mut anchored = collect_anchored_positions(sheet_data, &sheet.id, snapshot, cell_id_to_pos);
+    anchored.extend(extra_anchored.iter().copied());
 
     // 2. Build column -> sorted (row, cell_index) for non-anchored cells.
     // Explicit Null cells participate in classification: they split numeric
@@ -155,6 +178,82 @@ pub(crate) fn classify_sheet_ranges(
 
     // 6. Attach ranges to the sheet.
     sheet.ranges = range_data;
+}
+
+/// Classify homogeneous runs from the live streamed sheet, not from parse IR.
+pub(crate) fn classify_store_sheet_ranges(
+    store: &crate::cells::CellStore,
+    sheet_id: SheetId,
+    sheet_data: &SheetData,
+    snapshot: &WorkbookSnapshot,
+    sheet_row_axis: &AxisIdentityStore<RowId>,
+    sheet_col_axis: &AxisIdentityStore<ColId>,
+    allocator: &mut DefaultIdAllocator,
+    extra_anchored: &FxHashSet<(u32, u32)>,
+) -> (Vec<RangeData>, FxHashSet<(u32, u32)>) {
+    let Some(sheet_store) = store.get_sheet(&sheet_id) else {
+        return (Vec::new(), FxHashSet::default());
+    };
+    let sheet_name = sheet_store.name.clone();
+    let sheet_rows = sheet_store.rows;
+    let sheet_cols = sheet_store.cols;
+    let live_cells: Vec<_> = sheet_store.cells().collect();
+    let mut extra_anchored = extra_anchored.clone();
+    let mut cells = Vec::new();
+    for (cell_id, row, col) in live_cells {
+        let has_formula = store.get_formula(&cell_id).is_some();
+        if has_formula {
+            extra_anchored.insert((row, col));
+        }
+        cells.push(CellData {
+            cell_id: format!("{:032x}", cell_id.as_u128()),
+            row,
+            col,
+            value: store
+                .get_cell_value(&cell_id)
+                .cloned()
+                .unwrap_or(CellValue::Null),
+            formula: has_formula.then(String::new),
+            identity_formula: None,
+            array_ref: None,
+        });
+    }
+    let before: FxHashSet<(u32, u32)> = cells
+        .iter()
+        .filter(|cell| cell.formula.is_some() || !cell.value.is_null())
+        .map(|cell| (cell.row, cell.col))
+        .collect();
+    let mut sheet = SheetSnapshot {
+        identities: Vec::new(),
+        row_axis: None,
+        col_axis: None,
+        id: format!("{:032x}", sheet_id.as_u128()),
+        name: sheet_name,
+        rows: sheet_rows,
+        cols: sheet_cols,
+        cells,
+        ranges: Vec::new(),
+    };
+    classify_sheet_ranges_with_extra_anchors(
+        &mut sheet,
+        sheet_data,
+        snapshot,
+        None,
+        sheet_row_axis,
+        sheet_col_axis,
+        allocator,
+        &extra_anchored,
+    );
+    let after: FxHashSet<(u32, u32)> = sheet
+        .cells
+        .iter()
+        .map(|cell| (cell.row, cell.col))
+        .collect();
+    let ranged = before
+        .into_iter()
+        .filter(|pos| !after.contains(pos))
+        .collect();
+    (sheet.ranges, ranged)
 }
 
 // ---------------------------------------------------------------------------

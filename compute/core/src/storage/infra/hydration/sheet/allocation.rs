@@ -2,7 +2,7 @@ use cell_types::SheetId;
 use compute_document::hex::id_to_hex;
 use domain_types::SheetData;
 
-use super::identity::{allocate_anchored_identities, sheet_identity_extent, SheetIdAllocation};
+use super::identity::{SheetIdAllocation, allocate_anchored_identities, sheet_identity_extent};
 use crate::storage::infra::hydration::IdAllocator;
 
 /// Allocate all IDs for a sheet for native hydration.
@@ -18,7 +18,7 @@ pub(crate) fn allocate_sheet_ids(
     allocate_sheet_ids_after_sheet_id(sheet, allocator, sheet_id)
 }
 
-fn allocate_sheet_ids_after_sheet_id(
+pub(crate) fn allocate_sheet_ids_after_sheet_id(
     sheet: &SheetData,
     allocator: &mut impl IdAllocator,
     sheet_id: SheetId,
@@ -43,6 +43,7 @@ fn allocate_sheet_ids_after_sheet_id(
         col_axis,
         cell_ids,
         identity_only_cells,
+        existing_identities: Vec::new(),
     }
 }
 

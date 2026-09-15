@@ -33,16 +33,15 @@ impl Fixture {
 
     fn save(&self, recalculate: bool, script: Option<&str>) -> Workbook {
         let mut command = Command::new(env!("CARGO_BIN_EXE_mog"));
-        command.arg(if script.is_some() { "run" } else { "save" });
         if recalculate {
             command.arg("--recalculate");
         }
-        command.arg(self.0.join("input.xlsx"));
+        command.arg("--input").arg(self.0.join("input.xlsx"));
         if let Some(script) = script {
             fs::write(self.0.join("script.js"), script).unwrap();
             command.arg(self.0.join("script.js"));
         }
-        command.arg(self.0.join("output.xlsx"));
+        command.arg("--output").arg(self.0.join("output.xlsx"));
         let output = command.output().unwrap();
         assert!(
             output.status.success(),
@@ -57,6 +56,13 @@ impl Fixture {
 
 impl Drop for Fixture {
     fn drop(&mut self) {
+        let directory = self.0.join("sessions");
+        if directory.exists() {
+            let _ = Command::new(env!("CARGO_BIN_EXE_mog"))
+                .env("MOG_SESSION_DIR", directory)
+                .args(["--close-all", "--discard"])
+                .output();
+        }
         let _ = fs::remove_dir_all(&self.0);
     }
 }
@@ -124,4 +130,60 @@ fn run_recalculate_exports_results_after_script_mutation() {
     let sheet = workbook.sheet_by_index(0).unwrap();
     assert_eq!(sheet.get_cell_value("C1").unwrap(), CellValue::number(45.0));
     assert_eq!(sheet.get_cell_value("C3").unwrap(), CellValue::number(90.0));
+}
+
+#[test]
+fn script_automatically_recalculates_imported_manual_workbook() {
+    let fixture = Fixture::new();
+    let workbook = fixture.save(false, Some("return 1;"));
+    let sheet = workbook.sheet_by_index(0).unwrap();
+    assert_eq!(sheet.get_cell_value("C1").unwrap(), CellValue::number(15.0));
+    assert_eq!(sheet.get_cell_value("C3").unwrap(), CellValue::number(60.0));
+}
+
+#[test]
+fn session_preserves_caches_until_explicit_recalculation() {
+    let fixture = Fixture::new();
+    let directory = fixture.0.join("sessions");
+    let invoke = |args: &[&str]| {
+        let output = Command::new(env!("CARGO_BIN_EXE_mog"))
+            .env("MOG_SESSION_DIR", &directory)
+            .current_dir(&fixture.0)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).unwrap().trim().to_owned()
+    };
+    let id = invoke(&["-s", "-i", "input.xlsx", "-o", "preserved.xlsx"]);
+    invoke(&["-s", &id, "--close"]);
+    let preserved = Workbook::from_xlsx_path(fixture.0.join("preserved.xlsx").to_str().unwrap())
+        .unwrap()
+        .0;
+    assert_eq!(
+        preserved
+            .sheet_by_index(0)
+            .unwrap()
+            .get_cell_value("C1")
+            .unwrap(),
+        CellValue::number(0.0)
+    );
+    let id = invoke(&["-s", "-i", "input.xlsx"]);
+    invoke(&["-s", &id, "-r"]);
+    invoke(&["-s", &id, "--close"]);
+    let calculated = Workbook::from_xlsx_path(fixture.0.join("input.xlsx").to_str().unwrap())
+        .unwrap()
+        .0;
+    assert_eq!(
+        calculated
+            .sheet_by_index(0)
+            .unwrap()
+            .get_cell_value("C1")
+            .unwrap(),
+        CellValue::number(15.0)
+    );
 }

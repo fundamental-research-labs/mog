@@ -5,7 +5,7 @@ Mog is a headless spreadsheet engine:
 1. **Compute core** (`compute/core`) owns formula evaluation, sparse cells, UUID identities, and native workbook metadata.
 2. **Compute API** (`compute/api`) provides the Rust workbook/sheet facade for native callers and the scripting host.
 3. **Office.js host** (`compute/officejs`) embeds QuickJS and exposes `Excel.run` / `load` / `sync` on that facade.
-4. **CLI** (`mog`) evaluates a script file or `--eval` source through the same entry as the tests.
+4. **CLI** (`mog`) opens workbooks with `--input`, evaluates script files or `--eval` source, and saves with `--output`. Optional background sessions retain a workbook between invocations; `--close` saves and terminates a session. Scripts use the same Office.js entry as the tests.
 
 The native cell store is the source of truth for authored values and formulas.
 Compact ranges share immutable value buffers; individual edits remain sparse.

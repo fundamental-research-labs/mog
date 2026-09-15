@@ -9,9 +9,9 @@ use serde_json::{Value, json};
 use value_types::CellValue;
 
 use crate::borders::{BorderCollectionRef, BorderError, BorderRef};
-use crate::dispatch::{ExtensionBinding, ExtensionRegistry, HostDispatchContext};
 #[cfg(test)]
 use crate::dispatch::ExtensionHandler;
+use crate::dispatch::{ExtensionBinding, ExtensionRegistry, HostDispatchContext};
 use crate::format::{FormatError, FormatRef};
 use crate::names::{self, NameError, NamedItemCollectionRef, NamedItemRef};
 use crate::range_content::{self, RangeContentError};
@@ -669,7 +669,6 @@ impl Host {
             stdout.push('\n');
         }
         stdout.push_str(line);
-        println!("{line}");
     }
 
     pub(crate) fn take_stdout(&self) -> String {

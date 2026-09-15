@@ -61,8 +61,7 @@ impl Fixture {
         // global pool settings. Each command starts a fresh process/pool.
         command.env("RUST_MIN_STACK", "2097152");
         command.env("RAYON_NUM_THREADS", "2");
-        command.arg(if mutate { "run" } else { "save" });
-        command.arg(self.0.join("input.xlsx"));
+        command.arg("--input").arg(self.0.join("input.xlsx"));
         if mutate {
             let script = self.0.join("script.js");
             fs::write(
@@ -76,7 +75,7 @@ impl Fixture {
             command.arg(script);
         }
         let output_path = self.0.join("output.xlsx");
-        let output = command.arg(&output_path).output().unwrap();
+        let output = command.arg("--output").arg(&output_path).output().unwrap();
         assert!(
             output.status.success(),
             "{}",

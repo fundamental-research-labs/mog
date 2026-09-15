@@ -1,7 +1,7 @@
 //! CLI contracts for imported dynamic arrays.
 //!
 //! These fixtures intentionally use small, deterministic XLSX packages.  The
-//! tests exercise the same `mog save`/`mog run` boundary used by callers and
+//! tests exercise the same `mog -i` / `mog -i script.js` boundary used by callers and
 //! then reopen the exported package through `compute_api::Workbook`.
 
 use std::{
@@ -104,17 +104,16 @@ impl Fixture {
     ) -> PathBuf {
         let output = self.directory.join(output_name);
         let mut command = Command::new(env!("CARGO_BIN_EXE_mog"));
-        command.arg(if script.is_some() { "run" } else { "save" });
         if recalculate {
             command.arg("--recalculate");
         }
-        command.arg(input);
+        command.arg("--input").arg(input);
         if let Some(script) = script {
             let script_path = self.directory.join(format!("{output_name}.js"));
             fs::write(&script_path, script).unwrap();
             command.arg(script_path);
         }
-        let result = command.arg(&output).output().unwrap();
+        let result = command.arg("--output").arg(&output).output().unwrap();
         assert!(
             result.status.success(),
             "mog CLI failed: {}",
@@ -473,7 +472,7 @@ fn cli_save_recalculate_replaces_rich_text_cached_spill_child_with_numeric_proje
 }
 
 #[test]
-fn cli_run_replacing_imported_dynamic_array_anchor_retires_only_its_old_cache() {
+fn cli_script_replaces_imported_dynamic_array_anchor_and_recalculates() {
     let replace = |script: &str, output_name: &str| {
         let fixture = Fixture::new(&dynamic_roundtrip_sheet());
         let output = fixture.run(&fixture.input(), false, script, output_name);
@@ -483,9 +482,8 @@ fn cli_run_replacing_imported_dynamic_array_anchor_retires_only_its_old_cache() 
     // The old A2/A3 package values belong to A1's imported spill. Replacing
     // A1 must retire that cache before the scheduler evaluates the new anchor,
     // otherwise those former children block the new spill with #SPILL!. The
-    // independent cached C1:D2 spill and its F1 dependent cache remain
-    // untouched. E1 depends on the replacement source and is refreshed by
-    // the normal formula-mutation dependency path.
+    // independent C1:D2 spill and both dependent formulas are refreshed by
+    // the CLI's automatic recalculation after the script.
     let (fixture, shorter) = replace(
         r#"await Excel.run(async context => {
             const sheet = context.workbook.worksheets.getItem("Sheet1");
@@ -500,7 +498,7 @@ fn cli_run_replacing_imported_dynamic_array_anchor_retires_only_its_old_cache() 
     assert_number(&shorter_sheet, "A2", 2.0);
     assert_empty(&shorter_sheet, "A3");
     assert_number(&shorter_sheet, "E1", 3.0);
-    assert_number(&shorter_sheet, "F1", 502.0);
+    assert_number(&shorter_sheet, "F1", 10.0);
     let shorter_xml = fixture.worksheet_xml(&shorter);
     assert!(cell_fragment(&shorter_xml, "A1").contains(r#"ref="A1:A2""#));
     assert_empty_formula_marker(&shorter_xml, "A2");
@@ -508,15 +506,9 @@ fn cli_run_replacing_imported_dynamic_array_anchor_retires_only_its_old_cache() 
         !shorter_xml.contains(r#"r="A3""#),
         "the retired, unstyled A3 cache cell survived: {shorter_xml}"
     );
-    assert_cell_bold(
-        &fixture.styles_xml(&shorter),
-        &shorter_xml,
-        "A2",
-        true,
-    );
+    assert_cell_bold(&fixture.styles_xml(&shorter), &shorter_xml, "A2", true);
 
-    // The explicit calculation route uses the same replacement path, then
-    // refreshes dependent caches instead of retaining their imported values.
+    // Explicit -r and automatic script recalculation produce the same results.
     let fixture = Fixture::new(&dynamic_roundtrip_sheet());
     let recalculated = fixture.run(
         &fixture.input(),
@@ -550,7 +542,7 @@ fn cli_run_replacing_imported_dynamic_array_anchor_retires_only_its_old_cache() 
         assert_number(&longer_sheet, address, expected);
     }
     assert_number(&longer_sheet, "E1", 6.0);
-    assert_number(&longer_sheet, "F1", 502.0);
+    assert_number(&longer_sheet, "F1", 10.0);
     assert!(cell_fragment(&fixture.worksheet_xml(&longer), "A1").contains(r#"ref="A1:A4""#));
 
     // Replacing the array with scalar content or clearing its anchor also
@@ -572,8 +564,8 @@ fn cli_run_replacing_imported_dynamic_array_anchor_retires_only_its_old_cache() 
     );
     assert_empty(&scalar_sheet, "A2");
     assert_empty(&scalar_sheet, "A3");
-    assert_number(&scalar_sheet, "E1", 501.0);
-    assert_number(&scalar_sheet, "F1", 502.0);
+    assert_number(&scalar_sheet, "E1", 0.0);
+    assert_number(&scalar_sheet, "F1", 10.0);
 
     let (fixture, cleared) = replace(
         r#"await Excel.run(async context => {
@@ -588,8 +580,8 @@ fn cli_run_replacing_imported_dynamic_array_anchor_retires_only_its_old_cache() 
     for address in ["A1", "A2", "A3"] {
         assert_empty(&cleared_sheet, address);
     }
-    assert_number(&cleared_sheet, "E1", 501.0);
-    assert_number(&cleared_sheet, "F1", 502.0);
+    assert_number(&cleared_sheet, "E1", 0.0);
+    assert_number(&cleared_sheet, "F1", 10.0);
 
     // A real authored cell still blocks the new spill. Cache retirement must
     // never hide a simultaneous external write merely because it lies in the
@@ -607,11 +599,10 @@ fn cli_run_replacing_imported_dynamic_array_anchor_retires_only_its_old_cache() 
     let blocked_sheet = blocked_book.sheet_by_index(0).unwrap();
     assert_spill_error(&blocked_sheet, "A1");
     assert_number(&blocked_sheet, "A4", 777.0);
-    // In a manual-calculation workbook an unsuccessful replacement retains
-    // dependent imported caches; only the edited array anchor reports its
-    // fresh #SPILL! result. The unrelated F1 cache must also stay intact.
-    assert_number(&blocked_sheet, "E1", 501.0);
-    assert_number(&blocked_sheet, "F1", 502.0);
+    // Automatic recalculation propagates the spill error to its dependent,
+    // even for an imported manual-calculation workbook.
+    assert_spill_error(&blocked_sheet, "E1");
+    assert_number(&blocked_sheet, "F1", 10.0);
 }
 
 #[test]
@@ -642,7 +633,7 @@ fn cli_run_recalculate_grows_shrinks_and_preserves_a_genuine_blocker() {
     let observed_sheet = observed_workbook.sheet_by_index(0).unwrap();
     assert_number(&observed_sheet, "B2", 1.0);
 
-    let edited_without_recalc = fixture.run(
+    let edited_with_auto_recalc = fixture.run(
         &observed_before_edit,
         false,
         r#"await Excel.run(async context => {
@@ -651,33 +642,33 @@ fn cli_run_recalculate_grows_shrinks_and_preserves_a_genuine_blocker() {
             sheet.getRange("A3").format.font.bold = false;
             await context.sync();
         });"#,
-        "edited-preserve.xlsx",
+        "edited-auto-recalc.xlsx",
     );
-    let preserved_workbook = fixture.load(&edited_without_recalc);
+    let preserved_workbook = fixture.load(&edited_with_auto_recalc);
     let preserved_sheet = preserved_workbook.sheet_by_index(0).unwrap();
     assert_number(&preserved_sheet, "A1", 3.0);
     assert_number(&preserved_sheet, "B1", 42.0);
     assert_number(&preserved_sheet, "B2", 1.0);
-    for (address, expected) in [("A2", 91.0), ("A3", 92.0), ("A4", 93.0)] {
+    for (address, expected) in [("A2", 1.0), ("A3", 2.0), ("A4", 3.0)] {
         assert_number(&preserved_sheet, address, expected);
     }
-    assert_number(&preserved_sheet, "C1", 999.0);
-    assert_number(&preserved_sheet, "D1", 888.0);
+    assert_number(&preserved_sheet, "C1", 6.0);
+    assert_number(&preserved_sheet, "D1", 5.0);
     for address in ["A5", "A6"] {
         assert_empty(&preserved_sheet, address);
     }
-    let preserved_xml = fixture.worksheet_xml(&edited_without_recalc);
+    let preserved_xml = fixture.worksheet_xml(&edited_with_auto_recalc);
     assert_empty_formula_marker(&preserved_xml, "A3");
     assert_unmarked_spill_child(&preserved_xml, "A4");
     assert_cell_bold(
-        &fixture.styles_xml(&edited_without_recalc),
+        &fixture.styles_xml(&edited_with_auto_recalc),
         &preserved_xml,
         "A3",
         false,
     );
 
     let grown = fixture.run(
-        &edited_without_recalc,
+        &edited_with_auto_recalc,
         true,
         r#"await Excel.run(async context => {
             const sheet = context.workbook.worksheets.getItem("Sheet1");

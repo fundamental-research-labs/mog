@@ -35,6 +35,8 @@ if [[ ! -x "${mog_bin}" ]]; then
   exit 1
 fi
 
+source "${root}/scripts/calipers-mog/build.sh"
+
 if [[ -n "${CALIPERS_BIN:-}" ]]; then
   calipers_bin="${CALIPERS_BIN}"
 else
@@ -58,7 +60,7 @@ log="$(mktemp)"
 trap 'rm -f "${log}"' EXIT
 
 set +e
-"${calipers_bin}" verify --engine "${mog_bin}" \
+"${calipers_bin}" verify --engine "${calipers_mog}" \
   --cases-dir "${root}/vendor/calipers/verification/cases" \
   "$@" | tee "${log}"
 status="${PIPESTATUS[0]}"

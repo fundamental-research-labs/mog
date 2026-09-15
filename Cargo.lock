@@ -1263,11 +1263,14 @@ version = "0.1.0"
 dependencies = [
  "compute-api",
  "domain-types",
+ "libc",
  "rquickjs",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror",
  "tokio",
+ "uuid",
  "value-types",
  "xlsx-parser",
 ]

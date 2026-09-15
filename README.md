@@ -16,8 +16,9 @@ cargo build -p mog
 cargo run -p mog -- compute/officejs/examples/formula.js
 ```
 
-The example writes `10` to `A1`, `=A1*2` to `A2`, loads the computed value, and
-prints `20`.
+The example writes `10` to `A1`, `=A1*2` to `A2`, loads the computed value,
+prints `20`, and saves `workbook.xlsx` in the current directory (or the next
+available `workbook-2.xlsx`, `workbook-3.xlsx`, and so on).
 
 ```js
 await Excel.run(async (context) => {
@@ -45,23 +46,86 @@ cargo run -p mog -- --eval 'await Excel.run(async (context) => {
 });'
 ```
 
-## Scripting surface
+## CLI
 
-To open and save an existing workbook:
+`mog` starts from a blank workbook unless `-i` / `--input` is supplied. It saves
+in place when an input is supplied; `-o` / `--output` chooses another destination.
+Without either path, it saves in the current directory with the first available
+name: `workbook.xlsx`, `workbook-2.xlsx`, `workbook-3.xlsx`, and so on. Existing
+automatic filenames are never overwritten, including concurrent invocations.
 
 ```bash
-mog save input.xlsx output.xlsx
-mog save --recalculate input.xlsx calculated.xlsx
-mog run --recalculate input.xlsx script.js calculated.xlsx
+mog                                      # create a blank workbook
+mog -i input.xlsx                         # open and save in place
+mog -i input.xlsx -o copy.xlsx            # save a copy
+mog -i input.xlsx -r                      # recalculate and save in place
+mog -i input.xlsx script.js               # run a script file, then save
+mog -e 'console.log("hello")' -o new.xlsx  # run inline JavaScript
+mog --help
 ```
 
-`save` preserves imported formula caches. `--recalculate` evaluates formulas
-before export, after any script has run. Use recalculation to verify arithmetic
-starting from stale caches; use ordinary save to verify preservation. Random,
-clock, path, and platform-dependent results require controlled inputs or
-separate assertions, including dependent cells and spill ranges, when comparing
-against an Excel-generated workbook. Exact cached-value equality does not
-verify calculation accuracy.
+`-e` / `--eval` takes inline JavaScript; a positional filename loads a script.
+Use `--` before a script filename beginning with `-`. Opening and saving without
+a script preserves imported formula caches. `-r` / `--recalculate` evaluates
+formulas before export. Scripts automatically trigger full recalculation after
+they finish, including workbooks imported in manual calculation mode. Within a
+script, `context.sync()` retains the Office.js calculation behavior.
+
+Exports complete before replacing an explicit destination, so a failed export
+does not truncate the input. Script failures do not save the workbook. Script
+console output is printed once; a non-null return value is printed as JSON if
+there was no console output.
+
+### Sessions
+
+Start a session with `-s` / `--session` (also spelled `--sesion`). This launches
+a detached background process that keeps the workbook in memory and prints its
+ID. Pass the ID to later invocations:
+
+```bash
+ID=$(mog -s -i input.xlsx)
+mog -s "$ID" -e 'await Excel.run(async c => {
+  c.workbook.worksheets.getItem("Sheet1").getRange("A1").values = [[42]];
+  await c.sync();
+});'
+mog -s "$ID" another-script.js
+mog -s "$ID" --close                       # save and end the session
+```
+
+| Action | Command |
+| --- | --- |
+| Save to another path and end | `mog -s ID --close -o result.xlsx` |
+| End without saving | `mog -s ID --close --discard` |
+| Save and end every session | `mog --close-all` |
+| End every session without saving | `mog --close-all --discard` |
+
+A session writes no workbook file until closed. Its default output is the input
+path, or an available `workbook*.xlsx` in the directory where it started. `-o`
+changes the session's destination; relative paths are resolved from the caller's
+current directory. The automatic filename is selected at save time. `--input`
+is only valid when starting a session. A script may also run during startup;
+its output goes to stderr so stdout contains only the ID.
+
+Requests to a session run sequentially. Workbook state persists; each script has
+a fresh JavaScript scope. A script error leaves the session alive, and earlier
+successful `context.sync()` calls remain applied. A failed save also leaves the
+session alive so you can retry with another output path. Closing all sessions
+attempts each one and reports failures without discarding unsaved workbooks.
+Sessions survive the launching shell, but their unsaved contents do not survive
+a process crash or reboot.
+
+Sessions use authenticated loopback connections and a private registry under
+`~/.mog/sessions` (`%USERPROFILE%\.mog\sessions` on Windows). `MOG_SESSION_DIR`
+can select another private directory, including for isolated test runs.
+`--close-all` covers sessions in that registry. Stale records from crashed
+workers are removed when a connection is refused.
+
+## Scripting surface
+
+Random, clock, path, and platform-dependent results require controlled inputs
+or separate assertions, including dependent cells and spill ranges, when
+comparing against an Excel-generated workbook. Exact cached-value equality
+does not verify calculation accuracy.
 
 The engine implements a growing portion of the Office.js Excel
 application-specific API:
@@ -111,7 +175,12 @@ for grouping, error handling, and redo behavior.
 ./run-calipers-bench.sh --excel
 ```
 
-Excel is desktop `Excel.Application` via COM plus a sideloaded Office.js add-in (not AppSource / Office Scripts). Mog uses `save` / `run`. The HTML also reports Office.js Excel API coverage (Microsoft method catalog vs Mog host vs verification scripts). See `vendor/calipers` `bench` / `bench-report` and `scripts/officejs-coverage`.
+Excel is desktop `Excel.Application` via COM plus a sideloaded Office.js add-in
+(not AppSource / Office Scripts). The repository runners build a small native
+adapter from Calipers' pinned `save` / `run` protocol to Mog's flags; `mog` itself
+has no subcommands. The HTML also reports Office.js Excel API coverage
+(Microsoft method catalog vs Mog host vs verification scripts). See
+`vendor/calipers` `bench` / `bench-report` and `scripts/officejs-coverage`.
 
 ## Tests
 

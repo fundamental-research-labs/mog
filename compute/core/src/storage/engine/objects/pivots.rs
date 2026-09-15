@@ -51,7 +51,7 @@ impl ComputeEngine {
         self.populate_missing_pivot_fields_from_source(config)
     }
 
-    fn materialize_pivot_table(
+    pub(in crate::storage::engine) fn materialize_pivot_table(
         &mut self,
         sheet_id: &SheetId,
         pivot_id: &str,

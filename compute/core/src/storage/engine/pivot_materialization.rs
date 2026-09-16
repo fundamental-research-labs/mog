@@ -525,121 +525,25 @@ impl ComputeEngine {
         }
     }
 
-    /// Materialize all pivot tables across all sheets after recalc.
+    /// Refresh pivots through the same rendering path as explicit pivot edits.
+    /// This preserves compact captions, filter rows, bounds, and formatting.
     pub(in crate::storage::engine) fn materialize_all_pivots(&mut self) {
-        use compute_pivot::{PivotEngineConfig, PivotTableDefExt};
-        let sheet_ids: Vec<SheetId> = self.cell_store.sheet_ids().copied().collect();
-        let mut pivot_pairs: Vec<(
-            SheetId,
-            String,
-            domain_types::domain::pivot::PivotTableConfig,
-        )> = Vec::new();
-        for sid in &sheet_ids {
-            let configs = services::objects::pivot_get_all(&self.stores, sid);
-            for cfg in configs {
-                let id = cfg.id.clone();
-                pivot_pairs.push((*sid, id, cfg));
-            }
-        }
-        for (sheet_id, pivot_id, config) in &pivot_pairs {
-            // Resolve output sheet
-            let output_sheet_id = match config
-                .output_sheet_id
-                .as_deref()
-                .and_then(|sheet_id| SheetId::from_uuid_str(sheet_id).ok())
-                .filter(|sheet_id| self.cell_store.get_sheet(sheet_id).is_some())
-                .or_else(|| self.cell_store.sheet_by_name(&config.output_sheet_name))
-            {
-                Some(id) => id,
-                None => continue,
-            };
-
-            // Clear old cells if previously materialized
-            {
-                let output_sheet_uuid = output_sheet_id.to_uuid_string();
-                let old_def = self
-                    .cell_store
-                    .find_pivot_table_def(pivot_id, &config.name, &output_sheet_uuid)
-                    .cloned();
-                if let Some(def) = old_def {
-                    let old_rows = def.rendered_row_count();
-                    let old_cols = def.rendered_col_count();
-                    if old_rows > 0 && old_cols > 0 {
-                        self.cell_store.clear_pivot_region(
-                            &output_sheet_id,
-                            def.start_row,
-                            def.start_col,
-                            old_rows,
-                            old_cols,
-                        );
-                    }
-                }
-            }
-
-            // Compute
-            match self.pivot_compute_from_source(sheet_id, pivot_id, None) {
-                Ok(result) => {
-                    let engine_config = match PivotEngineConfig::try_from(config.clone()) {
-                        Ok(config) => config,
-                        Err(e) => {
-                            tracing::warn!(
-                                pivot_id = %pivot_id,
-                                error = %e,
-                                "Pivot materialization failed to convert config; skipping"
-                            );
-                            continue;
-                        }
-                    };
-                    let row_field_names: Vec<String> = engine_config
-                        .row_placements()
-                        .iter()
-                        .map(|p| {
-                            p.display_name()
-                                .map(String::from)
-                                .or_else(|| {
-                                    engine_config
-                                        .fields
-                                        .iter()
-                                        .find(|f| f.id == *p.field_id())
-                                        .map(|f| f.name.clone())
-                                })
-                                .unwrap_or_else(|| p.field_id().to_string())
-                        })
-                        .collect();
-                    let repeat_row_labels = engine_config
-                        .layout
-                        .as_ref()
-                        .and_then(|layout| layout.repeat_row_labels)
-                        .unwrap_or(false);
-                    self.cell_store.materialize_pivot_with_identities(
-                        &output_sheet_id,
-                        config.output_location.row,
-                        config.output_location.col,
-                        &result,
-                        &row_field_names,
-                        repeat_row_labels,
-                        &self.stores.grid_id_alloc,
-                    );
-                    apply_pivot_value_number_formats(
-                        &mut self.stores,
-                        &self.cell_store,
-                        &output_sheet_id,
-                        config.output_location.row,
-                        config.output_location.col,
-                        config,
-                        &result,
-                    );
-                    let def =
-                        engine_config.to_pivot_table_def_from_result(&result, &output_sheet_id);
-                    self.cell_store.upsert_pivot_table_def(def);
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        pivot_id = %pivot_id,
-                        error = %e,
-                        "Pivot materialization failed during recalc; skipping"
-                    );
-                }
+        let pivots: Vec<_> = self
+            .cell_store
+            .sheet_ids()
+            .flat_map(|sheet_id| {
+                services::objects::pivot_get_all(&self.stores, sheet_id)
+                    .into_iter()
+                    .map(|config| (*sheet_id, config.id))
+            })
+            .collect();
+        for (sheet_id, pivot_id) in pivots {
+            if let Err(error) = self.materialize_pivot_table(&sheet_id, &pivot_id, None) {
+                tracing::warn!(
+                    pivot_id = %pivot_id,
+                    error = %error,
+                    "Pivot materialization failed during recalc; skipping"
+                );
             }
         }
     }

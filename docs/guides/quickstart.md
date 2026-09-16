@@ -11,7 +11,7 @@ Rust (stable), including a C compiler so QuickJS can build.
 From the repository root:
 
 ```bash
-cargo run -p mog -- compute/officejs/examples/formula.js
+cargo run -p mog -- -f compute/officejs/examples/formula.js
 ```
 
 Expected output:
@@ -22,7 +22,7 @@ Expected output:
 
 ## Write your own script
 
-Save a `.js` file and pass it to `mog`:
+Save a `.js` file and run it with `mog -f script.js`:
 
 ```js
 await Excel.run(async (context) => {

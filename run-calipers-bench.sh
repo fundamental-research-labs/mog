@@ -62,6 +62,8 @@ if [[ ! -x "${mog_bin}" ]]; then
   exit 1
 fi
 
+source "${root}/scripts/calipers-mog/build.sh"
+
 if [[ -n "${CALIPERS_BIN:-}" ]]; then
   calipers_bin="${CALIPERS_BIN}"
 else
@@ -81,7 +83,7 @@ python3 "${root}/scripts/officejs-coverage/coverage.py" scan \
 
 args=(
   bench
-  --engine "${mog_bin}"
+  --engine "${calipers_mog}"
   --json "${json}"
   --report "${report}"
   --coverage "${coverage_json}"
@@ -90,7 +92,7 @@ args=(
 if [[ "${excel}" -eq 1 ]]; then
   args=(
     bench
-    --engine "${mog_bin}"
+    --engine "${calipers_mog}"
     --engine excel
     --json "${json}"
     --report "${report}"

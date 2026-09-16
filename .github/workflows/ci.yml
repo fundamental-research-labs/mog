@@ -76,6 +76,9 @@ jobs:
       - name: Build Mog
         run: cargo build -p mog --locked --release
 
+      - name: Test Calipers CLI adapter
+        run: go test scripts/calipers-mog/main.go scripts/calipers-mog/main_test.go
+
       - name: Verify XLSX roundtrip cases
         env:
           MOG_BIN: ${{ github.workspace }}/target-native/release/mog

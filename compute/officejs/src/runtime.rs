@@ -50,6 +50,7 @@ const RUNNER: &str = r#"
 #[derive(Debug, Clone)]
 pub struct ScriptOutput {
     pub value: Value,
+    /// Captured console output; callers decide where to display it.
     pub stdout: String,
 }
 

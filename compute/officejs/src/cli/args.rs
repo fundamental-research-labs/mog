@@ -8,14 +8,11 @@ pub const HELP: &str = "Usage: mog [OPTIONS] [script.js]
   -e, --eval <source>       Run inline JavaScript instead of a script file
   -r, --recalculate         Evaluate formulas (automatic after a script)
   -s, --session [ID]        Start a background session, or use an existing one
-      --sesion [ID]         Alias for --session
+                           Keep workbook changes in memory until closed
       --close              Save and end the session selected with -s ID
       --close-all          Save and end all sessions for this user
       --discard            End without saving (with --close or --close-all)
   -h, --help               Show this help
-
-Sessions keep workbook changes in memory until closed. A failed save keeps the
-session alive; retry with -o <file.xlsx>, or close with --discard.
 ";
 
 #[derive(Default, Debug)]
@@ -60,7 +57,7 @@ impl Args {
                 "-i" | "--input" => set(&mut result.input, value()?.into(), flag)?,
                 "-o" | "--output" => set(&mut result.output, value()?.into(), flag)?,
                 "-e" | "--eval" => set(&mut result.eval, value()?, flag)?,
-                "-s" | "--session" | "--sesion" => {
+                "-s" | "--session" => {
                     let id = if let Some(id) = inline {
                         if id.is_empty() {
                             return Err("session ID cannot be empty".into());

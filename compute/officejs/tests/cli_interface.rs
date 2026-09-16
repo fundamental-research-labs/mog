@@ -167,6 +167,7 @@ fn invalid_arguments_and_help_have_no_workbook_side_effects() {
         (vec!["-i", "missing.xlsx"], "failed to read"),
         (vec!["-o", "bad.csv"], "output must be .xlsx"),
         (vec!["--unknown"], "unknown option"),
+        (vec!["--sesion"], "unknown option: --sesion"),
         (vec!["--close"], "requires -s"),
         (vec!["--discard"], "requires --close"),
         (vec!["--close-all", "-o", "x.xlsx"], "only be combined"),
@@ -191,7 +192,7 @@ fn invalid_arguments_and_help_have_no_workbook_side_effects() {
 #[test]
 fn session_retains_workbook_until_close_and_returns_output_once() {
     let f = Fixture::new();
-    let output = f.run(&["--sesion", "--eval", "console.log('starting')"]);
+    let output = f.run(&["--session", "--eval", "console.log('starting')"]);
     assert!(output.status.success());
     assert_eq!(String::from_utf8_lossy(&output.stderr).trim(), "starting");
     let id = String::from_utf8(output.stdout).unwrap().trim().to_owned();
@@ -201,7 +202,7 @@ fn session_retains_workbook_until_close_and_returns_output_once() {
     assert_eq!(f.ok(&["--session", &id, "--eval", READ]), "42");
     assert_eq!(
         f.ok(&[
-            "--sesion",
+            "--session",
             &id,
             "-e",
             "console.log('one'); console.log('two'); return 5"
@@ -245,7 +246,7 @@ fn failed_save_keeps_session_alive_and_output_can_be_corrected() {
     let f = Fixture::new();
     fs::write(f.path().join("blocked"), "not a directory").unwrap();
     let id = f.ok(&["-s", "-o", "blocked/output.xlsx", "-e", WRITE]);
-    f.fails(&["-s", &id, "--close"], "failed to save");
+    f.fails(&["-s", &id, "--close"], "Session remains open.");
     assert_eq!(f.ok(&["-s", &id, "-e", READ]), "42");
     f.ok(&["-s", &id, "-o", "recovered.xlsx"]);
     assert!(!f.path().join("recovered.xlsx").exists());

@@ -181,7 +181,9 @@ pub(super) fn worker() -> Result<()> {
             let output = state.apply(&request)?;
             if request.close {
                 if !request.discard {
-                    state.save()?;
+                    state
+                        .save()
+                        .map_err(|error| format!("{error}\nSession remains open."))?;
                 }
                 close = true;
             }

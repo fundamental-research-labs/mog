@@ -80,7 +80,7 @@ there was no console output.
 
 ### Sessions
 
-Start a session with `-s` / `--session` (also spelled `--sesion`). This launches
+Start a session with `-s` / `--session`. This launches
 a detached background process that keeps the workbook in memory and prints its
 ID. Pass the ID to later invocations:
 

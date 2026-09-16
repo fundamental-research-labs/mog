@@ -14,6 +14,7 @@ pub const HELP: &str = "Usage: mog [OPTIONS] [script.js]
       --discard            End without saving (with --close or --close-all)
   -h, --help               Show this help
 
+With no arguments, shows this help without creating a workbook.
 Without input, starts blank. Automatic filenames never overwrite existing files:
 workbook.xlsx, workbook-2.xlsx, workbook-3.xlsx, ... in the current directory.
 Sessions keep workbook changes in memory until closed. A failed save keeps the
@@ -36,7 +37,10 @@ pub struct Args {
 
 impl Args {
     pub fn parse(raw: Vec<String>) -> Result<Self> {
-        let mut result = Self::default();
+        let mut result = Self {
+            help: raw.is_empty(),
+            ..Self::default()
+        };
         let mut args = raw.into_iter().peekable();
         while let Some(arg) = args.next() {
             if arg == "--" {

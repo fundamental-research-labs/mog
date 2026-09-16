@@ -79,10 +79,19 @@ const READ: &str = r#"return await Excel.run(async c => {
 });"#;
 
 #[test]
+fn no_arguments_shows_help_without_creating_files() {
+    let f = Fixture::new();
+    let output = f.ok(&[]);
+    assert!(output.starts_with("Usage: mog"));
+    assert_eq!(output, f.ok(&["--help"]));
+    assert_eq!(fs::read_dir(f.path()).unwrap().count(), 0);
+}
+
+#[test]
 fn blank_workbooks_use_collision_safe_names() {
     let f = Fixture::new();
     for name in ["workbook.xlsx", "workbook-2.xlsx", "workbook-3.xlsx"] {
-        assert_eq!(f.ok(&[]), "");
+        assert_eq!(f.ok(&["-r"]), "");
         assert!(f.path().join(name).exists());
     }
     let before = fs::read(f.path().join("workbook.xlsx")).unwrap();
@@ -94,7 +103,9 @@ fn blank_workbooks_use_collision_safe_names() {
 #[test]
 fn concurrent_blank_saves_do_not_overwrite_each_other() {
     let f = Fixture::new();
-    let mut children: Vec<_> = (0..4).map(|_| f.command().spawn().unwrap()).collect();
+    let mut children: Vec<_> = (0..4)
+        .map(|_| f.command().arg("-r").spawn().unwrap())
+        .collect();
     for child in &mut children {
         assert!(child.wait().unwrap().success());
     }

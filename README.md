@@ -48,14 +48,16 @@ cargo run -p mog -- --eval 'await Excel.run(async (context) => {
 
 ## CLI
 
-`mog` starts from a blank workbook unless `-i` / `--input` is supplied. It saves
+Running `mog` with no arguments shows help without creating a file.
+For workbook operations, Mog starts blank unless `-i` / `--input` is supplied. It saves
 in place when an input is supplied; `-o` / `--output` chooses another destination.
 Without either path, it saves in the current directory with the first available
 name: `workbook.xlsx`, `workbook-2.xlsx`, `workbook-3.xlsx`, and so on. Existing
 automatic filenames are never overwritten, including concurrent invocations.
 
 ```bash
-mog                                      # create a blank workbook
+mog                                      # show help
+mog -o workbook.xlsx                     # create a blank workbook
 mog -i input.xlsx                         # open and save in place
 mog -i input.xlsx -o copy.xlsx            # save a copy
 mog -i input.xlsx -r                      # recalculate and save in place

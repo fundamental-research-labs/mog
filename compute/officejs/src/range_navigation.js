@@ -66,6 +66,14 @@
     ]);
   };
 
+  Excel.Worksheet.prototype.getUsedRange = function (valuesOnly) {
+    return queueWorksheetRange(
+      this,
+      "worksheet.getUsedRange",
+      arguments.length === 0 ? [] : [valuesOnly]
+    );
+  };
+
   // Range methods that return another Range. The returned proxy is created
   // immediately, while all geometry and error handling stays deferred to the
   // host's rangeNavigation operation at context.sync().
@@ -135,5 +143,13 @@
 
   Excel.Range.prototype.getEntireColumn = function () {
     return queueRange(this, "getEntireColumn");
+  };
+
+  Excel.Range.prototype.getUsedRange = function (valuesOnly) {
+    return queueRange(
+      this,
+      "getUsedRange",
+      arguments.length === 0 ? [] : [valuesOnly]
+    );
   };
 })(globalThis);

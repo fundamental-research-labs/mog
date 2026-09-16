@@ -220,6 +220,10 @@ pub(crate) fn navigate_range(
             })?;
             make_cells(start_row, start_column, end_row, end_column, method)?
         }
+        "worksheet.getUsedRange" => {
+            optional_values_only(args, method)?;
+            used_range(&sheet, &RangeAddress::WholeSheet, true, method)?
+        }
         "getCell" => {
             expect_arg_count(method, args, 2)?;
             let row_offset = number_arg(args, 0, method)?;
@@ -349,6 +353,10 @@ pub(crate) fn navigate_range(
             let other = argument_range(&sheet, &args[0], method)?;
             intersection(&current, &other, method)?
         }
+        "getUsedRange" => {
+            optional_values_only(args, method)?;
+            used_range(&sheet, &current, false, method)?
+        }
         other => {
             return Err(invalid(format!(
                 "Unsupported Range navigation method '{other}'"
@@ -438,6 +446,45 @@ fn bounding_rect(
         left.flags().1 || right.flags().1,
         method,
     )
+}
+
+fn used_range(
+    sheet: &Sheet,
+    current: &RangeAddress,
+    empty_returns_a1: bool,
+    method: &str,
+) -> Result<RangeAddress, RangeNavigationError> {
+    let bounds = sheet
+        .get_data_bounds()
+        .map_err(|error| RangeNavigationError {
+            code: "GeneralException",
+            message: error.to_string(),
+        })?;
+    let Some(bounds) = bounds else {
+        if empty_returns_a1 {
+            return make_cells(0, 0, 0, 0, method);
+        }
+        return Err(item_not_found(
+            "The requested range does not contain any used cells",
+        ));
+    };
+    let used = make_cells(
+        bounds.min_row,
+        bounds.min_col,
+        bounds.max_row,
+        bounds.max_col,
+        method,
+    )?;
+    if empty_returns_a1 {
+        return Ok(used);
+    }
+    match intersection(current, &used, method) {
+        Ok(address) => Ok(address),
+        Err(error) if error.code == "ItemNotFound" => Err(item_not_found(
+            "The requested range does not contain any used cells",
+        )),
+        Err(error) => Err(error),
+    }
 }
 
 fn intersection(
@@ -972,6 +1019,26 @@ fn expect_optional_count(args: &[Value], method: &str) -> Result<(), RangeNaviga
         return Err(invalid(format!("{method} accepts at most one argument")));
     }
     Ok(())
+}
+
+fn optional_values_only(args: &[Value], method: &str) -> Result<bool, RangeNavigationError> {
+    if args.len() > 1 {
+        return Err(invalid(format!("{method} accepts at most one argument")));
+    }
+    match args.first() {
+        None | Some(Value::Null) => Ok(false),
+        Some(Value::Bool(value)) => Ok(*value),
+        Some(_) => Err(invalid(format!(
+            "{method} valuesOnly must be a boolean when provided"
+        ))),
+    }
+}
+
+fn item_not_found(message: impl Into<String>) -> RangeNavigationError {
+    RangeNavigationError {
+        code: "ItemNotFound",
+        message: message.into(),
+    }
 }
 
 fn expect_arg_count(

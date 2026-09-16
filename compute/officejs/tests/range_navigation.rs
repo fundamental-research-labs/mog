@@ -1,8 +1,9 @@
 //! Worksheet/Range geometry through the production Office.js runtime.
 
 use compute_api::Workbook;
-use mog::{OfficeJsError, run_office_js_with_workbook};
+use mog::{run_office_js_with_workbook, OfficeJsError};
 use serde_json::json;
+use value_types::CellValue;
 
 fn blank_workbook() -> Workbook {
     Workbook::blank().expect("blank workbook").0
@@ -210,6 +211,111 @@ fn range_navigation_rejects_non_intersecting_ranges_and_cross_grid_cells() {
         OfficeJsError::Script(message) => assert!(
             message.contains("InvalidArgument"),
             "unexpected grid overflow error: {message}"
+        ),
+        other => panic!("expected script error, got {other:?}"),
+    }
+}
+
+#[test]
+fn worksheet_get_used_range_writes_through_the_data_extent() {
+    let workbook = blank_workbook();
+    run_office_js_with_workbook(
+        &workbook,
+        r#"
+        await Excel.run(async (context) => {
+          const sheet = context.workbook.worksheets.getItem("Sheet1");
+          sheet.getRange("B2").values = [["x"]];
+          sheet.getRange("D4").values = [["y"]];
+          const used = sheet.getUsedRange();
+          used.values = [
+            ["a", "b", "c"],
+            ["d", "e", "f"],
+            ["g", "h", "i"],
+          ];
+          await context.sync();
+        });
+        "#,
+    )
+    .expect("Worksheet.getUsedRange should bind the data extent");
+
+    let sheet = workbook.sheet_by_name("Sheet1").expect("Sheet1");
+    assert_eq!(sheet.get_cell_value("B2").unwrap().as_text(), Some("a"));
+    assert_eq!(sheet.get_cell_value("C3").unwrap().as_text(), Some("e"));
+    assert_eq!(sheet.get_cell_value("D4").unwrap().as_text(), Some("i"));
+    assert_eq!(sheet.get_cell_value("A1").unwrap(), CellValue::Null);
+    assert_eq!(sheet.get_cell_value("E5").unwrap(), CellValue::Null);
+}
+
+#[test]
+fn worksheet_get_used_range_on_a_blank_sheet_writes_a1() {
+    let workbook = blank_workbook();
+    run_office_js_with_workbook(
+        &workbook,
+        r#"
+        await Excel.run(async (context) => {
+          const sheet = context.workbook.worksheets.getItem("Sheet1");
+          sheet.getUsedRange().values = [["origin"]];
+          await context.sync();
+        });
+        "#,
+    )
+    .expect("blank Worksheet.getUsedRange should return A1");
+
+    let sheet = workbook.sheet_by_name("Sheet1").expect("Sheet1");
+    assert_eq!(
+        sheet.get_cell_value("A1").unwrap().as_text(),
+        Some("origin")
+    );
+}
+
+#[test]
+fn range_get_used_range_writes_through_used_cells_inside_the_source() {
+    let workbook = blank_workbook();
+    run_office_js_with_workbook(
+        &workbook,
+        r#"
+        await Excel.run(async (context) => {
+          const sheet = context.workbook.worksheets.getItem("Sheet1");
+          sheet.getRange("B2").values = [["x"]];
+          sheet.getRange("D4").values = [["y"]];
+          const used = sheet.getRange("A1:Z20").getUsedRange();
+          used.values = [
+            ["a", "b", "c"],
+            ["d", "e", "f"],
+            ["g", "h", "i"],
+          ];
+          await context.sync();
+        });
+        "#,
+    )
+    .expect("Range.getUsedRange should bind used cells inside the source");
+
+    let sheet = workbook.sheet_by_name("Sheet1").expect("Sheet1");
+    assert_eq!(sheet.get_cell_value("B2").unwrap().as_text(), Some("a"));
+    assert_eq!(sheet.get_cell_value("C3").unwrap().as_text(), Some("e"));
+    assert_eq!(sheet.get_cell_value("D4").unwrap().as_text(), Some("i"));
+    assert_eq!(sheet.get_cell_value("A1").unwrap(), CellValue::Null);
+}
+
+#[test]
+fn range_get_used_range_rejects_an_empty_source_at_sync() {
+    let error = run_office_js_with_workbook(
+        &blank_workbook(),
+        r#"
+        return await Excel.run(async (context) => {
+          const sheet = context.workbook.worksheets.getItem("Sheet1");
+          const result = sheet.getRange("A1:C3").getUsedRange();
+          result.load("address");
+          await context.sync();
+          return result.address;
+        });
+        "#,
+    )
+    .expect_err("Range.getUsedRange on an empty range should reject");
+    match error {
+        OfficeJsError::Script(message) => assert!(
+            message.contains("ItemNotFound"),
+            "unexpected empty used-range error: {message}"
         ),
         other => panic!("expected script error, got {other:?}"),
     }

@@ -476,6 +476,10 @@ impl RangeRef {
 
     /// Return the optional unqualified A1 address.  `None` represents the
     /// whole worksheet or another unbounded range.
+    pub(crate) fn ensure_present(&self) -> Result<(), BatchError> {
+        parsed_range(self).map(|_| ())
+    }
+
     pub(crate) fn address(&self) -> Option<&str> {
         self.address.as_deref()
     }
@@ -535,7 +539,9 @@ impl Host {
     fn default_extensions() -> ExtensionRegistry {
         let registry = ExtensionRegistry::default();
         registry.register(crate::range_ops::RangeOpsHandler);
+        registry.register(crate::range_queries::RangeQueriesHandler);
         registry.register(crate::freeze::FreezeHandler);
+        registry.register(crate::table_filters::TableFiltersHandler);
         registry.register(crate::worksheets::WorksheetOpsHandler);
         registry.register(crate::comments::CommentsHandler);
         registry.register(crate::conditional::ConditionalHandler);
@@ -615,6 +621,37 @@ impl Host {
             })
     }
 
+    pub(crate) fn bind_range(&self, id: &str, range: RangeRef) {
+        self.ranges
+            .lock()
+            .expect("ranges lock")
+            .insert(id.to_string(), range);
+    }
+
+    pub(crate) fn lookup_table(&self, id: &str) -> Result<TableRef, BatchError> {
+        self.tables
+            .lock()
+            .expect("tables lock")
+            .get(id)
+            .cloned()
+            .ok_or_else(|| BatchError {
+                code: "InvalidObjectPath",
+                message: "The table is not available.".into(),
+            })
+    }
+
+    pub(crate) fn lookup_table_column(&self, id: &str) -> Result<TableColumnRef, BatchError> {
+        self.table_columns
+            .lock()
+            .expect("columns lock")
+            .get(id)
+            .cloned()
+            .ok_or_else(|| BatchError {
+                code: "InvalidObjectPath",
+                message: "The table column is not available.".into(),
+            })
+    }
+
     pub(crate) fn bind_worksheet(&self, id: &str, worksheet: WorksheetRef) {
         self.sheets
             .lock()
@@ -641,8 +678,9 @@ impl Host {
         &self,
         operation: &Value,
         loaded: &mut HashMap<String, HashMap<String, Value>>,
+        results: &mut HashMap<String, Value>,
     ) -> Result<ExtensionDispatch, BatchError> {
-        let mut context = HostDispatchContext::new(self, loaded);
+        let mut context = HostDispatchContext::new(self, loaded, results);
         let handled = self.extensions.dispatch(operation, &mut context)?;
         Ok(ExtensionDispatch {
             handled,
@@ -728,7 +766,7 @@ impl Host {
             // Give extension handlers first refusal for both new operation
             // names and property additions to existing core objects.  A
             // handler can return `false` to preserve the core path below.
-            let dispatch = self.dispatch_extension(&raw_op, &mut loaded)?;
+            let dispatch = self.dispatch_extension(&raw_op, &mut loaded, &mut results)?;
             let has_delegated_load = dispatch.delegated_load.is_some();
             let raw_op = if let Some((target_id, properties)) = dispatch.delegated_load {
                 let operation_id =
@@ -2490,6 +2528,32 @@ impl Host {
                                             Value::Null
                                         } else {
                                             range_formulas_json(&range.sheet, metadata.bounds)?
+                                        },
+                                    );
+                                }
+                                "rowHidden" | "columnHidden" => {
+                                    let (sr, sc, er, ec) = metadata.bounds;
+                                    let rows = property == "rowHidden";
+                                    let hidden = if rows {
+                                        range.sheet.layout().get_hidden_rows()
+                                    } else {
+                                        range.sheet.layout().get_hidden_columns()
+                                    }
+                                    .map_err(engine_error)?;
+                                    let (start, end) = if rows { (sr, er) } else { (sc, ec) };
+                                    let count = hidden
+                                        .iter()
+                                        .filter(|index| **index >= start && **index <= end)
+                                        .count()
+                                        as u32;
+                                    props.insert(
+                                        property.clone(),
+                                        if count == 0 {
+                                            json!(false)
+                                        } else if count == end - start + 1 {
+                                            json!(true)
+                                        } else {
+                                            Value::Null
                                         },
                                     );
                                 }

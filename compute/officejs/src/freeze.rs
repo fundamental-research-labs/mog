@@ -11,7 +11,7 @@ impl ExtensionHandler for FreezeHandler {
     fn can_handle(&self, operation: &str) -> bool {
         matches!(
             operation,
-            "freezeRows" | "freezeColumns" | "freezeAt" | "unfreeze"
+            "freezeRows" | "freezeColumns" | "freezeAt" | "unfreeze" | "freezeLocation"
         )
     }
 
@@ -27,6 +27,43 @@ impl ExtensionHandler for FreezeHandler {
         let worksheet = context.worksheet(required_str(operation, "worksheetId")?)?;
         let layout = worksheet.sheet().layout();
         match op {
+            "freezeLocation" => {
+                use crate::range_navigation::RangeAddress;
+                let panes = layout.get_frozen_panes().map_err(engine)?;
+                let address = match (panes.rows, panes.cols) {
+                    (0, 0) => None,
+                    (rows, 0) => Some(RangeAddress::Rows {
+                        start: 0,
+                        end: rows - 1,
+                    }),
+                    (0, cols) => Some(RangeAddress::Columns {
+                        start: 0,
+                        end: cols - 1,
+                    }),
+                    (rows, cols) => Some(RangeAddress::Cells {
+                        start_row: 0,
+                        start_column: 0,
+                        end_row: rows - 1,
+                        end_column: cols - 1,
+                    }),
+                };
+                let is_null = address.is_none();
+                if is_null && operation["nullable"] != true {
+                    return Err(BatchError {
+                        code: "ItemNotFound",
+                        message: "No frozen panes exist".into(),
+                    });
+                }
+                context.bind_range(
+                    required_str(operation, "id")?,
+                    crate::host::RangeRef::new(
+                        worksheet.sheet(),
+                        address.map(|a| a.to_a1()),
+                        is_null,
+                    ),
+                    is_null,
+                );
+            }
             "freezeRows" => {
                 let count = required_u32(operation, "count")?;
                 layout.freeze_rows(count).map_err(engine)?;

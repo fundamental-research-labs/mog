@@ -728,7 +728,7 @@ fn set_column_filter_json(
     Ok(())
 }
 
-fn parse_filter_criteria(criteria: &Value) -> Result<Value, SortFilterError> {
+pub(crate) fn parse_filter_criteria(criteria: &Value) -> Result<Value, SortFilterError> {
     let object = criteria.as_object().ok_or_else(|| {
         SortFilterError::invalid("AutoFilter criteria must be a FilterCriteria object")
     })?;
@@ -1077,7 +1077,7 @@ fn criteria_array(
     Ok(result)
 }
 
-fn office_criteria_from_domain(value: &Value) -> Result<Value, SortFilterError> {
+pub(crate) fn office_criteria_from_domain(value: &Value) -> Result<Value, SortFilterError> {
     let object = value
         .as_object()
         .ok_or_else(|| SortFilterError::general("stored AutoFilter criterion is not an object"))?;

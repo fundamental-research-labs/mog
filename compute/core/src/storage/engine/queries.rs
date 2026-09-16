@@ -7,6 +7,7 @@ mod helpers;
 mod projections_settings;
 mod ranges_search_formula;
 mod styles_named_ranges;
+mod used_bounds;
 mod workbook_settings;
 
 use super::ComputeEngine;

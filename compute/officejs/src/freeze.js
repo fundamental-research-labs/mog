@@ -35,6 +35,14 @@
     });
   };
 
+  function location(object, nullable) {
+    var range = new Excel.Range(object.context, object._worksheet, null);
+    object.context._queue.push({ op: "freezeLocation", id: range._id, worksheetId: object._worksheet._id, nullable: nullable });
+    return range;
+  }
+  FreezePaneCollection.prototype.getLocation = function () { return location(this, false); };
+  FreezePaneCollection.prototype.getLocationOrNullObject = function () { return location(this, true); };
+
   FreezePaneCollection.prototype.unfreeze = function () {
     this.context._queue.push({
       op: "unfreeze",
@@ -52,5 +60,6 @@
     },
   });
 
+  Excel.WorksheetFreezePanes = FreezePaneCollection;
   Excel.FreezePaneCollection = FreezePaneCollection;
 })(globalThis);

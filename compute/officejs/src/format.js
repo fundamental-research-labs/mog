@@ -199,6 +199,9 @@
   }
   RangeFormat.prototype = Object.create(ClientObject.prototype);
   RangeFormat.prototype.constructor = RangeFormat;
+  RangeFormat.prototype.adjustIndent = function (amount) {
+    this.context._queue.push({ op: "set", id: this._id, property: "adjustIndent", value: amount });
+  };
   RangeFormat.prototype.set = setProperties;
   RangeFormat.prototype.toJSON = toJSON;
   defineScalars(RangeFormat, [

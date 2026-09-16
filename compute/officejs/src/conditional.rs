@@ -1,7 +1,6 @@
 //! Range.conditionalFormats host operations.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
 
 use domain_types::ConditionalFormat;
 use serde_json::{Value, json};
@@ -14,7 +13,7 @@ pub(crate) struct ConditionalHandler;
 
 impl ExtensionHandler for ConditionalHandler {
     fn can_handle(&self, operation: &str) -> bool {
-        matches!(operation, "cfAdd" | "set")
+        matches!(operation, "cfAdd" | "cfQuery" | "set")
     }
 
     fn handle(
@@ -27,6 +26,7 @@ impl ExtensionHandler for ConditionalHandler {
             .and_then(Value::as_str)
             .unwrap_or_default();
         match op {
+            "cfQuery" => handle_query(operation, context),
             "cfAdd" => {
                 let id = required_str(operation, "id")?;
                 let range = context.range(required_str(operation, "rangeId")?)?;
@@ -56,14 +56,13 @@ impl ExtensionHandler for ConditionalHandler {
 
 struct ConditionalFormatRef {
     sheet: compute_api::Sheet,
-    format_id: Mutex<String>,
-    state: Mutex<Value>,
+    format_id: String,
 }
 
 impl ConditionalFormatRef {
-    fn add(range: &RangeRef, cf_type: &str, format_id: &str) -> Result<Self, BatchError> {
+    fn add(range: &RangeRef, cf_type: &str, _format_id: &str) -> Result<Self, BatchError> {
         let bounds = range_bounds(range)?;
-        let format_id = format!("cf-{format_id}");
+        let format_id = uuid::Uuid::new_v4().to_string();
         let rule = default_rule(cf_type, &format_id)?;
         let state = json!({
             "id": format_id,
@@ -79,18 +78,29 @@ impl ConditionalFormatRef {
         persist(&range.sheet(), &state)?;
         Ok(Self {
             sheet: range.sheet(),
-            format_id: Mutex::new(format_id),
-            state: Mutex::new(state),
+            format_id,
         })
     }
 
+    fn state(&self) -> Result<Value, BatchError> {
+        let format = self
+            .sheet
+            .conditional_formats()
+            .get_all_rules()
+            .map_err(engine)?
+            .into_iter()
+            .find(|f| f.id == self.format_id)
+            .ok_or_else(missing)?;
+        serde_json::to_value(format).map_err(engine)
+    }
+
     fn apply_property(&self, property: &str, value: &Value) -> Result<(), BatchError> {
-        let mut state = self.state.lock().expect("cf state");
+        let mut state = self.state()?;
         apply_to_state(&mut state, property, value)?;
-        persist(&self.sheet, &state)?;
-        if let Some(id) = state.get("id").and_then(Value::as_str) {
-            *self.format_id.lock().expect("cf id") = id.to_string();
-        }
+        self.sheet
+            .conditional_formats()
+            .update_rule(&self.format_id, state)
+            .map_err(engine)?;
         Ok(())
     }
 }
@@ -100,13 +110,208 @@ impl ExtensionObject for ConditionalFormatRef {
         "ConditionalFormat"
     }
 
-    fn load(&self, _properties: &[String]) -> Result<HashMap<String, Value>, BatchError> {
-        Ok(HashMap::new())
+    fn load(&self, properties: &[String]) -> Result<HashMap<String, Value>, BatchError> {
+        let state = self.state()?;
+        let rule = &state["rules"][0];
+        properties
+            .iter()
+            .map(|name| {
+                let value = match name.as_str() {
+                    "id" => json!(self.format_id),
+                    "type" => json!(match rule["type"].as_str().unwrap_or("") {
+                        "cellValue" => "CellValue",
+                        "colorScale" => "ColorScale",
+                        "dataBar" => "DataBar",
+                        "iconSet" => "IconSet",
+                        "containsText" => "ContainsText",
+                        "expression" => "Custom",
+                        "top10" => "TopBottom",
+                        _ => "PresetCriteria",
+                    }),
+                    "priority" => rule["priority"].clone(),
+                    "stopIfTrue" => json!(rule["stopIfTrue"].as_bool().unwrap_or(false)),
+                    _ => {
+                        return Err(invalid(format!(
+                            "Unknown ConditionalFormat property: {name}"
+                        )));
+                    }
+                };
+                Ok((name.clone(), value))
+            })
+            .collect()
     }
 
     fn set(&self, property: &str, value: &Value) -> Result<(), BatchError> {
         self.apply_property(property, value)
     }
+}
+
+fn missing() -> BatchError {
+    BatchError {
+        code: "ItemNotFound",
+        message: "The conditional format was not found".into(),
+    }
+}
+
+fn handle_query(op: &Value, context: &mut HostDispatchContext<'_>) -> Result<bool, BatchError> {
+    let method = required_str(op, "method")?;
+    if matches!(method, "delete" | "range") {
+        let object =
+            context.extension_object::<ConditionalFormatRef>(required_str(op, "sourceId")?)?;
+        let state = object.state()?;
+        if method == "delete" {
+            object
+                .sheet
+                .conditional_formats()
+                .delete_rule(&object.format_id)
+                .map_err(engine)?;
+        } else {
+            let ranges = state["ranges"].as_array().ok_or_else(missing)?;
+            let single = ranges.len() == 1;
+            if !single && op["nullable"] != true {
+                return Err(BatchError {
+                    code: "InvalidOperation",
+                    message: "The conditional format applies to multiple ranges".into(),
+                });
+            }
+            let address = if single {
+                let r = &ranges[0];
+                Some(
+                    crate::range_navigation::RangeAddress::Cells {
+                        start_row: r["startRow"].as_u64().ok_or_else(missing)? as u32,
+                        start_column: r["startCol"].as_u64().ok_or_else(missing)? as u32,
+                        end_row: r["endRow"].as_u64().ok_or_else(missing)? as u32,
+                        end_column: r["endCol"].as_u64().ok_or_else(missing)? as u32,
+                    }
+                    .to_a1(),
+                )
+            } else {
+                None
+            };
+            context.bind_range(
+                required_str(op, "id")?,
+                RangeRef::new(object.sheet.clone(), address, !single),
+                !single,
+            );
+        }
+        return Ok(true);
+    }
+    let range = context.range(required_str(op, "rangeId")?)?;
+    let (sr, sc, er, ec) = range_bounds(&range)?;
+    let mut formats = range
+        .sheet()
+        .conditional_formats()
+        .get_all_rules()
+        .map_err(engine)?;
+    formats.retain(|f| {
+        f.ranges.iter().any(|r| {
+            r.start_row() <= er && r.end_row() >= sr && r.start_col() <= ec && r.end_col() >= sc
+        })
+    });
+    // Office.js collection indices follow rule priority, including imported rules.
+    formats.sort_by_key(|f| f.rules.first().map(|r| r.priority()).unwrap_or(i32::MAX));
+    match method {
+        "count" => context.result(required_str(op, "id")?, json!(formats.len())),
+        "clear" => {
+            for format in formats {
+                let remaining = format
+                    .ranges
+                    .iter()
+                    .flat_map(|r| subtract_range(*r, (sr, sc, er, ec)))
+                    .collect::<Vec<_>>();
+                if remaining.is_empty() {
+                    range
+                        .sheet()
+                        .conditional_formats()
+                        .delete_rule(&format.id)
+                        .map_err(engine)?;
+                } else {
+                    range
+                        .sheet()
+                        .conditional_formats()
+                        .update_ranges(&format.id, remaining)
+                        .map_err(engine)?;
+                }
+            }
+        }
+        "item" | "at" | "itemOrNull" => {
+            let format = if method == "at" {
+                let index = op["key"]
+                    .as_u64()
+                    .ok_or_else(|| invalid("index must be a non-negative integer"))?;
+                formats.into_iter().nth(index as usize)
+            } else {
+                formats
+                    .into_iter()
+                    .find(|f| Some(f.id.as_str()) == op["key"].as_str())
+            };
+            let id = required_str(op, "id")?;
+            if let Some(format) = format {
+                context.bind_object(
+                    id,
+                    std::sync::Arc::new(ConditionalFormatRef {
+                        sheet: range.sheet(),
+                        format_id: format.id,
+                    }),
+                );
+            } else if method == "itemOrNull" {
+                context.bind_null(id);
+            } else {
+                return Err(missing());
+            }
+        }
+        _ => return Err(invalid("Unknown conditional format operation")),
+    }
+    Ok(true)
+}
+
+fn subtract_range(
+    range: domain_types::CFCellRange,
+    (sr, sc, er, ec): (u32, u32, u32, u32),
+) -> Vec<domain_types::CFCellRange> {
+    let (top, left, bottom, right) = (
+        range.start_row().max(sr),
+        range.start_col().max(sc),
+        range.end_row().min(er),
+        range.end_col().min(ec),
+    );
+    if top > bottom || left > right {
+        return vec![range];
+    }
+    let mut result = Vec::new();
+    if range.start_row() < top {
+        result.push(domain_types::CFCellRange::new(
+            range.start_row(),
+            range.start_col(),
+            top - 1,
+            range.end_col(),
+        ));
+    }
+    if bottom < range.end_row() {
+        result.push(domain_types::CFCellRange::new(
+            bottom + 1,
+            range.start_col(),
+            range.end_row(),
+            range.end_col(),
+        ));
+    }
+    if range.start_col() < left {
+        result.push(domain_types::CFCellRange::new(
+            top,
+            range.start_col(),
+            bottom,
+            left - 1,
+        ));
+    }
+    if right < range.end_col() {
+        result.push(domain_types::CFCellRange::new(
+            top,
+            right + 1,
+            bottom,
+            range.end_col(),
+        ));
+    }
+    result
 }
 
 fn persist(sheet: &compute_api::Sheet, state: &Value) -> Result<(), BatchError> {

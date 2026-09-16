@@ -327,6 +327,65 @@ impl Sheet {
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
+    /// Bounds of used cells within a range, optionally excluding formatting.
+    pub fn used_range_bounds(
+        &self,
+        range: impl Into<CellRange>,
+        values_only: bool,
+    ) -> Result<Option<(u32, u32, u32, u32)>, ComputeApiError> {
+        let bounds = range.into().resolve()?;
+        let sid = self.sheet_id;
+        self.dispatch.query_engine(move |e| {
+            e.used_range_bounds(&sid, bounds, values_only)
+                .map(|b| (b.start_row, b.start_col, b.end_row, b.end_col))
+        })
+    }
+
+    /// Search displayed cell values using a regular expression, within the
+    /// populated portion of the requested range. Results are in row order.
+    pub fn find_cells(
+        &self,
+        range: impl Into<CellRange>,
+        pattern: &str,
+        match_case: bool,
+        complete_match: bool,
+        include_formulas: bool,
+    ) -> Result<Vec<(u32, u32)>, ComputeApiError> {
+        let bounds = range.into().resolve()?;
+        let sid = self.sheet_id;
+        let pattern = pattern.to_string();
+        self.dispatch.query_engine(move |e| {
+            let Some(data) = e.get_data_bounds(&sid) else {
+                return Vec::new();
+            };
+            let (sr, sc, er, ec) = (
+                bounds.0.max(data.min_row),
+                bounds.1.max(data.min_col),
+                bounds.2.min(data.max_row),
+                bounds.3.min(data.max_col),
+            );
+            if sr > er || sc > ec {
+                return Vec::new();
+            }
+            e.find_all_in_range(
+                &sid,
+                sr,
+                sc,
+                er,
+                ec,
+                compute_core::engine_types::queries::FindInRangeOptions {
+                    text: pattern,
+                    case_sensitive: Some(match_case),
+                    whole_cell: Some(complete_match),
+                    include_formulas: Some(include_formulas),
+                },
+            )
+            .into_iter()
+            .map(|cell| (cell.row, cell.col))
+            .collect()
+        })
+    }
+
     /// Get the data bounds (used range) of the sheet.
     pub fn get_data_bounds(
         &self,

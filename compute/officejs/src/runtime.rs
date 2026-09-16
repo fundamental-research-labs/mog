@@ -27,6 +27,8 @@ const COMMENTS_BOOTSTRAP: &str = include_str!("comments.js");
 const CONDITIONAL_BOOTSTRAP: &str = include_str!("conditional.js");
 const PIVOT_BOOTSTRAP: &str = include_str!("pivot.js");
 
+const TABLE_FILTERS_BOOTSTRAP: &str = include_str!("table_filters.js");
+
 const RUNNER: &str = r#"
 (async () => {
   try {
@@ -211,6 +213,16 @@ async fn eval_in_ctx(
     let _: () = ctx.eval(PIVOT_BOOTSTRAP).catch(&ctx).map_err(|e| {
         OfficeJsError::runtime(format!("failed to load Office.js pivot tables: {e}"))
     })?;
+
+    let _: () = ctx
+        .eval(TABLE_FILTERS_BOOTSTRAP)
+        .catch(&ctx)
+        .map_err(|e| OfficeJsError::runtime(format!("failed to load table filters: {e}")))?;
+
+    let _: () = ctx
+        .eval(include_str!("range_queries.js"))
+        .catch(&ctx)
+        .map_err(|e| OfficeJsError::runtime(format!("failed to load range queries: {e}")))?;
 
     let console_src = r#"
       globalThis.console = {

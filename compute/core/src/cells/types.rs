@@ -715,9 +715,7 @@ impl SheetStore {
         cells: &FxHashMap<CellId, CellEntry>,
         formulas: &FxHashMap<CellId, IdentityFormula>,
     ) -> bool {
-        cells
-            .get(cell_id)
-            .is_none_or(|entry| entry.value.is_null())
+        cells.get(cell_id).is_none_or(|entry| entry.value.is_null())
             && !formulas.contains_key(cell_id)
     }
 
@@ -736,8 +734,20 @@ impl SheetStore {
         cells: &FxHashMap<CellId, CellEntry>,
         formulas: &FxHashMap<CellId, IdentityFormula>,
     ) -> Option<(u32, u32, u32, u32)> {
+        self.dense_content_bounds_in_range(cells, formulas, (0, 0, u32::MAX, u32::MAX))
+    }
+
+    pub(crate) fn dense_content_bounds_in_range(
+        &self,
+        cells: &FxHashMap<CellId, CellEntry>,
+        formulas: &FxHashMap<CellId, IdentityFormula>,
+        scope: (u32, u32, u32, u32),
+    ) -> Option<(u32, u32, u32, u32)> {
         let mut bounds = None;
         let mut include = |row: u32, col: u32| {
+            if row < scope.0 || col < scope.1 || row > scope.2 || col > scope.3 {
+                return;
+            }
             if self
                 .value_at(SheetPos::new(row, col), cells, formulas)
                 .is_none_or(CellValue::is_null)
@@ -1050,5 +1060,3 @@ pub(crate) struct ProjectionColumn {
     pub array_col: usize,
     pub array: std::sync::Arc<value_types::CellArray>,
 }
-
-

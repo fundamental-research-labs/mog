@@ -196,6 +196,7 @@ impl ExtensionRegistry {
 pub(crate) struct HostDispatchContext<'a> {
     host: &'a Host,
     loaded: &'a mut HashMap<String, HashMap<String, Value>>,
+    results: &'a mut HashMap<String, Value>,
     delegated_load: Option<(String, Vec<String>)>,
 }
 
@@ -203,10 +204,12 @@ impl<'a> HostDispatchContext<'a> {
     pub(crate) fn new(
         host: &'a Host,
         loaded: &'a mut HashMap<String, HashMap<String, Value>>,
+        results: &'a mut HashMap<String, Value>,
     ) -> Self {
         Self {
             host,
             loaded,
+            results,
             delegated_load: None,
         }
     }
@@ -223,7 +226,29 @@ impl<'a> HostDispatchContext<'a> {
 
     /// Resolve an already-bound Range proxy.
     pub(crate) fn range(&self, id: &str) -> Result<RangeRef, BatchError> {
-        self.host.lookup_range(id)
+        let range = self.host.lookup_range(id)?;
+        range.ensure_present()?;
+        Ok(range)
+    }
+
+    pub(crate) fn bind_range(&mut self, id: &str, range: RangeRef, is_null: bool) {
+        self.host.bind_range(id, range);
+        mark_object(self.loaded, id, is_null);
+    }
+
+    pub(crate) fn result(&mut self, id: &str, value: Value) {
+        self.results.insert(id.to_string(), value);
+    }
+
+    pub(crate) fn table(&self, id: &str) -> Result<crate::tables::TableRef, BatchError> {
+        self.host.lookup_table(id)
+    }
+
+    pub(crate) fn table_column(
+        &self,
+        id: &str,
+    ) -> Result<crate::table_collections::TableColumnRef, BatchError> {
+        self.host.lookup_table_column(id)
     }
 
     /// Bind a family-produced Worksheet reference and mark it present in the
@@ -242,6 +267,18 @@ impl<'a> HostDispatchContext<'a> {
         self.host
             .bind_extension_object(id, ExtensionBinding::object(object));
         mark_object(self.loaded, id, false);
+    }
+
+    pub(crate) fn bind_null(&mut self, id: &str) {
+        self.host.bind_extension_object(
+            id,
+            ExtensionBinding {
+                object: None,
+                typed: None,
+                is_null_object: true,
+            },
+        );
+        mark_object(self.loaded, id, true);
     }
 
     /// Retrieve a typed parent locator previously bound by this or another

@@ -126,6 +126,10 @@ impl TableColumnRef {
         Self { table, column_id }
     }
 
+    pub(crate) fn table(&self) -> TableRef {
+        self.table.clone()
+    }
+
     pub(crate) fn sheet(&self) -> Sheet {
         self.table.sheet()
     }

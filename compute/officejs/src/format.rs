@@ -93,6 +93,45 @@ impl FormatRef {
     }
 
     pub(crate) fn set(&self, property: &str, value: &Value) -> Result<(), FormatError> {
+        if self.kind == FormatKind::Format && property == "adjustIndent" {
+            let amount = value
+                .as_i64()
+                .filter(|n| (-250..=250).contains(n))
+                .ok_or_else(|| {
+                    invalid("adjustIndent amount must be an integer from -250 to 250")
+                })?;
+            let (sr, sc, er, ec) = self.bounds()?;
+            let mut groups = std::collections::BTreeMap::<i64, Vec<(u32, u32, u32, u32)>>::new();
+            for row in sr..=er {
+                for col in sc..=ec {
+                    let format = serde_json::to_value(
+                        self.sheet
+                            .formats()
+                            .get_cell_format(row, col)
+                            .map_err(engine)?,
+                    )
+                    .map_err(encoding)?;
+                    let indent = read_property(FormatKind::Format, "indentLevel", &format)?
+                        .as_i64()
+                        .unwrap_or(0);
+                    groups
+                        .entry((indent + amount).clamp(0, 250))
+                        .or_default()
+                        .push((row, col, row, col));
+                }
+            }
+            for (indent, ranges) in groups {
+                self.sheet
+                    .formats()
+                    .patch_format_for_ranges(
+                        ranges,
+                        serde_json::from_value(json!({"indent": indent})).map_err(encoding)?,
+                        Vec::new(),
+                    )
+                    .map_err(engine)?;
+            }
+            return Ok(());
+        }
         if self.kind == FormatKind::Format && matches!(property, "columnWidth" | "rowHeight") {
             return self.set_layout(property, value);
         }

@@ -177,6 +177,24 @@ class ScriptScanTests(unittest.TestCase):
 
 
 class HostScanTests(unittest.TestCase):
+    def test_shared_constructor_methods_are_scoped(self):
+        catalog = {"classes": [{"id": "Excel.Comment"}, {"id": "Excel.CommentReply"}]}
+        with tempfile.TemporaryDirectory() as directory:
+            src = Path(directory)
+            (src / "comments.js").write_text("""
+                [Comment, CommentReply].forEach(function (ctor) {
+                  ctor.prototype.delete = function () { if (true) { queue(); } };
+                  ctor.prototype.getLocation = function () { return range(); };
+                });
+                Unrelated.prototype.notShared = function () {};
+            """)
+            implemented = cov.scan_officejs_host(src, catalog)
+        for cls in ("Excel.Comment", "Excel.CommentReply"):
+            self.assertEqual(implemented[(cls, "delete")], "method")
+            self.assertEqual(implemented[(cls, "getLocation")], "method")
+            self.assertNotIn((cls, "notShared"), implemented)
+
+
     def test_prototype_methods_and_freeze_alias(self) -> None:
         js = """
         function Range(context) {

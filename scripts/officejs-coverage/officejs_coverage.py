@@ -367,6 +367,21 @@ def scan_officejs_host(src_dir: Path, catalog: dict[str, Any]) -> dict[tuple[str
         implemented[(cid, name)] = kind
 
     for text in texts:
+        # Shared constructors install the same methods through a literal list
+        # of types. Expand only that bounded pattern, using balanced braces so
+        # nested method bodies cannot leak into unrelated constructors.
+        shared = []
+        for loop in re.finditer(
+            r"\[([A-Za-z0-9_,\s]+)\]\.forEach\(function\s*\(\s*(\w+)\s*\)\s*\{",
+            text,
+        ):
+            constructors = [name.strip() for name in loop.group(1).split(",")]
+            if not all(resolve_ctor(name, aliases, class_ids) for name in constructors):
+                continue
+            body = text[loop.end():matching_brace(text, loop.end() - 1)]
+            shared.extend(re.sub(r"\b" + re.escape(loop.group(2)) + r"\b", name, body)
+                          for name in constructors)
+        text += "\n" + "\n".join(shared)
         for m in re.finditer(
             r"(?:Excel\.([A-Za-z0-9]+)|([A-Za-z0-9]+))\.prototype\.([A-Za-z0-9]+)\s*=\s*function",
             text,

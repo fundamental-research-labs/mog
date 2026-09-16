@@ -30,6 +30,24 @@ impl SheetComments {
             .query_engine(move |e| e.get_comments_for_cell(&sid, &cid))
     }
 
+    /// Get comments at a position, including replies in the thread.
+    pub fn get_at(&self, row: u32, col: u32) -> Result<Vec<Comment>, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .query_engine(move |e| e.get_comments_for_cell_by_position(&sid, row, col))
+    }
+
+    /// Resolve the current position of a comment's stable cell anchor.
+    pub fn location(&self, comment_id: &str) -> Result<Option<(u32, u32)>, ComputeApiError> {
+        let sid = self.sheet_id;
+        let id = comment_id.to_string();
+        self.dispatch.query_engine(move |e| {
+            let comment = e.get_comment(&sid, &id)?;
+            let position = e.get_cell_position(&sid, &comment.cell_ref)?;
+            Some((position.row, position.col))
+        })
+    }
+
     /// Get all comments in this sheet.
     pub fn get_all(&self) -> Result<Vec<Comment>, ComputeApiError> {
         let sid = self.sheet_id;

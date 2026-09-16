@@ -16,6 +16,7 @@ path = "src/main.rs"
 compute-api = { path = "../api" }
 domain-types = { path = "../../domain-types" }
 value-types = { path = "../core/crates/types/value-types" }
+regex = "1"
 rquickjs = { version = "0.12.2", features = ["futures"] }
 tokio = { version = "1", features = ["rt"] }
 serde = { workspace = true }

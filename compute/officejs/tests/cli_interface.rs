@@ -130,7 +130,14 @@ fn inline_file_output_and_in_place_input() {
     )
     .unwrap();
     assert_eq!(
-        f.ok(&["-i", "nested/original.xlsx", "script.js", "-o", "copy.XLSX"]),
+        f.ok(&[
+            "-i",
+            "nested/original.xlsx",
+            "-f",
+            "script.js",
+            "-o",
+            "copy.XLSX"
+        ]),
         "hello"
     );
     assert_eq!(
@@ -171,8 +178,14 @@ fn invalid_arguments_and_help_have_no_workbook_side_effects() {
         (vec!["--close"], "requires -s"),
         (vec!["--discard"], "requires --close"),
         (vec!["--close-all", "-o", "x.xlsx"], "only be combined"),
-        (vec!["-e", "return 1", "script.js"], "either --eval"),
-        (vec!["a.js", "b.js"], "more than once"),
+        (vec!["-e", "return 1", "-f", "script.js"], "either --eval"),
+        (vec!["a.js"], "unexpected argument"),
+        (vec!["--", "a.js"], "unknown option"),
+        (vec!["-f", "a.js", "b.js"], "unexpected argument"),
+        (vec!["-f", "a.js", "--file", "b.js"], "more than once"),
+        (vec!["-f"], "requires a value"),
+        (vec!["--file="], "requires a value"),
+        (vec!["--file", "missing.js"], "failed to read script"),
         (vec!["-i", "a.xlsx", "-i", "b.xlsx"], "more than once"),
         (vec!["-s", "../escape"], "invalid session ID"),
         (vec!["-s", ""], "invalid session ID"),
@@ -497,4 +510,15 @@ fn automatic_and_explicit_recalculation_preserve_compact_pivot_layout() {
         f.ok(&["-i", &file, "-r"]);
         assert_layout();
     }
+}
+
+#[test]
+fn file_flag_supports_session_scripts_and_hyphenated_filenames() {
+    let f = Fixture::new();
+    fs::write(f.path().join("-write.js"), WRITE).unwrap();
+    fs::write(f.path().join("read.js"), READ).unwrap();
+    let id = f.ok(&["-s", "--file=-write.js"]);
+    assert_eq!(f.ok(&["-s", &id, "--file", "read.js"]), "42");
+    f.ok(&["-s", &id, "--close"]);
+    assert_eq!(f.value("workbook.xlsx", "B1"), CellValue::number(42.0));
 }

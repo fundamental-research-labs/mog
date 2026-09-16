@@ -9,8 +9,8 @@ func TestMogArgs(t *testing.T) {
 	for _, test := range []struct{ input, want []string }{
 		{[]string{"save", "a b.xlsx", "out.xlsx"}, []string{"--input", "a b.xlsx", "--output", "out.xlsx"}},
 		{[]string{"save", "--recalculate", "in.xlsx", "out.xlsx"}, []string{"--recalculate", "--input", "in.xlsx", "--output", "out.xlsx"}},
-		{[]string{"run", "in.xlsx", "-script.js", "out.xlsx"}, []string{"--input", "in.xlsx", "--output", "out.xlsx", "--", "-script.js"}},
-		{[]string{"run", "--recalculate", "in.xlsx", "script.js", "out.xlsx"}, []string{"--recalculate", "--input", "in.xlsx", "--output", "out.xlsx", "--", "script.js"}},
+		{[]string{"run", "in.xlsx", "-script.js", "out.xlsx"}, []string{"--input", "in.xlsx", "--output", "out.xlsx", "--file=-script.js"}},
+		{[]string{"run", "--recalculate", "in.xlsx", "script.js", "out.xlsx"}, []string{"--recalculate", "--input", "in.xlsx", "--output", "out.xlsx", "--file=script.js"}},
 	} {
 		got, err := mogArgs(test.input)
 		if err != nil || !reflect.DeepEqual(got, test.want) {

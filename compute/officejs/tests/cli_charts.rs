@@ -72,7 +72,7 @@ impl Fixture {
             });"#,
             )
             .unwrap();
-            command.arg(script);
+            command.arg("--file").arg(script);
         }
         let output_path = self.0.join("output.xlsx");
         let output = command.arg("--output").arg(&output_path).output().unwrap();

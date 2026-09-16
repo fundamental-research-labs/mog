@@ -39,7 +39,7 @@ impl Fixture {
         command.arg("--input").arg(self.0.join("input.xlsx"));
         if let Some(script) = script {
             fs::write(self.0.join("script.js"), script).unwrap();
-            command.arg(self.0.join("script.js"));
+            command.arg("--file").arg(self.0.join("script.js"));
         }
         command.arg("--output").arg(self.0.join("output.xlsx"));
         let output = command.output().unwrap();

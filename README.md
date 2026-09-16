@@ -13,7 +13,7 @@ cargo build -p mog
 ## Quickstart
 
 ```bash
-cargo run -p mog -- compute/officejs/examples/formula.js
+cargo run -p mog -- -f compute/officejs/examples/formula.js
 ```
 
 The example writes `10` to `A1`, `=A1*2` to `A2`, loads the computed value,
@@ -61,13 +61,13 @@ mog -o workbook.xlsx                     # create a blank workbook
 mog -i input.xlsx                         # open and save in place
 mog -i input.xlsx -o copy.xlsx            # save a copy
 mog -i input.xlsx -r                      # recalculate and save in place
-mog -i input.xlsx script.js               # run a script file, then save
+mog -i input.xlsx -f script.js            # run a script file, then save
 mog -e 'console.log("hello")' -o new.xlsx  # run inline JavaScript
 mog --help
 ```
 
-`-e` / `--eval` takes inline JavaScript; a positional filename loads a script.
-Use `--` before a script filename beginning with `-`. Opening and saving without
+`-e` / `--eval` takes inline JavaScript; `-f` / `--file` loads a script file.
+Use `--file=-script.js` for a filename beginning with `-`. Opening and saving without
 a script preserves imported formula caches. `-r` / `--recalculate` evaluates
 formulas before export. Scripts automatically trigger full recalculation after
 they finish, including workbooks imported in manual calculation mode. Within a
@@ -90,7 +90,7 @@ mog -s "$ID" -e 'await Excel.run(async c => {
   c.workbook.worksheets.getItem("Sheet1").getRange("A1").values = [[42]];
   await c.sync();
 });'
-mog -s "$ID" another-script.js
+mog -s "$ID" -f another-script.js
 mog -s "$ID" --close                       # save and end the session
 ```
 

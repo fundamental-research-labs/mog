@@ -22,7 +22,7 @@ func mogArgs(args []string) ([]string, error) {
 		return append(flags, "--input", args[0], "--output", args[1]), nil
 	}
 	if operation == "run" && len(args) == 3 {
-		return append(flags, "--input", args[0], "--output", args[2], "--", args[1]), nil
+		return append(flags, "--input", args[0], "--output", args[2], "--file="+args[1]), nil
 	}
 	return nil, fmt.Errorf("invalid Calipers %s arguments", operation)
 }

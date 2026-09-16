@@ -1,7 +1,7 @@
 //! CLI contracts for imported dynamic arrays.
 //!
 //! These fixtures intentionally use small, deterministic XLSX packages.  The
-//! tests exercise the same `mog -i` / `mog -i script.js` boundary used by callers and
+//! tests exercise the same `mog -i` / `mog -i input.xlsx -f script.js` boundary used by callers and
 //! then reopen the exported package through `compute_api::Workbook`.
 
 use std::{
@@ -111,7 +111,7 @@ impl Fixture {
         if let Some(script) = script {
             let script_path = self.directory.join(format!("{output_name}.js"));
             fs::write(&script_path, script).unwrap();
-            command.arg(script_path);
+            command.arg("--file").arg(script_path);
         }
         let result = command.arg("--output").arg(&output).output().unwrap();
         assert!(

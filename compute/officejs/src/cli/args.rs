@@ -1,11 +1,12 @@
 use super::Result;
 use std::path::PathBuf;
 
-pub const HELP: &str = "Usage: mog [OPTIONS] [script.js]
+pub const HELP: &str = "Usage: mog [OPTIONS]
 
   -i, --input <file.xlsx>   Load a workbook (default: blank)
   -o, --output <file.xlsx>  Save here (default: input file, or workbook.xlsx)
-  -e, --eval <source>       Run inline JavaScript instead of a script file
+  -e, --eval <source>       Run inline JavaScript
+  -f, --file <script.js>    Run a JavaScript file
   -r, --recalculate         Evaluate formulas (automatic after a script)
   -s, --session [ID]        Start a background session, or use an existing one
                            Keep workbook changes in memory until closed
@@ -37,12 +38,6 @@ impl Args {
         };
         let mut args = raw.into_iter().peekable();
         while let Some(arg) = args.next() {
-            if arg == "--" {
-                for path in args.by_ref() {
-                    set(&mut result.script, path.into(), "script file")?;
-                }
-                break;
-            }
             let (flag, inline) = arg
                 .split_once('=')
                 .map_or((arg.as_str(), None), |(a, b)| (a, Some(b)));
@@ -57,6 +52,7 @@ impl Args {
                 "-i" | "--input" => set(&mut result.input, value()?.into(), flag)?,
                 "-o" | "--output" => set(&mut result.output, value()?.into(), flag)?,
                 "-e" | "--eval" => set(&mut result.eval, value()?, flag)?,
+                "-f" | "--file" => set(&mut result.script, value()?.into(), flag)?,
                 "-s" | "--session" => {
                     let id = if let Some(id) = inline {
                         if id.is_empty() {
@@ -78,11 +74,16 @@ impl Args {
                 _ if arg.starts_with('-') => {
                     return Err(format!("unknown option: {arg}\nUse mog --help for usage.").into());
                 }
-                _ => set(&mut result.script, arg.into(), "script file")?,
+                _ => {
+                    return Err(format!(
+                        "unexpected argument: {arg}; use --file to run a script file"
+                    )
+                    .into());
+                }
             }
         }
         if result.eval.is_some() && result.script.is_some() {
-            return Err("use either --eval or a script file".into());
+            return Err("use either --eval or --file".into());
         }
         if matches!(result.session, Some(Some(_))) && result.input.is_some() {
             return Err(

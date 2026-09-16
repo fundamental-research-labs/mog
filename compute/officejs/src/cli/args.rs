@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 pub const HELP: &str = "Usage: mog [OPTIONS] [script.js]
 
-  -i, --input <file.xlsx>   Load a workbook
+  -i, --input <file.xlsx>   Load a workbook (default: blank)
   -o, --output <file.xlsx>  Save here (default: input file, or workbook.xlsx)
   -e, --eval <source>       Run inline JavaScript instead of a script file
   -r, --recalculate         Evaluate formulas (automatic after a script)
@@ -14,9 +14,6 @@ pub const HELP: &str = "Usage: mog [OPTIONS] [script.js]
       --discard            End without saving (with --close or --close-all)
   -h, --help               Show this help
 
-With no arguments, shows this help without creating a workbook.
-Without input, starts blank. Automatic filenames never overwrite existing files:
-workbook.xlsx, workbook-2.xlsx, workbook-3.xlsx, ... in the current directory.
 Sessions keep workbook changes in memory until closed. A failed save keeps the
 session alive; retry with -o <file.xlsx>, or close with --discard.
 ";

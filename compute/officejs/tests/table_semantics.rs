@@ -533,7 +533,7 @@ fn workbook_table_add_uses_active_sheet_for_unqualified_and_address_sheet_for_qu
 }
 
 #[test]
-fn table_delete_preserves_cells_and_removes_fresh_lookup() {
+fn table_delete_clears_cells_and_removes_fresh_lookup() {
     let output = run_office_js(
         r#"
       return await Excel.run(async context => {
@@ -555,12 +555,12 @@ fn table_delete_preserves_cells_and_removes_fresh_lookup() {
       });
     "#,
     )
-    .expect("table delete should preserve values");
+    .expect("table delete should clear values");
 
     assert_eq!(
         output.value,
         json!({
-            "cells": [["A", "B"], [1, 2], [3, 4]],
+            "cells": [["", ""], ["", ""], ["", ""]],
             "missing": true
         })
     );

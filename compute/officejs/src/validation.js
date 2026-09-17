@@ -35,16 +35,26 @@
     );
   }
 
+  function RangeAreas(context, worksheet) {
+    ClientObject.call(this, context);
+    this._worksheet = worksheet;
+  }
+  RangeAreas.prototype = Object.create(ClientObject.prototype);
+  RangeAreas.prototype.constructor = RangeAreas;
+  RangeAreas.prototype._scalarProperties = ["address", "addressLocal", "areaCount", "cellCount"];
+  RangeAreas.prototype._scalarProperties.forEach(function (name) {
+    Object.defineProperty(RangeAreas.prototype, name, {
+      get: function () {
+        if (!this._loaded[name]) throw propertyNotLoaded(name);
+        return this["_" + name];
+      }
+    });
+  });
+  RangeAreas.prototype.toJSON = toJSON;
+  Excel.RangeAreas = RangeAreas;
+
   function createRangeAreas(context, worksheet) {
-    if (officeJs && typeof officeJs.createRangeAreas === "function") {
-      return officeJs.createRangeAreas(context, worksheet || null);
-    }
-    if (typeof Excel.RangeAreas === "function") {
-      return new Excel.RangeAreas(context, worksheet || null);
-    }
-    // Office returns RangeAreas. Until that adapter is wired, bind a Range so
-    // getInvalidCells / getInvalidCellsOrNullObject can still resolve cells.
-    return new Excel.Range(context, worksheet || null, null);
+    return new RangeAreas(context, worksheet);
   }
 
   function queueRangeAreasOperation(result, operation) {

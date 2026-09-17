@@ -23,7 +23,7 @@ fn non_first_column_keeps_banding() {
         ..Default::default()
     }));
     let fmt = resolve_table_cell_format(&table, 4, 2).unwrap();
-    assert_eq!(fmt.fill, Some(hex("#D6DCE5")));
+    assert_eq!(fmt.fill, None);
     assert!(fmt.font_bold.is_none());
 }
 
@@ -48,7 +48,7 @@ fn non_last_column_keeps_banding() {
         ..Default::default()
     }));
     let fmt = resolve_table_cell_format(&table, 4, 2).unwrap();
-    assert_eq!(fmt.fill, Some(hex("#D6DCE5")));
+    assert_eq!(fmt.fill, None);
     assert!(fmt.font_bold.is_none());
 }
 
@@ -111,7 +111,7 @@ fn col_banding_with_last_col_emphasis_col0() {
         ..Default::default()
     }));
     let fmt = resolve_table_cell_format(&table, 1, 0).unwrap();
-    assert_eq!(fmt.fill, Some(hex("#FFFFFF")));
+    assert_eq!(fmt.fill, Some(hex("#D9E1F2")));
 }
 
 #[test]
@@ -123,7 +123,7 @@ fn col_banding_with_last_col_emphasis_col1() {
         ..Default::default()
     }));
     let fmt = resolve_table_cell_format(&table, 1, 1).unwrap();
-    assert_eq!(fmt.fill, Some(hex("#D6DCE5")));
+    assert_eq!(fmt.fill, None);
 }
 
 #[test]

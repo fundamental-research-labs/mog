@@ -10,7 +10,7 @@ fn banded_rows_first_data_row_odd_fill() {
         ..Default::default()
     }));
     let fmt = resolve_table_cell_format(&table, 3, 2).unwrap();
-    assert_eq!(fmt.fill, Some(hex("#FFFFFF")));
+    assert_eq!(fmt.fill, Some(hex("#D9E1F2")));
 }
 
 #[test]
@@ -21,7 +21,7 @@ fn banded_rows_second_data_row_even_fill() {
         ..Default::default()
     }));
     let fmt = resolve_table_cell_format(&table, 4, 2).unwrap();
-    assert_eq!(fmt.fill, Some(hex("#D6DCE5")));
+    assert_eq!(fmt.fill, None);
 }
 
 #[test]
@@ -32,7 +32,7 @@ fn banded_rows_third_data_row_odd_fill() {
         ..Default::default()
     }));
     let fmt = resolve_table_cell_format(&table, 5, 2).unwrap();
-    assert_eq!(fmt.fill, Some(hex("#FFFFFF")));
+    assert_eq!(fmt.fill, Some(hex("#D9E1F2")));
 }
 
 #[test]
@@ -43,7 +43,7 @@ fn banded_rows_fourth_data_row_even_fill() {
         ..Default::default()
     }));
     let fmt = resolve_table_cell_format(&table, 6, 2).unwrap();
-    assert_eq!(fmt.fill, Some(hex("#D6DCE5")));
+    assert_eq!(fmt.fill, None);
 }
 
 #[test]
@@ -54,7 +54,7 @@ fn banded_columns_col_index_0_odd() {
         ..Default::default()
     }));
     let fmt = resolve_table_cell_format(&table, 3, 1).unwrap();
-    assert_eq!(fmt.fill, Some(hex("#FFFFFF")));
+    assert_eq!(fmt.fill, Some(hex("#D9E1F2")));
 }
 
 #[test]
@@ -65,7 +65,7 @@ fn banded_columns_col_index_1_even() {
         ..Default::default()
     }));
     let fmt = resolve_table_cell_format(&table, 3, 2).unwrap();
-    assert_eq!(fmt.fill, Some(hex("#D6DCE5")));
+    assert_eq!(fmt.fill, None);
 }
 
 #[test]
@@ -76,7 +76,7 @@ fn banded_columns_col_index_2_odd() {
         ..Default::default()
     }));
     let fmt = resolve_table_cell_format(&table, 3, 3).unwrap();
-    assert_eq!(fmt.fill, Some(hex("#FFFFFF")));
+    assert_eq!(fmt.fill, Some(hex("#D9E1F2")));
 }
 
 #[test]
@@ -102,9 +102,9 @@ fn dual_banding_data_cells_get_row_banding_fill() {
         ..Default::default()
     }));
     let fmt = resolve_table_cell_format(&table, 1, 0).unwrap();
-    assert_eq!(fmt.fill, Some(hex("#FFFFFF")));
+    assert_eq!(fmt.fill, Some(hex("#D9E1F2")));
     let fmt2 = resolve_table_cell_format(&table, 2, 0).unwrap();
-    assert_eq!(fmt2.fill, Some(hex("#D6DCE5")));
+    assert_eq!(fmt2.fill, None);
 }
 
 #[test]
@@ -116,7 +116,7 @@ fn dual_banding_even_row_fill_all_columns() {
     }));
     for c in 0..=3 {
         let fmt = resolve_table_cell_format(&table, 2, c).unwrap();
-        assert_eq!(fmt.fill, Some(hex("#D6DCE5")), "col {} mismatch", c);
+        assert_eq!(fmt.fill, None, "col {} mismatch", c);
     }
 }
 
@@ -130,7 +130,7 @@ fn dual_banding_column_transition_border() {
     let fmt = resolve_table_cell_format(&table, 1, 1).unwrap();
     assert!(fmt.border_left.is_some());
     assert_eq!(fmt.border_left.as_ref().unwrap().style, BorderStyle::Thin);
-    assert_eq!(fmt.border_left.as_ref().unwrap().color, hex("#8FAADC"));
+    assert_eq!(fmt.border_left.as_ref().unwrap().color, hex("#8EA9DB"));
 }
 
 #[test]

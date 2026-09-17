@@ -33,12 +33,32 @@ pub fn build_table_for_style_resolution(table: &Table) -> Table {
 /// into the effective format chain.
 ///
 /// Maps: fill → background_color, font_color → font_color, font_bold → bold.
-/// Border fields are ignored (out of scope — CellFormat has no border fields).
 pub fn table_cell_format_to_cell_format(tcf: &TableCellFormat) -> CellFormat {
+    let border = |side: &Option<compute_table::types::BorderDef>| {
+        side.as_ref().map(|side| domain_types::CellBorderSide {
+            style: Some(match side.style {
+                compute_table::types::BorderStyle::Thin => ooxml_types::styles::BorderStyle::Thin,
+                compute_table::types::BorderStyle::Medium => {
+                    ooxml_types::styles::BorderStyle::Medium
+                }
+                compute_table::types::BorderStyle::Thick => ooxml_types::styles::BorderStyle::Thick,
+            }),
+            color: Some(side.color.to_hex_rgb()),
+            ..Default::default()
+        })
+    };
+    let borders = domain_types::CellBorders {
+        top: border(&tcf.border_top),
+        bottom: border(&tcf.border_bottom),
+        left: border(&tcf.border_left),
+        right: border(&tcf.border_right),
+        ..Default::default()
+    };
     CellFormat {
         background_color: tcf.fill.as_ref().map(|c| c.to_hex_rgb()),
         font_color: tcf.font_color.as_ref().map(|c| c.to_hex_rgb()),
         bold: tcf.font_bold,
+        borders: (borders != domain_types::CellBorders::default()).then_some(borders),
         ..CellFormat::default()
     }
 }

@@ -77,15 +77,15 @@ pub(super) fn resolved_range_style_id(
     let base = properties::get_workbook_base_format(&stores.storage);
     let column = properties::get_col_format(&stores.storage, sheet_id, col, grid);
     let row_format = properties::get_row_format(&stores.storage, sheet_id, row, grid);
-    let table =
-        super::super::super::resolve_structured_format_at_cell(cell_store, sheet_id, row, col);
     let format = properties::get_effective_format_from_preloaded_layers(
         &base,
         column.as_ref(),
         row_format.as_ref(),
         row,
         col,
-        table.as_ref(),
+        // Table styles are serialized separately and must remain differential.
+        // Baking them into cell styles would override later table style changes.
+        None,
         None,
         cell_store.get_sheet(sheet_id),
         include_imported_column_ranges,

@@ -1,6 +1,26 @@
 use mog::run_office_js;
 
 #[test]
+fn freeze_at_retains_range_position_and_supports_string_and_null() {
+    let result = run_office_js(
+        r#"
+      return Excel.run(async context => {
+        const sheet = context.workbook.worksheets.getActiveWorksheet();
+        sheet.freezePanes.freezeAt("B2:D4");
+        const frozen = sheet.freezePanes.getLocation().load("address");
+        await context.sync();
+        sheet.freezePanes.freezeAt(null);
+        const none = sheet.freezePanes.getLocationOrNullObject();
+        await context.sync();
+        return [frozen.address, none.isNullObject];
+      });
+    "#,
+    )
+    .unwrap();
+    assert_eq!(result.value, serde_json::json!(["Sheet1!B2:D4", true]));
+}
+
+#[test]
 fn table_filters_are_scoped_and_reapplied() {
     let result = run_office_js(r##"
       return Excel.run(async context => {
@@ -110,7 +130,7 @@ fn expansion_caliper_scripts_execute() {
                 "api_range_range_replace" => serde_json::json!(2),
                 "api_range_sheet_replace" => serde_json::json!(3),
                 "api_range_freeze_location" => serde_json::json!("Sheet1!1:2"),
-                "api_range_adjust_indent" => serde_json::json!("0:2"),
+                "api_range_adjust_indent" => serde_json::json!(2.0 / 1440.0),
                 other => panic!("Missing expected result for {other}"),
             };
             assert_eq!(

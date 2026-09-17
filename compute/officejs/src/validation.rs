@@ -1397,3 +1397,44 @@ fn encoding_message(message: impl Into<String>) -> ValidationError {
         message: message.into(),
     }
 }
+/// Coalesce invalid cells into rectangles without including valid cells.
+pub(crate) fn invalid_cell_areas(cells: &[(u32, u32)]) -> Vec<String> {
+    let mut cells = cells.to_vec();
+    cells.sort_unstable();
+    cells.dedup();
+    let mut runs: Vec<(u32, u32, u32, u32)> = Vec::new();
+    for (row, col) in cells {
+        if let Some(last) = runs.last_mut()
+            && last.0 == row
+            && last.3 + 1 == col
+        {
+            last.3 = col;
+        } else {
+            runs.push((row, col, row, col));
+        }
+    }
+    let mut rectangles: Vec<(u32, u32, u32, u32)> = Vec::new();
+    for run in runs {
+        if let Some(rect) = rectangles
+            .iter_mut()
+            .rev()
+            .find(|rect| rect.2 + 1 == run.0 && rect.1 == run.1 && rect.3 == run.3)
+        {
+            rect.2 = run.2;
+        } else {
+            rectangles.push(run);
+        }
+    }
+    rectangles
+        .into_iter()
+        .map(|(start_row, start_column, end_row, end_column)| {
+            crate::range_navigation::RangeAddress::Cells {
+                start_row,
+                start_column,
+                end_row,
+                end_column,
+            }
+            .to_a1()
+        })
+        .collect()
+}

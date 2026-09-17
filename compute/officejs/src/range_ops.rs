@@ -103,15 +103,6 @@ fn merge(
             .merge_range(start_row, start_col, end_row, end_col)
             .map_err(engine)?;
     }
-    range
-        .sheet()
-        .formats()
-        .patch_format_for_ranges(
-            vec![(start_row, start_col, end_row, end_col)],
-            serde_json::from_value(json!({ "wrapText": false })).map_err(engine)?,
-            Vec::new(),
-        )
-        .map_err(engine)?;
     Ok(())
 }
 

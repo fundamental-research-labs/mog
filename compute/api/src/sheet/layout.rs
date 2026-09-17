@@ -175,11 +175,34 @@ impl SheetLayout {
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
+    /// Freeze the supplied rectangular pane, preserving its worksheet position.
+    pub fn freeze_range(
+        &self,
+        start_row: u32,
+        start_col: u32,
+        end_row: u32,
+        end_col: u32,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .call_engine(move |e| e.freeze_range(&sid, start_row, start_col, end_row, end_col))
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
     /// Get the frozen panes configuration.
     pub fn get_frozen_panes(&self) -> Result<FrozenPanes, ComputeApiError> {
         let sid = self.sheet_id;
         self.dispatch
             .query_engine(move |e| e.get_frozen_panes_query(&sid))
+    }
+
+    /// First visible cell in the scrollable frozen pane.
+    pub fn get_frozen_pane_top_left(
+        &self,
+    ) -> Result<Option<cell_types::SheetPos>, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .query_engine(move |e| e.get_frozen_pane_top_left(&sid))
     }
 
     /// Freeze a number of rows, preserving the current column freeze.

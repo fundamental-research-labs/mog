@@ -57,7 +57,7 @@ pub fn resolve_table_cell_format(table: &Table, row: u32, col: u32) -> Option<Ta
             fill: style_def.header_fill,
             font_color: style_def.header_font_color,
             font_bold: Some(true),
-            border_bottom: Some(medium_border(border_color)),
+            border_bottom: (!style_def.horizontal_borders).then(|| medium_border(border_color)),
             border_top: Some(thin_border(border_color)),
             border_left: None,
             border_right: None,
@@ -166,7 +166,9 @@ pub fn resolve_table_cell_format(table: &Table, row: u32, col: u32) -> Option<Ta
         fill,
         font_color,
         font_bold,
-        border_top: None,
+        border_top: style_def
+            .horizontal_borders
+            .then(|| thin_border(border_color)),
         border_bottom: None,
         border_left: column_band_border,
         border_right: None,

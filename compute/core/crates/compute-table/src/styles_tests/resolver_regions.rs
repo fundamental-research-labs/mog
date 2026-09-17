@@ -51,14 +51,10 @@ fn header_is_bold() {
 }
 
 #[test]
-fn header_has_medium_bottom_border() {
+fn medium2_header_has_no_bottom_border() {
     let table = make_table(None);
     let fmt = resolve_table_cell_format(&table, 2, 1).unwrap();
-    assert!(fmt.border_bottom.is_some());
-    assert_eq!(
-        fmt.border_bottom.as_ref().unwrap().style,
-        BorderStyle::Medium
-    );
+    assert!(fmt.border_bottom.is_none());
 }
 
 #[test]

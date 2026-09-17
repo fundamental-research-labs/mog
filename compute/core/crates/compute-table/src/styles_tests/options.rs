@@ -9,7 +9,7 @@ fn no_header_first_row_is_data() {
         ..Default::default()
     }));
     let fmt = resolve_table_cell_format(&table, 2, 2).unwrap();
-    assert_eq!(fmt.fill, Some(hex("#FFFFFF")));
+    assert_eq!(fmt.fill, Some(hex("#D9E1F2")));
     assert!(fmt.font_bold.is_none());
 }
 
@@ -34,8 +34,8 @@ fn no_header_banding_starts_from_first_row() {
     }));
     let fmt2 = resolve_table_cell_format(&table, 2, 2).unwrap();
     let fmt3 = resolve_table_cell_format(&table, 3, 2).unwrap();
-    assert_eq!(fmt2.fill, Some(hex("#FFFFFF")));
-    assert_eq!(fmt3.fill, Some(hex("#D6DCE5")));
+    assert_eq!(fmt2.fill, Some(hex("#D9E1F2")));
+    assert_eq!(fmt3.fill, None);
 }
 
 #[test]
@@ -46,7 +46,7 @@ fn no_totals_last_row_is_data() {
         ..Default::default()
     }));
     let fmt = resolve_table_cell_format(&table, 7, 2).unwrap();
-    assert_eq!(fmt.fill, Some(hex("#FFFFFF")));
+    assert_eq!(fmt.fill, Some(hex("#D9E1F2")));
     assert!(fmt.font_bold.is_none());
 }
 

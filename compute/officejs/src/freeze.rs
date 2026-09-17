@@ -30,6 +30,9 @@ impl ExtensionHandler for FreezeHandler {
             "freezeLocation" => {
                 use crate::range_navigation::RangeAddress;
                 let panes = layout.get_frozen_panes().map_err(engine)?;
+                let top_left = layout.get_frozen_pane_top_left().map_err(engine)?;
+                let end_row = top_left.map(|pos| pos.row()).unwrap_or(panes.rows);
+                let end_col = top_left.map(|pos| pos.col()).unwrap_or(panes.cols);
                 let address = match (panes.rows, panes.cols) {
                     (0, 0) => None,
                     (rows, 0) => Some(RangeAddress::Rows {
@@ -41,10 +44,10 @@ impl ExtensionHandler for FreezeHandler {
                         end: cols - 1,
                     }),
                     (rows, cols) => Some(RangeAddress::Cells {
-                        start_row: 0,
-                        start_column: 0,
-                        end_row: rows - 1,
-                        end_column: cols - 1,
+                        start_row: end_row.saturating_sub(rows),
+                        start_column: end_col.saturating_sub(cols),
+                        end_row: end_row.saturating_sub(1),
+                        end_column: end_col.saturating_sub(1),
                     }),
                 };
                 let is_null = address.is_none();
@@ -87,9 +90,9 @@ impl ExtensionHandler for FreezeHandler {
                         code: error.code,
                         message: error.message,
                     })?;
-                let (start_row, start_col, _, _) = parsed.bounds();
+                let (start_row, start_col, end_row, end_col) = parsed.bounds();
                 layout
-                    .set_frozen_panes(start_row, start_col)
+                    .freeze_range(start_row, start_col, end_row, end_col)
                     .map_err(engine)?;
             }
             _ => return Ok(false),

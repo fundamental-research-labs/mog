@@ -177,6 +177,24 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
     }
 
     let sheet_uuid = sheet_id.to_uuid_string();
+    // Excel persists blank members of an active merge. Materialize them only
+    // during export so unmerging does not leave authored blank/style cells.
+    if let Some(sheet) = cell_store.get_sheet(sheet_id) {
+        for region in
+            crate::storage::sheet::merges::get_all_merges(&stores.storage, *sheet_id, sheet)
+        {
+            for row in region.start_row..=region.end_row {
+                for col in region.start_col..=region.end_col {
+                    cells_by_pos.entry((row, col)).or_insert_with(|| {
+                        let mut cell = range_payload_cell(row, col, CellValue::Null);
+                        cell.style_id =
+                            positional_style_id_at(stores, cell_store, sheet_id, row, col, palette);
+                        cell
+                    });
+                }
+            }
+        }
+    }
     for pivot in cell_store
         .all_pivot_tables()
         .iter()

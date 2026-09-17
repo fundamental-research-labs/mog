@@ -348,7 +348,7 @@ fn data_validation_valid_reports_mixed_cells() {
 }
 
 #[test]
-fn data_validation_get_invalid_cells_returns_null_object_or_writable_range() {
+fn data_validation_get_invalid_cells_returns_range_areas_without_values_setter() {
     let output = run_office_js(
         r#"
         return await Excel.run(async context => {
@@ -375,7 +375,28 @@ fn data_validation_get_invalid_cells_returns_null_object_or_writable_range() {
     .expect("getInvalidCells should resolve through the shipped runtime");
 
     assert_eq!(output.value["noneIsNull"], json!(true));
-    assert_eq!(output.value["a1"], json!([["Yes"]]));
+    assert_eq!(output.value["a1"], json!([["Nope"]]));
+}
+
+#[test]
+fn invalid_cell_areas_exclude_valid_cells_between_rectangles() {
+    let output = run_office_js(r#"
+      return Excel.run(async context => {
+        const sheet = context.workbook.worksheets.getActiveWorksheet();
+        const range = sheet.getRange("A1:B3");
+        range.values = [["bad", "bad"], ["Yes", "Yes"], ["bad", "bad"]];
+        range.dataValidation.rule = { list: { source: "Yes,No", inCellDropDown: true } };
+        const invalid = range.dataValidation.getInvalidCells();
+        invalid.load("address,areaCount,cellCount");
+        await context.sync();
+        return { address: invalid.address, areas: invalid.areaCount, cells: invalid.cellCount,
+                 rangeAreas: invalid instanceof Excel.RangeAreas, range: invalid instanceof Excel.Range };
+      });
+    "#).unwrap();
+    assert_eq!(
+        output.value,
+        json!({"address":"Sheet1!A1:B1,Sheet1!A3:B3", "areas":2, "cells":4, "rangeAreas":true, "range":false})
+    );
 }
 
 #[test]

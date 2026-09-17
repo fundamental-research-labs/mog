@@ -478,6 +478,9 @@ pub struct TableStyleDef {
     pub data_font_color: Option<Color>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub border_color: Option<Color>,
+    /// Thin horizontal rules throughout the table, including the header.
+    #[serde(default)]
+    pub horizontal_borders: bool,
 }
 
 // ============================================================================

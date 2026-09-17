@@ -28,6 +28,8 @@
   };
 
   FreezePaneCollection.prototype.freezeAt = function (range) {
+    if (range == null) return this.unfreeze();
+    if (typeof range === "string") range = this._worksheet.getRange(range);
     this.context._queue.push({
       op: "freezeAt",
       worksheetId: this._worksheet._id,

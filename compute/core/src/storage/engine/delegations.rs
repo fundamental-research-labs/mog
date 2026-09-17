@@ -456,6 +456,57 @@ impl ComputeEngine {
         self.with_history(|engine| sheet_lifecycle::set_frozen_panes(engine, sheet_id, rows, cols))
     }
 
+    /// Freeze a rectangular pane, retaining its position in the worksheet.
+    pub fn freeze_range(
+        &mut self,
+        sheet_id: &SheetId,
+        start_row: u32,
+        start_col: u32,
+        end_row: u32,
+        end_col: u32,
+    ) -> Result<MutationResult, ComputeError> {
+        if start_row > end_row || start_col > end_col || end_row >= 1_048_575 || end_col >= 16_383 {
+            return Err(ComputeError::Eval {
+                message: "Frozen range must leave a scrollable row and column".into(),
+            });
+        }
+        self.with_history(|engine| {
+            let result = sheet_lifecycle::set_frozen_panes(
+                engine,
+                sheet_id,
+                end_row - start_row + 1,
+                end_col - start_col + 1,
+            )?;
+            if let Some(pane) = engine
+                .stores
+                .storage
+                .sheet_metadata
+                .get_mut(sheet_id)
+                .and_then(|meta| meta.view.pane.as_mut())
+            {
+                pane.top_left_cell =
+                    Some(cell_types::SheetPos::new(end_row + 1, end_col + 1).to_string());
+            }
+            Ok(result)
+        })
+    }
+
+    /// First visible cell in the scrollable frozen pane.
+    pub fn get_frozen_pane_top_left(&self, sheet_id: &SheetId) -> Option<cell_types::SheetPos> {
+        let pane = self
+            .stores
+            .storage
+            .sheet_metadata
+            .get(sheet_id)?
+            .view
+            .pane
+            .as_ref()?;
+        if !pane.state.is_frozen() {
+            return None;
+        }
+        pane.top_left_cell.as_deref()?.parse().ok()
+    }
+
     #[bridge::write]
     pub fn set_view_option(
         &mut self,

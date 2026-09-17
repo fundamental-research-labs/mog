@@ -251,10 +251,15 @@ impl TableRef {
         load_table_properties(&table, properties)
     }
 
-    /// Delete the table while preserving its cell contents as normal cells.
+    /// Delete the table and clear its former range.
     pub(crate) fn delete(&self) -> Result<(), TableError> {
+        let address = self.range_address(TableRangeKind::Full)?;
         let table = self.resolve()?;
         self.sheet.tables().delete(&table.name).map_err(engine)?;
+        crate::range_content::clear(&self.sheet, &address, "All").map_err(|error| TableError {
+            code: error.code,
+            message: error.message,
+        })?;
         Ok(())
     }
 

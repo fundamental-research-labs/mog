@@ -9,7 +9,7 @@ fn blank_workbook() -> Workbook {
 }
 
 #[test]
-fn values_preserve_javascript_scalar_types_and_formula_intent() {
+fn values_parse_strings_and_preserve_typed_scalars_and_formula_intent() {
     let workbook = blank_workbook();
     let output = run_office_js_with_workbook(
         &workbook,
@@ -32,26 +32,19 @@ fn values_preserve_javascript_scalar_types_and_formula_intent() {
 
     assert_eq!(
         output.value["values"],
-        json!([
-            ["001", "TRUE", "1.5", true, false, 7.25],
-            [14.5, "001", "", "", "", ""]
-        ])
+        json!([[1, true, 1.5, true, false, 7.25], [14.5, 1, "", "", "", ""]])
     );
     assert_eq!(
         output.value["formulas"],
         json!([
-            ["001", "TRUE", "1.5", true, false, 7.25],
-            ["=F1*2", "001", "", "", "", ""]
+            [1, true, 1.5, true, false, 7.25],
+            ["=F1*2", 1, "", "", "", ""]
         ])
     );
 }
 
 #[test]
 fn values_formula_markers_are_distinct_from_literal_strings() {
-    // Microsoft documents +, -, and = as Range.values formula markers. It
-    // does not document editor-style apostrophe stripping for this API; the
-    // apostrophe expectation below is a provisional local policy pending a
-    // recorded Excel host observation.
     let workbook = blank_workbook();
     let output = run_office_js_with_workbook(
         &workbook,
@@ -69,10 +62,10 @@ fn values_formula_markers_are_distinct_from_literal_strings() {
     )
     .expect("formula-marker Office.js write should succeed");
 
-    assert_eq!(output.value["values"], json!([[10, 20, 30, -10, "'001"]]));
+    assert_eq!(output.value["values"], json!([[10, 20, 30, -10, "001"]]));
     assert_eq!(
         output.value["formulas"],
-        json!([[10, "=A1*2", "=+A1*3", "=-A1", "'001"]])
+        json!([[10, "=A1*2", "=+A1*3", "=-A1", "001"]])
     );
 }
 

@@ -117,12 +117,24 @@ pub(super) fn build_cell_data_for_cell_id(
         return None;
     }
 
+    // Excel stores a reference to a named formula in array form even when
+    // its current result is scalar. Constants and simple named cells remain
+    // ordinary formulas; the shared name resolver distinguishes these cases.
+    let named_formula = formula.as_deref().is_some_and(|formula| {
+        let name = formula.trim().trim_start_matches('=');
+        matches!(
+            crate::eval_bridge::StoreAccess::new(cell_store, *cell_id, *sheet_id)
+                .resolve_defined_name(name),
+            Some(formula_types::ResolvedName::Formula { .. })
+        )
+    });
     let dynamic = formula.is_some()
         && match cell_store.formula_result_mode(cell_id) {
             Some(FormulaResultMode::Dynamic) => true,
             Some(FormulaResultMode::Cse | FormulaResultMode::LegacyScalar) => false,
             None => {
                 stores.compute.is_dynamic_array(cell_id).unwrap_or(false)
+                    || named_formula
                     || (cell_store.projection_registry.get(cell_id).is_some()
                         && !cell_store.is_cse_anchor(cell_id))
             }
@@ -136,11 +148,13 @@ pub(super) fn build_cell_data_for_cell_id(
             // ordinary formula, not `t="array"`. Keep array metadata only
             // when the spill occupies more than one cell.
             if projection.rows == 1 && projection.cols == 1 {
-                None
+                named_formula.then_some(origin)
             } else {
                 Some(format!("{origin}:{end}"))
             }
-        } else if matches!(value, CellValue::Error(value_types::CellError::Spill, _)) {
+        } else if named_formula
+            || matches!(value, CellValue::Error(value_types::CellError::Spill, _))
+        {
             Some(origin)
         } else {
             array_refs.get(cell_id).cloned()
@@ -260,17 +274,14 @@ fn cell_style_id(
     // An XLSX cellXf is a complete style at the cell layer; it does not retain
     // Mog's property-level inheritance from row, column, authored range, or
     // structured/table layers. Generated XFs must therefore snapshot the full
-    // authored cascade. Conditional formatting is deliberately excluded: it is
-    // exported independently and must remain dynamic.
-    let table_format = crate::storage::engine::services::resolve_structured_format_at_cell(
-        cell_store, sheet_id, row, col,
-    );
+    // authored cascade. Table styles and conditional formatting are exported
+    // independently and must remain dynamic.
     let effective = crate::storage::properties::get_effective_format_preloaded(
         &stores.storage,
         sheet_id,
         row,
         col,
-        table_format.as_ref(),
+        None,
         Some(props),
         stores.grid_indexes.get(sheet_id),
         cell_store.get_sheet(sheet_id),

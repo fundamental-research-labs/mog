@@ -434,14 +434,20 @@ mod tests {
             .expect("create_table");
 
         let header_before = engine.get_resolved_format(&sid, 0, 0);
-        let banded_before = engine.get_resolved_format(&sid, 2, 0);
+        let banded_before = engine.get_resolved_format(&sid, 1, 0);
+        let unbanded_before = engine.get_resolved_format(&sid, 2, 0);
         assert!(
             header_before.background_color.is_some(),
             "default table style should format the header row"
         );
-        assert!(
-            banded_before.background_color.is_some(),
-            "default table style should format banded data rows"
+        assert_eq!(
+            banded_before.background_color.as_deref(),
+            Some("#d9e1f2"),
+            "Medium2 fills the first data row"
+        );
+        assert_eq!(
+            unbanded_before.background_color, None,
+            "Medium2 leaves the second data row unfilled"
         );
 
         engine
@@ -457,18 +463,13 @@ mod tests {
             "post-convert style must not come from a table layer"
         );
 
-        let header_after = engine.get_resolved_format(&sid, 0, 0);
-        let banded_after = engine.get_resolved_format(&sid, 2, 0);
-        assert_eq!(
-            header_after.background_color,
-            header_before.background_color
-        );
-        assert_eq!(header_after.font_color, header_before.font_color);
-        assert_eq!(header_after.bold, header_before.bold);
-        assert_eq!(
-            banded_after.background_color,
-            banded_before.background_color
-        );
+        for (row, before) in [(0, header_before), (1, banded_before), (2, unbanded_before)] {
+            let after = engine.get_resolved_format(&sid, row, 0);
+            assert_eq!(after.background_color, before.background_color, "row {row}");
+            assert_eq!(after.font_color, before.font_color, "row {row}");
+            assert_eq!(after.bold, before.bold, "row {row}");
+            assert_eq!(after.borders, before.borders, "row {row}");
+        }
     }
 
     #[test]

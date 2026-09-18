@@ -55,7 +55,7 @@ fn all_fifty_function_calipers_cases_produce_expected_values_and_errors() {
         ("max", json!([4, -2])),
         ("median", json!([2, 5])),
         ("count", json!([3, 3])),
-        ("countA", json!([5, 3])),
+        ("countA", json!([5, "#VALUE!"])),
         ("len", json!([8, 0])),
         ("left", json!(["abc", "a"])),
         ("right", json!(["def", "f"])),
@@ -63,7 +63,7 @@ fn all_fifty_function_calipers_cases_produce_expected_values_and_errors() {
         ("lower", json!(["hello", "a1 b2"])),
         ("upper", json!(["HELLO", "A1 B2"])),
         ("trim", json!(["one two", ""])),
-        ("concatenate", json!(["say \"hi\"2", "=1+1"])),
+        ("concatenate", json!(["#VALUE!", "=1+1"])),
         ("exact", json!([true, false])),
     ];
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -129,6 +129,34 @@ fn all_fifty_function_calipers_cases_produce_expected_values_and_errors() {
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn concatenate_rejects_js_numbers_and_counta_rejects_js_text() {
+    let result = run_office_js(
+        r#"
+        return await Excel.run(async context => {
+            const f = context.workbook.functions;
+            const concatNum = f.concatenate("say ", "\"hi\"", 2).load();
+            const concatText = f.concatenate("=", "1+1").load();
+            const countNumbers = f.countA(1, 0, 4).load();
+            const countScalars = f.countA("", false, 0).load();
+            await context.sync();
+            return {concatNum, concatText, countNumbers, countScalars};
+        });
+    "#,
+    )
+    .unwrap()
+    .value;
+    assert_eq!(
+        result,
+        json!({
+            "concatNum": {"value": null, "error": "#VALUE!"},
+            "concatText": {"value": "=1+1", "error": null},
+            "countNumbers": {"value": 3, "error": null},
+            "countScalars": {"value": null, "error": "#VALUE!"}
+        })
+    );
 }
 
 #[test]

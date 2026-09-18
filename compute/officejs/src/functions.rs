@@ -3,7 +3,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use serde_json::{Value, json};
-use value_types::CellValue;
+use value_types::{CellError, CellValue};
 
 use crate::dispatch::{ExtensionHandler, ExtensionObject, HostDispatchContext};
 use crate::host::BatchError;
@@ -67,24 +67,40 @@ impl ExtensionHandler for FunctionsHandler {
         let args = operation["args"]
             .as_array()
             .ok_or_else(|| invalid("Expected function arguments"))?;
-        let args = args
-            .iter()
-            .map(|arg| argument(arg, context))
-            .collect::<Result<Vec<_>, _>>()?;
-        let sheet = context
-            .worksheet(required_str(operation, "worksheetId")?)?
-            .sheet();
-        let value = context
-            .workbook()
-            .names()
-            .evaluate_expression(sheet.id(), &format!("={name}({})", args.join(",")))
-            .map_err(engine)?;
+        let value = if let Some(error) = office_js_argument_error(name, args) {
+            error
+        } else {
+            let args = args
+                .iter()
+                .map(|arg| argument(arg, context))
+                .collect::<Result<Vec<_>, _>>()?;
+            let sheet = context
+                .worksheet(required_str(operation, "worksheetId")?)?
+                .sheet();
+            context
+                .workbook()
+                .names()
+                .evaluate_expression(sheet.id(), &format!("={name}({})", args.join(",")))
+                .map_err(engine)?
+        };
         context.bind_object(
             required_str(operation, "id")?,
             Arc::new(FunctionResult { value }),
         );
         Ok(true)
     }
+}
+
+/// Excel.Functions argument types are narrower than worksheet functions.
+/// CONCATENATE accepts JS strings (and ranges / results); COUNTA accepts JS
+/// numbers (and ranges / results). Other JS scalars become `#VALUE!`.
+fn office_js_argument_error(name: &str, args: &[Value]) -> Option<CellValue> {
+    let allowed = match name {
+        "CONCATENATE" => args.iter().all(|arg| arg.is_string() || arg.is_object()),
+        "COUNTA" => args.iter().all(|arg| arg.is_number() || arg.is_object()),
+        _ => true,
+    };
+    (!allowed).then_some(CellValue::Error(CellError::Value, None))
 }
 
 fn argument(value: &Value, context: &HostDispatchContext<'_>) -> Result<String, BatchError> {

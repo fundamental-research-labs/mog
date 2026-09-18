@@ -542,6 +542,7 @@ impl Host {
         registry.register(crate::range_ops::RangeOpsHandler);
         registry.register(crate::range_queries::RangeQueriesHandler);
         registry.register(crate::freeze::FreezeHandler);
+        registry.register(crate::functions::FunctionsHandler);
         registry.register(crate::table_filters::TableFiltersHandler);
         registry.register(crate::worksheets::WorksheetOpsHandler);
         registry.register(crate::comments::CommentsHandler);

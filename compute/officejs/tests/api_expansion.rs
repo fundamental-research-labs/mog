@@ -68,6 +68,11 @@ fn expansion_caliper_scripts_execute() {
         }
         let script = std::fs::read_to_string(path.join("script.js")).unwrap();
         let name = path.file_name().unwrap().to_string_lossy();
+        // The function family has its own value/error and XLSX round-trip
+        // assertions for all 50 cases in functions.rs.
+        if name.starts_with("api_function_") {
+            continue;
+        }
         let capture = r##"
           return Excel.run(async context => {
             const sheet = context.workbook.worksheets.getItem("Sheet1");

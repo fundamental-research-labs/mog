@@ -142,6 +142,8 @@ application-specific API:
 - Range addresses, dimensions, and row/column indices
 - Range formatting through `format`, `font`, `fill`, and `protection`
 - Worksheet table creation, name/ID lookup, scalar properties, and table ranges
+- 50 `workbook.functions` methods with loadable `FunctionResult.value` / `error`
+  (see [supported functions and verification cases](compute/officejs/FUNCTIONS.md))
 
 Fresh proxy properties require `load` and `sync` before reading. Assigning a
 writable property also caches that value on the same proxy; use a fresh proxy

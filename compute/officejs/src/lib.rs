@@ -15,6 +15,7 @@ mod dispatch;
 mod error;
 mod format;
 mod freeze;
+mod functions;
 mod host;
 mod names;
 mod pivot;

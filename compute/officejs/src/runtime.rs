@@ -224,6 +224,11 @@ async fn eval_in_ctx(
         .catch(&ctx)
         .map_err(|e| OfficeJsError::runtime(format!("failed to load range queries: {e}")))?;
 
+    let _: () = ctx
+        .eval(include_str!("functions.js"))
+        .catch(&ctx)
+        .map_err(|e| OfficeJsError::runtime(format!("failed to load functions: {e}")))?;
+
     let console_src = r#"
       globalThis.console = {
         log: function () {

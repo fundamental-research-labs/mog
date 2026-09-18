@@ -8,8 +8,8 @@ tool snapshots that catalog (classes, methods, properties) and records:
   * which members the calipers verification scripts actually call
 
 Excel.Functions (workbook.functions.sum, …) is a separate family of
-worksheet-function wrappers. Mog evaluates those as cell formulas through
-Range.formulas, not through workbook.functions.
+worksheet-function wrappers. Mog supports a subset through workbook.functions
+as well as evaluating worksheet formulas through Range.formulas.
 
 Usage:
   coverage.py catalog --yaml-dir DIR --out excel-js-api.json

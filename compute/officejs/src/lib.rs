@@ -11,6 +11,7 @@
 mod borders;
 mod comments;
 mod conditional;
+mod diagnostics;
 mod dispatch;
 mod error;
 mod format;

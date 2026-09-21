@@ -79,6 +79,96 @@ const READ: &str = r#"return await Excel.run(async c => {
 });"#;
 
 #[test]
+fn diagnostics_distinguish_import_script_and_successful_save() {
+    let f = Fixture::new();
+    for (args, expected_stage, expected_status, success) in [
+        (
+            vec!["-i", "missing.xlsx", "-e", WRITE],
+            "load_workbook",
+            "failed",
+            false,
+        ),
+        (
+            vec!["-e", "throw new Error('broken')"],
+            "run_script",
+            "failed",
+            false,
+        ),
+        (vec!["-e", WRITE], "save_workbook", "completed", true),
+    ] {
+        let path = f.path().join(format!("{expected_stage}.jsonl"));
+        let output = f
+            .command()
+            .env("MOG_DIAGNOSTICS_FILE", &path)
+            .args(args)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.success(), success);
+        let records: Vec<serde_json::Value> = fs::read_to_string(path)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert!(
+            records
+                .iter()
+                .any(|r| r["stage"] == expected_stage && r["status"] == expected_status)
+        );
+        if expected_stage != "load_workbook" {
+            assert!(
+                records
+                    .iter()
+                    .any(|r| r["stage"] == "evaluate_javascript" && r["status"] == "started")
+            );
+        }
+        assert!(
+            records
+                .iter()
+                .all(|r| r["pid"].as_u64().is_some() && r["timestamp_ms"].as_u64().is_some())
+        );
+    }
+    // A failed diagnostics sink must not prevent normal workbook work.
+    let output = f
+        .command()
+        .env("MOG_DIAGNOSTICS_FILE", f.path())
+        .args(["-e", "return 7"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8(output.stdout).unwrap().trim(), "7");
+}
+
+#[test]
+fn session_worker_persists_diagnostics() {
+    let f = Fixture::new();
+    let path = f.path().join("worker.jsonl");
+    let output = f
+        .command()
+        .env("MOG_DIAGNOSTICS_FILE", &path)
+        .args(["-s", "-e", WRITE])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let id = String::from_utf8(output.stdout).unwrap();
+    f.ok(&["-s", id.trim(), "--close"]);
+    let records: Vec<serde_json::Value> = fs::read_to_string(path)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert!(
+        records
+            .iter()
+            .any(|r| r["stage"] == "save_workbook" && r["status"] == "completed")
+    );
+    assert_eq!(f.value("workbook.xlsx", "B1"), CellValue::number(42.0));
+}
+
+#[test]
 fn no_arguments_shows_help_without_creating_files() {
     let f = Fixture::new();
     let output = f.ok(&[]);

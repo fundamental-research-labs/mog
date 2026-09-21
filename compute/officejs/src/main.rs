@@ -1,4 +1,5 @@
 mod cli;
+mod diagnostics;
 
 use std::process::ExitCode;
 
@@ -7,7 +8,12 @@ fn main() -> ExitCode {
     match std::thread::Builder::new()
         .name("mog-main".into())
         .stack_size(16 * 1024 * 1024)
-        .spawn(cli::run)
+        .spawn(|| {
+            let stage = diagnostics::Stage::start("cli");
+            cli::run()?;
+            stage.complete();
+            Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
+        })
         .expect("failed to spawn mog-main")
         .join()
     {

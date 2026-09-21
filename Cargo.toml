@@ -67,8 +67,9 @@ tracing = "0.1"
 opt-level = 3
 lto = true
 codegen-units = 1
-debug = false
-strip = true
+# Keep function names and source locations for native crash symbolication.
+debug = "line-tables-only"
+strip = false
 
 [profile.dev]
 opt-level = 0

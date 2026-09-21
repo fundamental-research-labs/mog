@@ -6,6 +6,7 @@ use std::{env, fs, path::PathBuf};
 use compute_api::Workbook;
 use serde::{Deserialize, Serialize};
 
+use crate::diagnostics::Stage;
 use args::Args;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -96,6 +97,7 @@ struct State {
 
 impl State {
     fn load(config: &Config) -> Result<Self> {
+        let stage = Stage::start("load_workbook");
         if let Some(path) = config.request.output.as_ref().or(config.input.as_ref()) {
             validate_output(path)?;
         }
@@ -106,6 +108,7 @@ impl State {
         } else {
             Workbook::blank()?.0
         };
+        stage.complete();
         Ok(Self {
             workbook,
             output: config
@@ -134,7 +137,9 @@ impl State {
             String::new()
         };
         if request.recalculate || request.source.is_some() {
+            let stage = Stage::start("recalculate");
             self.workbook.recalculate()?;
+            stage.complete();
         }
         if let Some(path) = &request.output {
             self.output = Some(path.clone());
@@ -143,6 +148,7 @@ impl State {
     }
 
     fn save(&self) -> Result<()> {
+        let stage = Stage::start("save_workbook");
         if let Some(path) = &self.output {
             // Follow an existing symlink just as loading the input does.
             let path = if path.exists() {
@@ -171,6 +177,7 @@ impl State {
                 }
             }
         }
+        stage.complete();
         Ok(())
     }
 

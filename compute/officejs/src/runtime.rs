@@ -6,6 +6,7 @@ use rquickjs::promise::Promise;
 use rquickjs::{AsyncContext, AsyncRuntime, CatchResultExt, Ctx};
 use serde_json::Value;
 
+use crate::diagnostics::Stage;
 use crate::error::OfficeJsError;
 use crate::host::Host;
 
@@ -65,20 +66,25 @@ pub fn run_office_js_with_workbook(
     workbook: &Workbook,
     source: &str,
 ) -> Result<ScriptOutput, OfficeJsError> {
+    let stage = Stage::start("run_script");
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .map_err(OfficeJsError::runtime)?;
-    rt.block_on(run_async(workbook.clone(), source.to_string()))
+    let output = rt.block_on(run_async(workbook.clone(), source.to_string()))?;
+    stage.complete();
+    Ok(output)
 }
 
 async fn run_async(workbook: Workbook, source: String) -> Result<ScriptOutput, OfficeJsError> {
+    let stage = Stage::start("initialize_javascript");
     let host = Arc::new(Host::new(workbook));
     let runtime = AsyncRuntime::new().map_err(OfficeJsError::runtime)?;
     let ctx = AsyncContext::full(&runtime)
         .await
         .map_err(OfficeJsError::runtime)?;
 
+    stage.complete();
     let host_for_apply = host.clone();
     let host_for_log = host.clone();
     let json = ctx
@@ -116,6 +122,7 @@ async fn eval_in_ctx(
     host_log: Arc<Host>,
     source: String,
 ) -> Result<String, OfficeJsError> {
+    let stage = Stage::start("officejs_bootstrap");
     let globals = ctx.globals();
     globals
         .set(
@@ -254,13 +261,17 @@ async fn eval_in_ctx(
         .set("__mogSource", source)
         .map_err(OfficeJsError::runtime)?;
 
+    stage.complete();
+    let stage = Stage::start("evaluate_javascript");
     let promise: Promise = ctx
         .eval(RUNNER)
         .catch(&ctx)
         .map_err(|e| OfficeJsError::runtime(format!("failed to start script: {e}")))?;
-    promise
+    let output = promise
         .into_future::<String>()
         .await
         .catch(&ctx)
-        .map_err(|e| OfficeJsError::runtime(format!("script promise failed: {e}")))
+        .map_err(|e| OfficeJsError::runtime(format!("script promise failed: {e}")))?;
+    stage.complete();
+    Ok(output)
 }

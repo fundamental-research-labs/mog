@@ -271,8 +271,8 @@ impl ComputeCore {
     /// Skips BOTH formula parsing AND recalc. The dependency graph is NOT built.
     /// Only the cell store is populated from the snapshot.
     ///
-    /// Use this on WASM for fast initial load: cached values render immediately.
-    /// The graph is built lazily on the first mutation (via `ensure_graph_built`).
+    /// Cached values are stored immediately. The graph is built lazily on the
+    /// first mutation (via `ensure_graph_built`).
     pub fn init_from_snapshot_minimal(
         &mut self,
         cell_store: &mut CellStore,
@@ -548,9 +548,7 @@ impl ComputeCore {
         }
 
 
-        // Pass 3: Range index is rebuilt automatically:
-        // - Native path: builder.build() handles it
-        // - WASM path: set_precedents() auto-rebuilds per call
+        // Pass 3: builder.build() rebuilds the range index.
     }
 
     /// Inline-dispatched functions (not in the registry) that return arrays.

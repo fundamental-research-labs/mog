@@ -22,7 +22,7 @@ pub mod filter; // Filter evaluation (bitmap per column)
 pub mod filter_dropdown;
 pub mod filter_resolve; // Dynamic/top-bottom → concrete filter resolution; date range helpers
 
-// Re-export filter_resolve functions needed by WASM bindings
+// Re-export filter_resolve functions used by the compute bridge.
 pub use filter_resolve::{
     compute_date_range, compute_date_range_serial, compute_date_range_serial_with_date_system,
     evaluate_top_bottom_direct, resolve_dynamic_filter, resolve_dynamic_filter_with_date_system,

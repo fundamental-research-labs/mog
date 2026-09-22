@@ -18,9 +18,8 @@ use crate::output::results::{FullParseResult, ParseTimings};
 
 /// Parse an XLSX file from raw bytes and return a full structured result.
 ///
-/// This is the core parse pipeline shared between WASM entry points and native
-/// CLI tools. Worksheet inflation, cell parsing, and semantic conversion use
-/// one incremental pipeline, with an optional consumer for native hydration.
+/// Worksheet inflation, cell parsing, and semantic conversion use one
+/// incremental pipeline, with an optional consumer for engine hydration.
 ///
 /// # Profiling
 ///

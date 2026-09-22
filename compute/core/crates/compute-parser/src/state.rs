@@ -3,10 +3,8 @@ use std::cell::Cell;
 use super::CellRefResolver;
 use super::parser::ParseErrorKind;
 
-/// WASM targets default to a 1 MB stack. The Pratt parser uses ~3 stack frames
-/// per nesting level (vs ~9 for recursive descent), so 128 levels fits well
-/// within 1 MB. On native targets the stack is larger, but 128 nesting levels
-/// is far beyond any realistic formula.
+/// The Pratt parser uses ~3 stack frames per nesting level. 128 levels is
+/// far beyond any realistic formula.
 pub const MAX_DEPTH: u32 = 128;
 
 pub struct ParseState<'a> {

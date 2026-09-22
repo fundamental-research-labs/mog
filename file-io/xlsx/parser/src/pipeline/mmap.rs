@@ -3,7 +3,6 @@
 //! This module provides memory-mapped file access for large XLSX files (>100MB),
 //! eliminating file read overhead by mapping the file directly into virtual memory.
 //!
-//! This module is only available on native platforms (not WASM).
 //! It is a trusted-local-file optimization; untrusted XLSX byte imports should
 //! use the owned-bytes parser path.
 

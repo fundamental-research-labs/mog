@@ -39,9 +39,6 @@ pub(crate) fn decompress_deflate_with_limit(
     }
 }
 
-/// Decompress DEFLATE data using pure-Rust miniz_oxide (WASM / non-native path).
-
-
 fn decompress_zlib_with_limit(compressed: &[u8], limit: usize) -> Result<Vec<u8>, ZipError> {
     match miniz_oxide::inflate::decompress_to_vec_zlib_with_limit(compressed, limit) {
         Ok(decompressed) if decompressed.len() <= limit => Ok(decompressed),

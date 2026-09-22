@@ -22,7 +22,7 @@ pub mod styles;
 /// A handle to an open workbook backed by the compute engine.
 ///
 /// `Workbook` is cheap to clone — clones share the same underlying engine
-/// (via the actor channel on native, or `Rc<RefCell>` on WASM).
+/// via the actor channel.
 pub struct Workbook {
     pub(crate) dispatch: Dispatch,
 }

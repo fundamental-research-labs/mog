@@ -36,8 +36,7 @@ pub(crate) struct ViewportRegistration {
 /// Palette interning and the sheet→bounds registry are both *observational*
 /// caches, not authoritative workbook state — mutating them from a logical
 /// read preserves the engine's read contract. `RefCell` is safe
-/// here because the engine runs on a dedicated single thread (under the
-/// native dispatch loop) or on the main WASM thread via `Rc<RefCell<Engine>>`;
+/// here because the engine runs on one thread under the dispatch loop;
 /// nested borrows are impossible by construction because no method reads a
 /// palette or registration entry while holding a prior borrow across a call
 /// into a method that also borrows.

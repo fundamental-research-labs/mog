@@ -1,5 +1,4 @@
-//! LookupIndexCache — thread-safe (native) or single-threaded (WASM) cache
-//! of lookup indexes keyed by `(SheetId, col)`.
+//! LookupIndexCache — thread-safe cache of lookup indexes keyed by `(SheetId, col)`.
 
 use super::index::LookupIndex;
 
@@ -10,14 +9,7 @@ use dashmap::DashMap;
 use value_types::CellValue;
 
 
-// ---------------------------------------------------------------------------
-// LookupIndexCache — available on both native and WASM
-// ---------------------------------------------------------------------------
-
-// On native: use DashMap for thread-safe concurrent access.
-// On WASM: use RefCell<HashMap> for single-threaded access.
-
-/// Thread-safe cache of lookup indexes (native: DashMap, WASM: RefCell<HashMap>).
+/// Thread-safe cache of lookup indexes.
 pub struct LookupIndexCache {
     indexes: DashMap<(SheetId, u32), LookupIndex>,
 }

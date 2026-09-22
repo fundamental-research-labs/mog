@@ -334,7 +334,7 @@ impl RangeStore {
     ///
     /// Check order:
     /// 1. Pre-materialized map (populated before compute — zero sync cost)
-    /// 2. On-demand cache (DashMap on native, RefCell<FxHashMap> on WASM)
+    /// 2. On-demand cache
     /// 3. Cache miss: materialize from cell_store and insert into on-demand cache
     pub fn get_or_materialize(&self, key: RangeKey, source: &dyn DataSource) -> Arc<CellArray> {
         // 1. Check pre-materialized (fast, no sync)

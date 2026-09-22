@@ -2,7 +2,7 @@
 //!
 //! This crate (`compute-stats`, formerly `compute-aggregate`) provides the
 //! general-purpose building blocks used by the pivot engine, chart engine,
-//! worksheet functions, and WASM bindings:
+//! worksheet functions:
 //!
 //! - **`values`** — Canonical value semantics (blank detection, numeric checks,
 //!   sort keys, grouping keys, Kahan summation)

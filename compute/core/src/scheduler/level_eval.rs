@@ -14,7 +14,7 @@ use crate::formula_text::FormulaTextProvider;
 pub(super) const PARALLEL_THRESHOLD: usize = 500;
 
 impl ComputeCore {
-    /// Evaluate a single level of cells sequentially (unified: works on both native and WASM).
+    /// Evaluate a single level of cells sequentially.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn topo_evaluate_level_sequential(
         &mut self,

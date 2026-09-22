@@ -36,8 +36,7 @@ pub mod validation;
 /// Handle to a single sheet within a workbook.
 ///
 /// `Sheet` is `Clone` — cloning produces another handle to the same sheet.
-/// All operations are dispatched to the engine thread (native) or called
-/// directly (WASM).
+/// All operations are dispatched to the engine thread.
 pub struct Sheet {
     pub(crate) dispatch: Dispatch,
     pub(crate) sheet_id: SheetId,

@@ -381,8 +381,7 @@ fn export_data_table_regions(
 /// This produces the same type that the XLSX parser emits, enabling
 /// the unified XLSX writer to consume it.
 ///
-/// On native targets (with rayon), sheets are exported in parallel using a
-/// shared thread-safe style palette. On WASM, sheets are processed sequentially.
+/// Sheets are exported in parallel using a shared style palette.
 pub(in crate::storage::engine) fn build_parse_output(
     stores: &EngineStores,
     cell_store: &CellStore,

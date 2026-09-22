@@ -164,12 +164,9 @@ fn bitmask_entry_bytes(rows: u32, criteria: &CellValue) -> Option<usize> {
 
 /// Persistent cache that lives on `ComputeCore` across recalc epochs.
 ///
-/// On native targets, provides thread-safe (`DashMap`-backed) caches.
-/// On WASM, the lookup cache is not available (single-threaded contexts
-/// use thread-local caches or will get a `WorkbookCacheLocal`).
+/// Caches are `DashMap`-backed so recalc workers can share them.
 pub struct WorkbookCache {
     // Tier 0 — persists until structural changes (insert/delete row/col).
-    // Available on both native (DashMap-backed) and WASM (RefCell-backed).
     pub(crate) lookup_cache: LookupIndexCache,
 
     // === Tier 1: Sorted Cache ===

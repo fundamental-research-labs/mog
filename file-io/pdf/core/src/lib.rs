@@ -1,7 +1,7 @@
 //! pdf-core: PDF 1.7 document model, serializer, and content stream builder.
 //!
 //! This crate provides the foundational layer for generating valid PDF files.
-//! It is WASM-compatible (no filesystem access, pure Rust dependencies only).
+//! It does not touch the filesystem and uses only pure Rust dependencies.
 //!
 //! # Architecture
 //!

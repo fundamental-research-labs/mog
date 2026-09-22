@@ -1,9 +1,7 @@
 //! System clock abstraction for NOW()/TODAY() functions.
 //!
-//! Provides an injectable timestamp mechanism:
-//! - On WASM, JavaScript sets the time before each recalc via `set_current_time()`
-//! - On native, falls back to the shared runtime clock primitive
-//! - For testing, `set_current_time()` enables deterministic evaluation
+//! Provides an injectable timestamp mechanism. `set_current_time()` overrides
+//! the clock for a session or a test; otherwise evaluation uses the system clock.
 //!
 //! The thread-local hook remains the compatibility/session input. A
 //! [`RecalcClock`] captures that hook at a recalc boundary and is copied into
@@ -104,10 +102,7 @@ pub(crate) fn injected_serial_timestamp() -> Option<f64> {
 /// Set the current time for NOW()/TODAY() as a canonical 1900-system serial
 /// date number. Workbook date-system conversion happens in evaluator metadata.
 ///
-/// On WASM, this should be called from JavaScript before each recalc
-/// with the value from `Date.now()` converted to an Excel serial number.
-///
-/// Pass `0.0` to clear the override (native will fall back to system clock).
+/// Pass `0.0` to clear the override and fall back to the system clock.
 pub fn set_current_time(serial_timestamp: f64) {
     // Keep the legacy `0.0` clear operation intact, but never let an invalid
     // bridge value poison the session hook. Ignoring NaN/∞ preserves the
@@ -119,23 +114,20 @@ pub fn set_current_time(serial_timestamp: f64) {
 
 /// Get the current timestamp as a canonical 1900-system serial date number.
 ///
-/// Returns the injected timestamp if set, otherwise falls back to the system clock
-/// on native targets or a placeholder on WASM.
+/// Returns the injected timestamp if set, otherwise the system clock.
+/// If the system time cannot be converted, returns Excel serial `45000.5`.
 pub fn get_current_serial_timestamp() -> f64 {
     if let Some(injected) = injected_serial_timestamp() {
         return injected;
     }
 
-    {
-        let millis = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as i64)
-            .unwrap_or(0);
-        chrono::DateTime::from_timestamp_millis(millis)
-            .map(|dt| datetime_to_serial(&dt.naive_utc()))
-            .unwrap_or(45000.5)
-    }
-
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    chrono::DateTime::from_timestamp_millis(millis)
+        .map(|dt| datetime_to_serial(&dt.naive_utc()))
+        .unwrap_or(45000.5)
 }
 
 fn datetime_to_serial(dt: &NaiveDateTime) -> f64 {
@@ -146,8 +138,8 @@ fn datetime_to_serial(dt: &NaiveDateTime) -> f64 {
 }
 
 /// Get the current real calendar date represented by NOW()/TODAY() — i.e. the
-/// canonical JS-injected serial when present, otherwise UTC system time on
-/// native targets. The workbook's 1900/1904 serial offset is intentionally
+/// injected serial when present, otherwise UTC system time. The workbook's
+/// 1900/1904 serial offset is intentionally
 /// not applied because a calendar date has no serial-system adjustment.
 ///
 /// Used by date-range filter operators (Last Month, This Year, Today, …)

@@ -1,8 +1,6 @@
 //! Native full-parse pipeline for XLSX files.
 //!
-//! This module contains the core parse logic shared between the WASM entry points
-//! (`wasm_bindings.rs`) and native CLI tools (`bin/crashtest.rs`). All functions
-//! here are pure Rust with no WASM dependencies.
+//! Core parse logic shared by the library and the CLI tools (`bin/crashtest.rs`).
 //!
 //! UTF-8 boundary guard: every `&s[n..]` / `&s[..n]` in this file slices
 //! attribute / sheet-qualified reference content at byte offsets
@@ -299,9 +297,7 @@ fn legacy_sheet_num_for_context(context: &SheetPackageContext) -> usize {
 
 /// Parse an XLSX file from raw bytes and return a full structured result.
 ///
-/// This is the core parse pipeline shared between WASM entry points and native
-/// CLI tools. It performs all the same steps as the WASM `parse_xlsx_full` but
-/// returns a native `Result<FullParseResult, String>` instead of `Result<JsValue, JsValue>`.
+/// Parse an XLSX byte slice into a `FullParseResult`.
 ///
 /// # Profiling (Chrome-style on-demand)
 ///

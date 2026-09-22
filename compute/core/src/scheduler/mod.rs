@@ -4,7 +4,7 @@
 //! and AST cache. It processes cell edits by parsing formulas, building the dependency
 //! graph, and evaluating cells in topological order.
 //!
-//! Level-based parallel recalc with rayon (native) or single-threaded fallback (WASM).
+//! Level-based parallel recalc with rayon.
 //!
 //! ## Architecture: shared evaluator, specialized orchestration
 //!
@@ -854,16 +854,12 @@ impl ComputeCore {
     }
 
     // -----------------------------------------------------------------------
-    // Time injection (for WASM / testing)
+    // Time injection (testing and session overrides)
     // -----------------------------------------------------------------------
 
     /// Set canonical 1900-system time for NOW()/TODAY(); metadata converts 1904 workbooks.
     ///
-    /// On WASM, this should be called from JavaScript before each recalc
-    /// with the value from `Date.now()` converted to an Excel serial number.
-    /// On native targets, this overrides the system clock (useful for testing).
-    ///
-    /// Pass `0.0` to clear the override (native falls back to system clock).
+    /// Overrides the system clock. Pass `0.0` to clear the override.
     pub fn set_current_time(timestamp: f64) {
         crate::eval::clock::set_current_time(timestamp);
     }

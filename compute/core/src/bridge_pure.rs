@@ -951,9 +951,7 @@ impl ClockBridge {
     /// 1900-system Excel serial date number. Evaluator metadata converts it
     /// for 1904 workbooks.
     ///
-    /// On WASM, this should be called from JavaScript before each recalc.
-    /// On native targets, this overrides the system clock (useful for testing).
-    /// Pass `0.0` to clear the override (native falls back to system clock).
+    /// Overrides the system clock. Pass `0.0` to clear the override.
     #[bridge::pure]
     pub fn set_current_time(timestamp_serial: f64) {
         crate::eval::clock::set_current_time(timestamp_serial);

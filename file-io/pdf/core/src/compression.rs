@@ -1,6 +1,6 @@
 //! DEFLATE compression wrappers for PDF streams.
 //!
-//! Uses `flate2` with the pure-Rust `miniz_oxide` backend for WASM compatibility.
+//! Uses `flate2` with the pure-Rust `miniz_oxide` backend.
 //! Compression levels: 6 for content streams (default), 9 for fonts/ICC profiles.
 
 use flate2::Compression;

@@ -57,8 +57,7 @@ Modules are organized as:
 - **`write/`** — round-trip write path used by the compute engine
 - **`zip/`** — ZIP archive reading
 
-Native callers use `parse_xlsx_to_output()` / `parse_xlsx_full_native()`. There
-is no WASM or TypeScript entry point in this crate.
+Callers use `parse_xlsx_to_output()` / `parse_xlsx_full_native()`.
 
 ## Building
 

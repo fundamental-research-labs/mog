@@ -23,7 +23,7 @@ cell-types = { path = "../types/cell-types" }
 winnow = "0.6"
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.5", default-features = false, features = ["rayon", "cargo_bench_support"] }
 proptest = "1.0"
 
 [[bench]]

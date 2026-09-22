@@ -34,7 +34,7 @@ finite-at-boundary = { path = "../finite-at-boundary" }
 
 [dev-dependencies]
 proptest = "1"
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.5", default-features = false, features = ["rayon", "cargo_bench_support"] }
 # Drives the `tests/no_bare_f64_at_boundary.rs` build-time gate.
 finite-at-boundary-walker = { path = "../finite-at-boundary-walker" }
 

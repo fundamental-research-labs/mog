@@ -57,8 +57,10 @@ repository = "https://github.com/fundamental-research-labs/mog"
 [workspace.dependencies]
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
-uuid = { version = "1", features = ["v4"] }
-chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", default-features = false, features = ["std", "v4"] }
+# Chrono defaults include a browser binding and a timezone database this repo
+# does not use. Keep calendar arithmetic and serde only.
+chrono = { version = "0.4", default-features = false, features = ["std", "serde"] }
 thiserror = "1"
 tikv-jemallocator = "0.6"
 tracing = "0.1"

@@ -22,7 +22,7 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 cell-types = { path = "../types/cell-types" }
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.5", default-features = false, features = ["rayon", "cargo_bench_support"] }
 proptest = "1"
 compute-wire = { path = ".", features = ["test-utils"] }
 

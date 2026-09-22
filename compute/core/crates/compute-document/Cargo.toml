@@ -14,4 +14,4 @@ serde_json = { workspace = true }
 value-types = { path = "../types/value-types" }
 cell-types = { path = "../types/cell-types" }
 rustc-hash = "2"
-uuid = { version = "1", features = ["v4"] }
+uuid = { version = "1", default-features = false, features = ["std", "v4"] }

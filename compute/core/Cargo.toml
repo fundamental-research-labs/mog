@@ -118,7 +118,7 @@ serde_json = { workspace = true }
 bincode = "1"
 
 # UUID handling (CellId/SheetId string ↔ u128 at IPC boundary)
-uuid = { version = "1", features = ["v4", "v5"] }
+uuid = { version = "1", default-features = false, features = ["std", "v4", "v5"] }
 
 # Date/time functions
 chrono = { workspace = true }
@@ -168,7 +168,7 @@ ordered-float = "4"
 
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.5", default-features = false, features = ["rayon", "cargo_bench_support"] }
 proptest = "1"
 proc-macro2 = { version = "1", features = ["span-locations"] }
 syn = { version = "2", features = ["full"] }

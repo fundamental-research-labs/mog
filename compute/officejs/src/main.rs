@@ -1,9 +1,12 @@
 mod cli;
 mod diagnostics;
+mod fatal_signal;
 
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
+    fatal_signal::install_fatal_signal_handlers();
+    fatal_signal::raise_configured_self_test();
     // XLSX import needs a larger stack before the workbook actor exists.
     match std::thread::Builder::new()
         .name("mog-main".into())

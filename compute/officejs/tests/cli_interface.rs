@@ -138,6 +138,56 @@ fn diagnostics_distinguish_import_script_and_successful_save() {
     assert_eq!(String::from_utf8(output.stdout).unwrap().trim(), "7");
 }
 
+#[cfg(unix)]
+#[test]
+fn fatal_signal_records_address_and_backtrace_then_reraises() {
+    if !cfg!(debug_assertions) {
+        return;
+    }
+    for (hook, signal, status) in [("sigbus", 7, "sigbus"), ("sigsegv", 11, "sigsegv")] {
+        let f = Fixture::new();
+        let path = f.path().join(format!("{status}.jsonl"));
+        let output = f
+            .command()
+            .env("MOG_DIAGNOSTICS_FILE", &path)
+            .env("MOG_DIAGNOSTICS_SELF_TEST", hook)
+            .output()
+            .unwrap();
+        assert_eq!(
+            std::os::unix::process::ExitStatusExt::signal(&output.status),
+            Some(signal),
+            "{hook}: {:?}",
+            output.status
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("\"stage\":\"native_fault\""),
+            "{hook} stderr: {stderr}"
+        );
+        let records: Vec<serde_json::Value> = fs::read_to_string(&path)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        let fault = records
+            .iter()
+            .find(|record| record["stage"] == "native_fault" && record["status"] == status)
+            .unwrap_or_else(|| panic!("{hook} records: {records:?}"));
+        assert_eq!(fault["signal"], signal);
+        assert!(fault["pid"].as_u64().is_some());
+        assert!(fault["timestamp_ms"].as_u64().is_some());
+        let address = fault["fault_address"].as_str().unwrap();
+        assert!(address.starts_with("0x"), "{address}");
+        let frames = fault["backtrace"].as_array().unwrap();
+        assert!(!frames.is_empty());
+        assert!(frames.iter().all(|frame| {
+            frame
+                .as_str()
+                .is_some_and(|value| value.starts_with("0x") && value.len() > 2)
+        }));
+    }
+}
+
 #[test]
 fn session_worker_persists_diagnostics() {
     let f = Fixture::new();

@@ -39,9 +39,8 @@ The engine is split into a **root orchestration crate** (`compute-core`) and **e
    uses JSON batches at its QuickJS boundary.
 3. **Layered type crates.** Runtime type crates form a strict dependency DAG.
    Leaf crates depend only on the types they need, minimizing compile-time coupling.
-4. **Native parallelism.** The `native` feature (on by default) gates `rayon`
-   (parallel recalc) and `parking_lot` (fast locks). Builds without `native`
-   fall back to single-threaded eval.
+4. **Parallel evaluation.** Recalc uses `rayon` and `parking_lot`. There is
+   no single-threaded fallback build.
 5. **Extracted purity.** Sub-crates are pure computation with zero IO, zero
    global state, and no dependency on the root crate.
 
@@ -258,7 +257,7 @@ crates because they depend on multiple sub-crates or own mutable state:
 |--------|-------------|
 | `cells` | **CellStore** -- authoritative native sparse values and compact imported ranges, queried by the evaluator through borrowed views and disposable numeric caches. |
 | `eval` | **AST Evaluator** -- recursive descent evaluator that walks `ASTNode` trees. Two trait hierarchies: `EvalDataAccess` (async data reads) and `EvalMetadata` (sync positional/structural queries). Sub-modules: `core` (dispatch), `context` (traits), `cache` (multi-tier), `lookup` (INDEX/MATCH/XLOOKUP), `functions` (special dispatch), `coordination` (cycle detection, vectorized eval). |
-| `scheduler` | **Recalc Scheduler** -- top-level `ComputeCore` struct. Owns the DependencyGraph and AST cache and evaluates against the engine's CellStore. Processes edits by parsing, building the dep graph, and evaluating in topological order. Level-based parallel recalc with rayon (`native`) or sequential fallback. |
+| `scheduler` | **Recalc Scheduler** -- top-level `ComputeCore` struct. Owns the DependencyGraph and AST cache and evaluates against the engine's CellStore. Processes edits by parsing, building the dep graph, and evaluating in topological order. Level-based parallel recalc with rayon. |
 | `identity` | Shared compact row/column axes and axis order lookup. `SheetStore` owns authored cell identities, keyed by stable `(RowId, ColId)` pairs. |
 | `storage` | `WorkbookStorage` owns typed workbook, sheet, and cell metadata. `CellStore` owns sparse values and compact ranges; derived indexes share its native axes. |
 | `projection` | Dynamic array projection registry. Spatial index tracking which cells are spill array members. |
@@ -415,7 +414,6 @@ Defined in `compute/core/Cargo.toml`:
 
 | Feature | Default | Description |
 |---------|---------|-------------|
-| `native` | yes | Enables `rayon` (parallel recalc) and `parking_lot` (fast RwLock). Gates desktop-only code paths. |
 | `power-query-full` | no | Enables full Power Query CRUD -- gates unwired functions. |
 | `profile` | no | Enables `tracing` spans in eval hot paths. Zero overhead when off (single atomic load per span check). |
 

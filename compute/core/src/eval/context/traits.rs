@@ -75,8 +75,7 @@ pub trait EvalDataAccess {
 ///
 /// Used by lookup functions (VLOOKUP, MATCH) to leverage the
 /// `LookupIndexCache` for O(log n) searches on sorted/hashed columns.
-/// Cross-platform (not feature-gated); implementations on non-native
-/// targets return `NotAvailable` via the default trait methods.
+/// `NotAvailable` means the caller should fall back to a scan.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IndexedLookupResult {
     /// Index not available (column not clean, no dense data, etc). Caller should fall back.

@@ -11,5 +11,5 @@ pub mod import_extensions;
 pub mod metadata;
 pub mod streaming;
 
-// Memory-mapped I/O module (native only)
+// Memory-mapped I/O for local XLSX files.
 pub mod mmap;

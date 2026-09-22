@@ -532,7 +532,7 @@ impl RangeStore {
         }
     }
 
-    /// Access the unified lookup index cache (native only).
+    /// Access the lookup index cache.
     pub fn lookup_cache(&self) -> &LookupIndexCache {
         &self.lookup_indexes
     }

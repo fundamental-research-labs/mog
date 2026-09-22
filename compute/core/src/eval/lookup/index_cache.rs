@@ -81,11 +81,6 @@ impl Default for LookupIndexCache {
     }
 }
 
-// === Single-threaded LookupIndexCache using RefCell<HashMap> ===
-
-/// Single-threaded cache of lookup indexes (builds without `native`).
-
-
 // ===========================================================================
 // Tests
 // ===========================================================================
@@ -102,7 +97,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // test_cache_get_or_build (native only)
+    // test_cache_get_or_build
     // -----------------------------------------------------------------------
 
     #[test]
@@ -134,7 +129,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // test_cache_clear (native only)
+    // test_cache_clear
     // -----------------------------------------------------------------------
 
     #[test]

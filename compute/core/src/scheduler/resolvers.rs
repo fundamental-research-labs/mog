@@ -69,7 +69,7 @@ impl IdentityResolver for CoreIdentityResolver<'_> {
 }
 
 // ---------------------------------------------------------------------------
-// ConcurrentIdentityResolver for parallel init (native only — uses DashMap)
+// ConcurrentIdentityResolver for parallel init (DashMap)
 // ---------------------------------------------------------------------------
 
 /// Thread-safe identity resolver for parallel identity resolution during bulk init.

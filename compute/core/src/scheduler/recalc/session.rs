@@ -24,8 +24,8 @@ pub(in super::super) fn past_deadline(deadline: &Deadline) -> bool {
 /// column pointer, so a worker's cached result from a prior recalc
 /// silently "hits" on a new recalc with different underlying data.
 ///
-/// Under the `native` feature we broadcast the clear across the rayon
-/// thread pool so every worker invalidates its thread-local.
+/// The clear is broadcast across the rayon thread pool so every worker
+/// invalidates its thread-local.
 pub(in super::super) fn clear_thread_local_caches() {
     clear_current_thread_caches();
     rayon::broadcast(|_| clear_current_thread_caches());

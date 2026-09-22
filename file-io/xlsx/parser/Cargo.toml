@@ -17,19 +17,19 @@ name = "xlsx-roundtrip"
 path = "src/bin/roundtrip.rs"
 required-features = ["cli"]
 
-# Test corpus generator for malformed file testing (native only)
+# Test corpus generator for malformed file testing
 [[bin]]
 name = "generate_test_corpus"
 path = "src/bin/generate_test_corpus.rs"
 required-features = ["corpus-gen"]
 
-# Crashtest tool for fuzzing existing corpus files (native only)
+# Crashtest tool for fuzzing existing corpus files
 [[bin]]
 name = "xlsx-crashtest"
 path = "src/bin/crashtest.rs"
 required-features = ["cli"]
 
-# Corpus profiler with per-phase timing breakdown (native only)
+# Corpus profiler with per-phase timing breakdown
 [[bin]]
 name = "xlsx-profile-corpus"
 path = "src/bin/profile_corpus.rs"

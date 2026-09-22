@@ -152,7 +152,7 @@ impl State {
             };
             self.export(&path)?;
         } else {
-            // The API already streams and validates exports before atomic replacement.
+            // The API already streams the export to a temporary file before atomic replacement.
             // Stage once, then claim an automatic name without overwriting a racer.
             let mut temporary = tempfile::NamedTempFile::new_in(&self.directory)?.into_temp_path();
             self.export(&temporary)?;

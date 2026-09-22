@@ -77,8 +77,8 @@ pub struct FullCellData {
     /// Original OOXML formula metadata for round-trip preservation. A Normal
     /// formula with empty text and no `formula` text is an authored empty
     /// `<f>` marker; it must not be registered as executable formula text.
-    /// The `formula` field continues to hold the expanded text for WASM consumers.
-    /// This field is NOT serialized to JSON (WASM doesn't need it).
+    /// The `formula` field continues to hold the expanded text.
+    /// This field is not serialized to JSON.
     #[serde(skip)]
     pub cell_formula: Option<ooxml_types::worksheet::CellFormula>,
     /// Whether the `<f>` element had `xml:space="preserve"`, for round-trip fidelity.

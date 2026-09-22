@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Maps directly to the JS `Record<string, unknown>`.
 /// Using `serde_json::Map` gives us O(1) field access and
-/// zero-overhead round-trip through the WASM boundary.
+/// zero-overhead JSON round-trip.
 pub type DataRow = serde_json::Map<String, serde_json::Value>;
 
 // =============================================================================

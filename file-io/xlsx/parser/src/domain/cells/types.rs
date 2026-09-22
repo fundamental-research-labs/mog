@@ -29,9 +29,7 @@ pub const VALUE_TYPE_CACHED_FORMULA: u8 = 4;
 
 /// Cell data layout in shared buffer (20 bytes per cell)
 ///
-/// This struct is designed for zero-copy transfer between WASM and JavaScript
-/// via SharedArrayBuffer. The packed representation ensures consistent memory
-/// layout across platforms.
+/// Packed layout so every cell occupies a fixed number of bytes.
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CellData {

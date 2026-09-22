@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 /// Serializable `<objectPr>` properties for an OLE object.
 ///
 /// Captures the visual + interaction flags of CT_ObjectPr plus the optional
-/// `<anchor>` grandchild, in a shape suitable for both WASM JSON output and
+/// `<anchor>` grandchild, in a shape suitable for both JSON output and
 /// typed round-trip bookkeeping on `OleObjectOoxmlProps`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

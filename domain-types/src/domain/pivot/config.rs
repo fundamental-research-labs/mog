@@ -425,7 +425,7 @@ const REQUIRED_FIELDS: &[(&str, &str, &str)] = &[
 ///
 /// This is the fix for the "18 trial-and-error calls" problem: serde only
 /// reports one missing field per attempt. This function catches them all
-/// and works for every API consumer (TypeScript, Python, WASM, etc.).
+/// and works for every API consumer.
 pub fn validate_pivot_config_json(value: &serde_json::Value) -> Result<(), String> {
     let obj = match value.as_object() {
         Some(o) => o,

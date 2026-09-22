@@ -12,7 +12,7 @@ use ooxml_types::cond_format::{
 /// Parse conditional formats from worksheet XML.
 ///
 /// Finds all `<conditionalFormatting>` elements and returns a pair:
-/// - `Vec<CfSummary>`: lightweight summaries (sqref, pivot flag, rules count) for JSON/WASM
+/// - `Vec<CfSummary>`: lightweight summaries (sqref, pivot flag, rules count) for JSON
 /// - `Vec<ConditionalFormatting>`: full parsed rules for domain conversion
 ///
 /// # Arguments

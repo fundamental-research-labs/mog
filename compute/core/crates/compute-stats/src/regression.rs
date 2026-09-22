@@ -4,7 +4,7 @@
 //! regression, plus simple moving average.
 //!
 //! Ported from `charts/src/math/regression.ts`.
-//! All functions are pure — no closures in output (wire-safe for WASM).
+//! All functions are pure — no closures in the output.
 
 mod dispatch;
 mod format;

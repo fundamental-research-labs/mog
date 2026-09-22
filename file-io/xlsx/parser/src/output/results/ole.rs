@@ -45,7 +45,7 @@ pub struct OleObjectOutput {
 // have moved to `domain-types::domain::drawings::ole_object` (typed OOXML preservation
 // inventory row 1.7) under their plain domain names (`OleObjectProperties`,
 // `OleObjectAnchor`, `OleAnchorPoint`). Alias the historical `*Output` names
-// here so the `OleObjectOutput` struct and WASM JSON consumers compile
+// here so the `OleObjectOutput` struct and existing callers compile
 // unchanged.
 pub use domain_types::domain::drawings::{
     OleAnchorPoint as OleAnchorPointOutput, OleObjectAnchor as OleObjectAnchorOutput,
@@ -53,7 +53,7 @@ pub use domain_types::domain::drawings::{
 };
 
 impl OleObjectOutput {
-    /// Convert an `OleObject` (parser-internal) into an `OleObjectOutput` (WASM-serializable).
+    /// Convert an `OleObject` (parser-internal) into an `OleObjectOutput`.
     pub fn from_ole_object(obj: &crate::domain::controls::types::OleObject) -> Self {
         let object_pr = obj.object_pr.as_ref().map(|pr| {
             let anchor = pr.anchor.as_ref().map(|a| OleObjectAnchorOutput {

@@ -141,7 +141,7 @@ pub struct FormControlOutput {
 }
 
 impl FormControlOutput {
-    /// Convert a `FormControlOutput` (WASM-serializable) back into a `FormControl` (parser-internal).
+    /// Convert a `FormControlOutput` back into a `FormControl` (parser-internal).
     ///
     /// This is the reverse of `from_form_control()` and enables semantic round-trip:
     /// parse → FormControlOutput → FormControl → ControlsWriter → ctrlProp XML.
@@ -222,7 +222,7 @@ impl FormControlOutput {
         }
     }
 
-    /// Convert a `FormControl` (parser-internal) into a `FormControlOutput` (WASM-serializable).
+    /// Convert a `FormControl` (parser-internal) into a `FormControlOutput`.
     ///
     /// `shape_id` is provided externally because it comes from the worksheet-level
     /// `<control shapeId="...">` element, not from the ctrlProp XML.

@@ -1,13 +1,13 @@
 //! JSON utility functions for XLSX parser serialization.
 //!
 //! Provides escape_json_string and errors_to_json for manual JSON
-//! serialization (no serde dependency for WASM size).
+//! serialization without a serde dependency.
 
 use crate::infra::error::ParseErrorDetail;
 
 /// Convert ParseErrorDetail array to JSON string for JS consumption
 ///
-/// Serializes errors to JSON without serde dependency (for WASM size).
+/// Serializes errors to JSON without a serde dependency.
 /// Format: [{"code":300,"severity":"error","message":"...","part":"..."},...]
 pub fn errors_to_json(errors: &[ParseErrorDetail]) -> String {
     if errors.is_empty() {

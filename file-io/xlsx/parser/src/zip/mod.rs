@@ -1,7 +1,7 @@
 //! ZIP archive handling for XLSX files
 //!
 //! XLSX files are ZIP archives containing XML files. This module provides
-//! a lightweight, WASM-compatible ZIP parser using miniz_oxide for decompression.
+//! a lightweight ZIP parser using miniz_oxide for decompression.
 //!
 //! Key features:
 //! - Parses ZIP central directory for fast file lookup

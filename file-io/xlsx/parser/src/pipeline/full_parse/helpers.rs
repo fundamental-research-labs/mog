@@ -8,7 +8,7 @@ use crate::output::results::SmartArtPartsOutput;
 // SmartArt Conversion Helper
 // =============================================================================
 
-/// Convert parser-internal `SmartArtParts` to the WASM-serializable `SmartArtPartsOutput`.
+/// Convert parser-internal `SmartArtParts` to `SmartArtPartsOutput`.
 pub(super) fn convert_smartart_parts(
     parts: Vec<crate::domain::drawings::SmartArtParts>,
 ) -> Vec<SmartArtPartsOutput> {

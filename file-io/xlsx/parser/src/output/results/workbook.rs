@@ -193,9 +193,9 @@ pub struct FullParsedSheet {
     pub explicit_blank_cells: Vec<(u32, u32)>,
     /// Merge ranges
     pub merges: Vec<MergeRange>,
-    /// Conditional formatting rules (summary for JSON/WASM output)
+    /// Conditional formatting rules (summary for JSON output)
     pub conditional_formats: Vec<CfSummary>,
-    /// Full conditional formatting data for domain conversion (not serialized to JSON/WASM).
+    /// Full conditional formatting data for domain conversion (not serialized to JSON).
     /// Contains complete rule definitions (color scales, data bars, icon sets, cell-is conditions, etc.).
     #[serde(skip)]
     pub conditional_formatting_full: Vec<ooxml_types::cond_format::ConditionalFormatting>,
@@ -235,9 +235,9 @@ pub struct FullParsedSheet {
     pub parsed_pivot_configs: Vec<domain_types::domain::pivot::ParsedPivotTable>,
     /// Data table regions in this sheet
     pub data_tables: Vec<DataTableInfo>,
-    /// Sparkline groups (summary for JSON/WASM output)
+    /// Sparkline groups (summary for JSON output)
     pub sparklines: Vec<SparklineSummary>,
-    /// Full sparkline group data for domain conversion (not serialized to JSON/WASM).
+    /// Full sparkline group data for domain conversion (not serialized to JSON).
     #[serde(skip)]
     pub sparkline_groups: Vec<ooxml_types::sparklines::SparklineGroup>,
     /// Comments
@@ -605,11 +605,11 @@ pub struct FullParseResult {
     /// Full pivot cache definitions for structured round-trip writing.
     /// Keyed by cache_id. Contains source, fields, shared items — everything
     /// needed to reconstruct pivotCacheDefinition XML.
-    /// Not serialized to TypeScript/WASM (internal round-trip data only).
+    /// Not serialized to JSON (internal round-trip data only).
     #[serde(skip)]
     pub pivot_caches: std::collections::HashMap<u32, crate::domain::pivot::types::ParsedPivotCache>,
     /// Pivot-owned imported cache package facts for writer-only no-edit
-    /// preservation. Not serialized to TypeScript/WASM.
+    /// preservation. Not serialized to JSON.
     #[serde(skip)]
     pub pivot_cache_packages: Vec<domain_types::PivotCachePackageFidelity>,
     /// Slicer cache definitions (workbook-level, shared across sheets)

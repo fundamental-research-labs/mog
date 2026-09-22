@@ -222,14 +222,6 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
                     workbook_snap.clone(),
                 )?
         } else {
-            #[cfg(target_arch = "wasm32")]
-            {
-                engine
-                    .stores
-                    .compute
-                    .init_from_snapshot_minimal(&mut engine.cell_store, workbook_snap.clone())?
-            }
-            #[cfg(not(target_arch = "wasm32"))]
             {
                 engine
                     .stores

@@ -21,32 +21,20 @@
 
 use crate::eval::lookup::index_cache::LookupIndexCache;
 
-#[cfg(feature = "native")]
 use std::sync::Arc;
-#[cfg(feature = "native")]
 use std::sync::atomic::{AtomicU64, Ordering};
 
-#[cfg(feature = "native")]
 use super::range_version::RangeVersion;
-#[cfg(feature = "native")]
 use super::versioned_entry::VersionedEntry;
-#[cfg(feature = "native")]
 use crate::eval::context::traits::DataSource;
-#[cfg(feature = "native")]
 use cell_types::SheetId;
-#[cfg(feature = "native")]
 use compute_functions::helpers::bitmask_cache::{CachedBitmask, build_bitmask, update_bitmask_row};
-#[cfg(feature = "native")]
 use compute_functions::helpers::column_bitset::ColumnBitset;
-#[cfg(feature = "native")]
 use compute_functions::helpers::conditional_aggregate::ValueSlice;
-#[cfg(feature = "native")]
 use compute_functions::helpers::frequency_cache::{
     CountFrequencyMap, SumFrequencyMap, build_count_map, build_sum_map,
 };
-#[cfg(feature = "native")]
 use compute_functions::helpers::sorted_cache::{incremental_update, sort_and_build};
-#[cfg(feature = "native")]
 use dashmap::DashMap;
 use value_types::CellValue;
 
@@ -55,7 +43,6 @@ use value_types::CellValue;
 // ---------------------------------------------------------------------------
 
 /// Atomic counters for a single cache tier.
-#[cfg(feature = "native")]
 #[derive(Debug, Default)]
 pub struct CacheCounters {
     pub hits: AtomicU64,
@@ -73,7 +60,6 @@ pub struct CacheCountersSnapshot {
     pub evictions: u64,
 }
 
-#[cfg(feature = "native")]
 impl CacheCounters {
     fn snapshot(&self) -> CacheCountersSnapshot {
         CacheCountersSnapshot {
@@ -86,7 +72,6 @@ impl CacheCounters {
 }
 
 /// Atomic counters for all workbook cache tiers.
-#[cfg(feature = "native")]
 #[derive(Debug, Default)]
 pub struct WorkbookCacheStats {
     pub sorted: CacheCounters,
@@ -126,11 +111,9 @@ pub struct WorkbookCacheStatsSnapshot {
 /// Cache key for sorted arrays: (sheet_id, col, row_start, row_end).
 /// Identifies the exact column range whose values were sorted.
 /// Used by SMALL, LARGE, RANK functions.
-#[cfg(feature = "native")]
 pub(crate) type SortedCacheKey = (SheetId, u32, u32, u32);
 
 /// Max entries in the Tier 1 sorted cache before eviction.
-#[cfg(feature = "native")]
 const SORTED_CACHE_MAX: usize = 10_000;
 
 // ---------------------------------------------------------------------------
@@ -139,16 +122,13 @@ const SORTED_CACHE_MAX: usize = 10_000;
 
 /// Cache key for count frequency maps: (sheet_id, col, row_start, row_end).
 /// Identifies the exact range whose values were used to build the frequency map.
-#[cfg(feature = "native")]
 pub(crate) type FrequencyCountKey = (SheetId, u32, u32, u32);
 
 /// Cache key for sum frequency maps: (criteria range key, sum range key).
 /// Each sub-key is (sheet_id, col, row_start, row_end).
-#[cfg(feature = "native")]
 pub(crate) type FrequencySumKey = (FrequencyCountKey, FrequencyCountKey);
 
 /// Max entries per Tier 1 frequency cache before eviction.
-#[cfg(feature = "native")]
 #[allow(dead_code)]
 const FREQUENCY_CACHE_MAX: usize = 10_000;
 
@@ -159,18 +139,14 @@ const FREQUENCY_CACHE_MAX: usize = 10_000;
 /// Cache key for bitmask entries: (sheet_id, col, row_start, row_end, criteria_hash).
 /// Identifies the exact column range + hashed criterion used to build the bitmask.
 /// The criteria hash is an FxHash of the raw criteria `CellValue`.
-#[cfg(feature = "native")]
 pub(crate) type BitmaskCacheKey = (SheetId, u32, u32, u32, u64);
 
 /// Max entries in the Tier 1 bitmask cache before eviction.
-#[cfg(feature = "native")]
 const BITMASK_CACHE_MAX: usize = 10_000;
 
 /// Retained mask words, criteria text, and conservatively estimated entry overhead.
-#[cfg(feature = "native")]
 const BITMASK_CACHE_BYTES: usize = 32 * 1024 * 1024;
 
-#[cfg(feature = "native")]
 fn bitmask_entry_bytes(rows: u32, criteria: &CellValue) -> Option<usize> {
     let criteria_bytes = match criteria {
         CellValue::Number(_) | CellValue::Boolean(_) | CellValue::Null => 0,
@@ -197,24 +173,18 @@ pub struct WorkbookCache {
     pub(crate) lookup_cache: LookupIndexCache,
 
     // === Tier 1: Sorted Cache ===
-    #[cfg(feature = "native")]
     pub(crate) sorted_cache: DashMap<SortedCacheKey, VersionedEntry<Arc<Vec<f64>>>>,
 
     // === Tier 1: Frequency Cache ===
-    #[cfg(feature = "native")]
     pub(crate) count_frequency_cache: DashMap<FrequencyCountKey, VersionedEntry<CountFrequencyMap>>,
-    #[cfg(feature = "native")]
     pub(crate) sum_frequency_cache: DashMap<FrequencySumKey, VersionedEntry<SumFrequencyMap>>,
 
     // === Tier 1: Bitmask Cache ===
-    #[cfg(feature = "native")]
     pub(crate) bitmask_cache: DashMap<BitmaskCacheKey, VersionedEntry<CachedBitmask>>,
     // Serializes admission/eviction only; valid cache hits never acquire it.
-    #[cfg(feature = "native")]
     bitmask_bytes: std::sync::Mutex<usize>,
 
     // === Cache observability ===
-    #[cfg(feature = "native")]
     stats: WorkbookCacheStats,
 }
 
@@ -224,17 +194,11 @@ impl WorkbookCache {
     pub fn new() -> Self {
         Self {
             lookup_cache: LookupIndexCache::new(),
-            #[cfg(feature = "native")]
             sorted_cache: DashMap::with_capacity(256),
-            #[cfg(feature = "native")]
             count_frequency_cache: DashMap::with_capacity(256),
-            #[cfg(feature = "native")]
             sum_frequency_cache: DashMap::with_capacity(256),
-            #[cfg(feature = "native")]
             bitmask_cache: DashMap::with_capacity(256),
-            #[cfg(feature = "native")]
             bitmask_bytes: std::sync::Mutex::new(0),
-            #[cfg(feature = "native")]
             stats: WorkbookCacheStats::default(),
         }
     }
@@ -245,7 +209,6 @@ impl WorkbookCache {
     /// cell positions, invalidating all column-keyed lookup indexes.
     pub fn invalidate_structure(&self) {
         self.lookup_cache.clear();
-        #[cfg(feature = "native")]
         self.clear_bitmasks();
     }
 
@@ -254,17 +217,12 @@ impl WorkbookCache {
     /// Called when the workbook is reloaded from scratch (e.g., `init_from_snapshot`).
     pub fn clear_all(&self) {
         self.lookup_cache.clear();
-        #[cfg(feature = "native")]
         self.sorted_cache.clear();
-        #[cfg(feature = "native")]
         self.count_frequency_cache.clear();
-        #[cfg(feature = "native")]
         self.sum_frequency_cache.clear();
-        #[cfg(feature = "native")]
         self.clear_bitmasks();
     }
 
-    #[cfg(feature = "native")]
     fn clear_bitmasks(&self) {
         let mut bytes = self
             .bitmask_bytes
@@ -291,7 +249,6 @@ impl WorkbookCache {
     ///
     /// Returns `None` if `values` contains an error cell (the caller should
     /// propagate the error from the cell values directly).
-    #[cfg(feature = "native")]
     pub(crate) fn get_or_build_sorted(
         &self,
         key: SortedCacheKey,
@@ -325,7 +282,6 @@ impl WorkbookCache {
     }
 
     /// Evict ~10% of sorted cache entries (oldest by insertion order).
-    #[cfg(feature = "native")]
     fn evict_sorted(&self) {
         let to_remove = SORTED_CACHE_MAX / 10;
         let keys: Vec<_> = self
@@ -357,7 +313,6 @@ impl WorkbookCache {
     /// `sheet`: sheet containing the range.
     /// `col_start`/`col_end`: column span for `RangeVersion` capture.
     /// `values`: cell value refs to build the frequency map from.
-    #[cfg(feature = "native")]
     pub(crate) fn get_or_build_count_frequency<'a>(
         &self,
         key: FrequencyCountKey,
@@ -417,7 +372,6 @@ impl WorkbookCache {
     /// `sheet`: sheet containing the ranges.
     /// `col_start`/`col_end`: combined column span covering both ranges.
     /// `crit_values`/`sum_values`: cell value refs for building the map.
-    #[cfg(feature = "native")]
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn get_or_build_sum_frequency<'a>(
         &self,
@@ -470,7 +424,6 @@ impl WorkbookCache {
     }
 
     /// Evict ~10% of count frequency cache entries (oldest by insertion order).
-    #[cfg(feature = "native")]
     fn evict_count_frequency(&self) {
         let to_remove = FREQUENCY_CACHE_MAX / 10;
         let keys: Vec<_> = self
@@ -490,7 +443,6 @@ impl WorkbookCache {
     }
 
     /// Evict ~10% of sum frequency cache entries (oldest by insertion order).
-    #[cfg(feature = "native")]
     fn evict_sum_frequency(&self) {
         let to_remove = FREQUENCY_CACHE_MAX / 10;
         let keys: Vec<_> = self
@@ -517,7 +469,6 @@ impl WorkbookCache {
     /// `None` otherwise. Used by the borrowed multi-criteria path where building
     /// on miss is wasteful for dynamic criteria (e.g., `">="&$CY109`) that
     /// produce unique keys per cell with little opportunity for reuse.
-    #[cfg(feature = "native")]
     pub(crate) fn try_get_bitmask(
         &self,
         key: &BitmaskCacheKey,
@@ -539,7 +490,6 @@ impl WorkbookCache {
     ///
     /// Retains only match bits and the criterion used for collision checking.
     /// Oversized masks or complex criterion objects bypass cache admission.
-    #[cfg(feature = "native")]
     pub(crate) fn get_or_build_bitmask<V: ValueSlice + ?Sized>(
         &self,
         key: BitmaskCacheKey,
@@ -578,7 +528,6 @@ impl WorkbookCache {
         Some(result)
     }
 
-    #[cfg(feature = "native")]
     fn insert_bitmask(
         &self,
         key: BitmaskCacheKey,
@@ -603,7 +552,6 @@ impl WorkbookCache {
     }
 
     /// Evict a small batch while the caller holds the admission lock.
-    #[cfg(feature = "native")]
     fn evict_bitmasks(&self, bytes: &mut usize) {
         let to_remove = (self.bitmask_cache.len() / 10).max(1);
         let keys: Vec<_> = self
@@ -639,7 +587,6 @@ impl WorkbookCache {
     /// Returns `Some(Arc<Vec<f64>>)` if incremental update succeeded,
     /// `None` if the entry doesn't exist, delta is too large (>10%), or
     /// incremental update was not possible.
-    #[cfg(feature = "native")]
     pub(crate) fn try_incremental_sorted_update(
         &self,
         key: SortedCacheKey,
@@ -674,7 +621,6 @@ impl WorkbookCache {
     ///
     /// Returns `true` if the entry was updated in place, `false` if the entry
     /// doesn't exist (caller should fall back to `get_or_build_count_frequency`).
-    #[cfg(feature = "native")]
     pub(crate) fn try_incremental_count_frequency_update(
         &self,
         key: FrequencyCountKey,
@@ -705,7 +651,6 @@ impl WorkbookCache {
     /// representing cell changes in the criteria and sum columns.
     ///
     /// Returns `true` if updated in place, `false` if entry doesn't exist.
-    #[cfg(feature = "native")]
     pub(crate) fn try_incremental_sum_frequency_update(
         &self,
         key: FrequencySumKey,
@@ -736,7 +681,6 @@ impl WorkbookCache {
     /// `criteria`: the criterion value associated with this bitmask entry.
     ///
     /// Returns `true` if updated in place, `false` if entry doesn't exist.
-    #[cfg(feature = "native")]
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn try_incremental_bitmask_update(
         &self,
@@ -774,7 +718,6 @@ impl WorkbookCache {
     ///
     /// These are order-of-magnitude estimates based on entry counts and
     /// typical entry sizes. Not exact — useful for observability dashboards.
-    #[cfg(feature = "native")]
     pub fn estimated_memory_bytes(&self) -> usize {
         let mut total = 0usize;
 
@@ -812,7 +755,6 @@ impl WorkbookCache {
     /// Safe to call concurrently — each counter is read with `Relaxed` ordering.
     /// The snapshot is a best-effort point-in-time view (individual counters may
     /// be read at slightly different moments under concurrent access).
-    #[cfg(feature = "native")]
     pub fn stats_snapshot(&self) -> WorkbookCacheStatsSnapshot {
         let sorted_entries = self.sorted_cache.len();
         let count_freq_entries = self.count_frequency_cache.len();
@@ -855,6 +797,6 @@ impl Default for WorkbookCache {
     }
 }
 
-#[cfg(all(test, feature = "native"))]
+#[cfg(test)]
 #[path = "workbook_cache_tests.rs"]
 mod tests;

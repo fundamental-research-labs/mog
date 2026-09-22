@@ -104,7 +104,7 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
     fn check_deadline(&self) -> Result<(), ComputeError> {
         if let Some(dl) = self.deadline
             && self.operations.is_multiple_of(DEADLINE_CHECK_INTERVAL)
-            && crate::time_compat::WasmSafeInstant::now() > dl
+            && crate::time_compat::ElapsedInstant::now() > dl
         {
             return Err(ComputeError::DeadlineExceeded);
         }

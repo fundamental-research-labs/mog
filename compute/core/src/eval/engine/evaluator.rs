@@ -27,7 +27,7 @@ pub struct Evaluator<'a, D: EvalDataAccess, M: EvalMetadata> {
     pub(in crate::eval) lambda_expr_cache: Option<LambdaExprCache>,
     /// Optional per-formula deadline. When set, `tick()` checks wall-clock
     /// time every `DEADLINE_CHECK_INTERVAL` operations.
-    pub deadline: Option<crate::time_compat::WasmSafeInstant>,
+    pub deadline: Option<crate::time_compat::ElapsedInstant>,
 }
 
 impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
@@ -56,7 +56,7 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         node: &ASTNode,
         data: &'a D,
         meta: &'a M,
-        deadline: crate::time_compat::WasmSafeInstant,
+        deadline: crate::time_compat::ElapsedInstant,
     ) -> Result<CellValue, ComputeError> {
         let mut eval = Evaluator {
             data,

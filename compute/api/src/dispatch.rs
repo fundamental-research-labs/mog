@@ -1,11 +1,7 @@
 //! Actor dispatch layer — serializes access to the `!Send + !Sync` engine.
 //!
-//! On native targets the engine lives on a dedicated thread, commands are sent
-//! via a channel, and replies come back on bounded(1) oneshots. On WASM the
-//! engine is owned via `Rc<RefCell>` and called synchronously.
-//!
-//! Both targets expose an identical public API so that `Workbook` and `Sheet`
-//! are target-agnostic.
+//! The engine lives on a dedicated thread. Commands are sent via a channel,
+//! and replies come back on bounded(1) oneshots.
 //!
 //! ## Closure-based dispatch
 //!
@@ -15,12 +11,7 @@
 
 use crate::error::ComputeApiError;
 
-// =========================================================================
-// Native dispatch (threaded actor)
-// =========================================================================
-
-#[cfg(feature = "native")]
-mod native {
+mod actor {
     use super::*;
     use compute_core::storage::engine::ComputeEngine;
     use crossbeam_channel::{Sender, bounded};
@@ -108,86 +99,13 @@ mod native {
     }
 }
 
-// =========================================================================
-// WASM dispatch (direct, single-threaded)
-// =========================================================================
-
-#[cfg(not(feature = "native"))]
-mod wasm {
-    use super::*;
-    use compute_core::storage::engine::ComputeEngine;
-    use std::cell::RefCell;
-    use std::rc::Rc;
-
-    /// Direct dispatch — no thread, no channel. Calls into the engine
-    /// synchronously through `Rc<RefCell<...>>`.
-    pub struct Dispatch {
-        engine: Rc<RefCell<ComputeEngine>>,
-    }
-
-    impl Clone for Dispatch {
-        fn clone(&self) -> Self {
-            Dispatch {
-                engine: self.engine.clone(),
-            }
-        }
-    }
-
-    impl Dispatch {
-        /// Wrap an engine for direct single-threaded access.
-        pub fn new(engine: ComputeEngine) -> Self {
-            Dispatch {
-                engine: Rc::new(RefCell::new(engine)),
-            }
-        }
-
-        /// Execute a closure with mutable engine access.
-        pub fn call_engine<T: 'static>(
-            &self,
-            f: impl FnOnce(&mut ComputeEngine) -> T,
-        ) -> Result<T, ComputeApiError> {
-            Ok(f(&mut self.engine.borrow_mut()))
-        }
-
-        /// Execute a closure with shared engine access.
-        pub fn query_engine<T: 'static>(
-            &self,
-            f: impl FnOnce(&ComputeEngine) -> T,
-        ) -> Result<T, ComputeApiError> {
-            Ok(f(&*self.engine.borrow()))
-        }
-    }
-}
-
-// =========================================================================
-// Re-export the target-appropriate Dispatch
-// =========================================================================
-
-#[cfg(feature = "native")]
-pub use native::Dispatch;
-
-#[cfg(not(feature = "native"))]
-pub use wasm::Dispatch;
-
-// =========================================================================
-// Unified constructor — works regardless of feature flags
-// =========================================================================
+pub use actor::Dispatch;
 
 impl Dispatch {
-    /// Create a `Dispatch` from an engine instance.
-    ///
-    /// On native: spawns a dedicated engine thread.
-    /// On WASM: wraps in Rc<RefCell> for synchronous access.
+    /// Spawn the engine on its thread and return a handle.
     pub fn from_engine(
         engine: compute_core::storage::engine::ComputeEngine,
     ) -> Result<Self, ComputeApiError> {
-        #[cfg(feature = "native")]
-        {
-            Self::spawn(engine)
-        }
-        #[cfg(not(feature = "native"))]
-        {
-            Ok(Self::new(engine))
-        }
+        Self::spawn(engine)
     }
 }

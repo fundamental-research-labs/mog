@@ -56,7 +56,6 @@
 // =============================================================================
 
 pub(crate) fn now_us() -> f64 {
-    #[cfg(not(target_arch = "wasm32"))]
     {
         use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -64,10 +63,6 @@ pub(crate) fn now_us() -> f64 {
             .duration_since(UNIX_EPOCH)
             .map(|duration| duration.as_micros() as f64)
             .unwrap_or(0.0)
-    }
-    #[cfg(target_arch = "wasm32")]
-    {
-        js_sys::Date::now() * 1_000.0
     }
 }
 

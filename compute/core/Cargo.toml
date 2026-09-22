@@ -9,16 +9,6 @@ repository.workspace = true
 description = "Native Rust compute engine for spreadsheet formula evaluation"
 
 [features]
-default = ["native"]
-# Native target: includes threading, system clock support,
-# and parallel XLSX parse/export support.
-native = [
-    "dep:rayon",
-    "dep:parking_lot",
-    "dep:dashmap",
-    "xlsx-api/parallel",
-    "xlsx-parser/parallel",
-]
 # Full Power Query CRUD — gate unwired functions only
 power-query-full = []
 # Enable tracing spans in eval hot paths (zero overhead when off)
@@ -130,7 +120,7 @@ bincode = "1"
 # UUID handling (CellId/SheetId string ↔ u128 at IPC boundary)
 uuid = { version = "1", features = ["v4", "v5"] }
 
-# Date/time functions (clock feature needed for Utc::now() on native only)
+# Date/time functions
 chrono = { workspace = true }
 
 # Error handling
@@ -139,8 +129,8 @@ thiserror = { workspace = true }
 # Zero-cost tracing instrumentation (single atomic load per span when no subscriber)
 tracing = { workspace = true }
 
-# Data-parallel recalculation (native only — no threads in WASM)
-rayon = { version = "1.10", optional = true }
+# Data-parallel recalculation
+rayon = "1.10"
 
 # Fast non-cryptographic HashMap (FxHashMap — ~5-10ns lookup with u128 keys)
 rustc-hash = "2"
@@ -163,27 +153,19 @@ regex = "1"
 # Grow the call stack on demand (prevents stack overflow in deep dependency chains)
 stacker = "0.1"
 
-# RwLock replacement — no poisoning on panic, faster uncontended path (native only)
-parking_lot = { version = "0.12", optional = true }
+# RwLock replacement — no poisoning on panic, faster uncontended path
+parking_lot = "0.12"
 
 
 # Small inline-optimized Vec (1 element inline, heap for 2+) — lookup index row lists
 smallvec = "1"
 
-# Concurrent hash map for lock-free parallel lookup index building (native only — pulls in parking_lot_core which panics on WASM)
-dashmap = { version = "6", optional = true }
+# Concurrent hash map for lock-free parallel lookup index building
+dashmap = "6"
 
 # Hashable f64 wrapper for exact-match lookup indexes
 ordered-float = "4"
 
-
-# WASM-specific dependency overrides:
-# - getrandom needs "js" feature for random number source (used by rand/nalgebra/statrs)
-# - uuid needs "js" feature for v4 UUID generation
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { version = "0.2", features = ["js"] }
-uuid = { version = "1", features = ["v4", "js"] }
-js-sys = "0.3"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

@@ -126,7 +126,6 @@ pub fn get_current_serial_timestamp() -> f64 {
         return injected;
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     {
         let millis = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -137,10 +136,6 @@ pub fn get_current_serial_timestamp() -> f64 {
             .unwrap_or(45000.5)
     }
 
-    #[cfg(target_arch = "wasm32")]
-    {
-        45000.5
-    }
 }
 
 fn datetime_to_serial(dt: &NaiveDateTime) -> f64 {

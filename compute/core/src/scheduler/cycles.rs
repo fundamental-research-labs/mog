@@ -880,7 +880,6 @@ impl ComputeCore {
                     .with_sumifs_cache_epoch(self.current_sumifs_cache_epoch())
                     .with_recalc_clock(self.recalc_clock());
                 ctx.access.formula_text_provider = self.formula_text_provider();
-                #[cfg(feature = "native")]
                 {
                     ctx.workbook_cache = Some(&self.workbook_cache);
                 }

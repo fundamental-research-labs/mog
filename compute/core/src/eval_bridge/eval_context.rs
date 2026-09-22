@@ -20,9 +20,7 @@ use std::sync::Arc;
 use value_types::{CellArray, CellError, CellValue};
 use value_types::{DenseBoolMask, DenseColumn};
 
-#[cfg(feature = "native")]
 use crate::eval::context::traits::IndexedLookupResult;
-#[cfg(feature = "native")]
 use crate::eval::lookup::index_cache::LookupIndexCache;
 
 /// Wraps a `&CellStore` and implements `EvaluationContext` (via split traits).
@@ -31,7 +29,6 @@ pub struct EvalContext<'a> {
     /// Optional shared lookup index cache for O(1) XLOOKUP/VLOOKUP/MATCH.
     /// When `None`, indexed lookups return `NotAvailable` and the evaluator
     /// falls back to the row-by-row materialization path.
-    #[cfg(feature = "native")]
     pub lookup_cache: Option<&'a LookupIndexCache>,
     /// Optional shared range store for pre-materialized range data.
     /// When Some, get_range_values delegates to the store instead of
@@ -41,7 +38,6 @@ pub struct EvalContext<'a> {
     /// formula's root shape rather than only persisted identity flags.
     pub ast_cache: Option<&'a FxHashMap<CellId, AstEntry>>,
     /// Optional shared workbook cache for bitmask/frequency caching.
-    #[cfg(feature = "native")]
     pub workbook_cache: Option<&'a crate::eval::cache::workbook_cache::WorkbookCache>,
     /// Current scheduler-owned SUMIFS cache epoch.
     pub sumifs_cache_epoch: Option<SumifsCacheEpoch>,
@@ -53,11 +49,9 @@ impl<'a> EvalContext<'a> {
     pub fn new(cell_store: &'a CellStore, current_cell_id: CellId, current_sheet: SheetId) -> Self {
         Self {
             access: StoreAccess::new(cell_store, current_cell_id, current_sheet),
-            #[cfg(feature = "native")]
             lookup_cache: None,
             range_store: None,
             ast_cache: None,
-            #[cfg(feature = "native")]
             workbook_cache: None,
             sumifs_cache_epoch: None,
             clock: RecalcClock::live(),
@@ -77,11 +71,9 @@ impl<'a> EvalContext<'a> {
                 current_sheet,
                 formula_text_provider,
             ),
-            #[cfg(feature = "native")]
             lookup_cache: None,
             range_store: None,
             ast_cache: None,
-            #[cfg(feature = "native")]
             workbook_cache: None,
             sumifs_cache_epoch: None,
             clock: RecalcClock::live(),
@@ -102,11 +94,9 @@ impl<'a> EvalContext<'a> {
                 current_sheet,
                 ordered_sheets,
             ),
-            #[cfg(feature = "native")]
             lookup_cache: None,
             range_store: None,
             ast_cache: None,
-            #[cfg(feature = "native")]
             workbook_cache: None,
             sumifs_cache_epoch: None,
             clock: RecalcClock::live(),
@@ -129,11 +119,9 @@ impl<'a> EvalContext<'a> {
                 current_sheet,
                 pending_override,
             ),
-            #[cfg(feature = "native")]
             lookup_cache: None,
             range_store: None,
             ast_cache: None,
-            #[cfg(feature = "native")]
             workbook_cache: None,
             sumifs_cache_epoch: None,
             clock: RecalcClock::live(),
@@ -141,7 +129,6 @@ impl<'a> EvalContext<'a> {
     }
 
     /// Create a context with a shared lookup index cache for indexed lookups.
-    #[cfg(feature = "native")]
     pub fn with_lookup_cache(
         cell_store: &'a CellStore,
         current_cell_id: CellId,
@@ -161,7 +148,6 @@ impl<'a> EvalContext<'a> {
 
     /// Create a context with a shared RangeStore for pre-materialized range data.
     /// Also uses the RangeStore's lookup cache for indexed lookups.
-    #[cfg(feature = "native")]
     pub fn with_range_store(
         cell_store: &'a CellStore,
         current_cell_id: CellId,
@@ -492,7 +478,6 @@ impl<'a> EvalMetadata for EvalContext<'a> {
         self.access.find_pivot_table_at(sheet, row, col)
     }
 
-    #[cfg(feature = "native")]
     fn indexed_column_search_range(
         &self,
         sheet: &SheetId,
@@ -522,7 +507,6 @@ impl<'a> EvalMetadata for EvalContext<'a> {
         }
     }
 
-    #[cfg(feature = "native")]
     fn indexed_column_search(
         &self,
         sheet: &SheetId,
@@ -570,7 +554,6 @@ impl<'a> EvalMetadata for EvalContext<'a> {
         }
     }
 
-    #[cfg(feature = "native")]
     fn indexed_column_wildcard_search(
         &self,
         sheet: &SheetId,
@@ -615,16 +598,10 @@ impl<'a> EvalMetadata for EvalContext<'a> {
         row_end: u32,
         values: &[CellValue],
     ) -> Option<Arc<Vec<f64>>> {
-        #[cfg(feature = "native")]
         {
             let cache = self.workbook_cache?;
             let key = (*sheet, col, row_start, row_end);
             cache.get_or_build_sorted(key, self.access.cell_store, sheet, col, values)
-        }
-        #[cfg(not(feature = "native"))]
-        {
-            let _ = (sheet, col, row_start, row_end, values);
-            None
         }
     }
 
@@ -637,7 +614,6 @@ impl<'a> EvalMetadata for EvalContext<'a> {
         criteria: &CellValue,
         _col_values: value_types::ColumnView<'_>,
     ) -> Option<compute_functions::helpers::column_bitset::ColumnBitset> {
-        #[cfg(feature = "native")]
         {
             if self.access.pending_override.is_some() {
                 return None;
@@ -647,11 +623,6 @@ impl<'a> EvalMetadata for EvalContext<'a> {
                 compute_functions::helpers::bitmask_cache::hash_criteria_value(criteria);
             let key = (*sheet, col, row_start, row_end, criteria_hash);
             cache.try_get_bitmask(&key, self.access.cell_store, criteria)
-        }
-        #[cfg(not(feature = "native"))]
-        {
-            let _ = (sheet, col, row_start, row_end, criteria, _col_values);
-            None
         }
     }
 
@@ -664,7 +635,6 @@ impl<'a> EvalMetadata for EvalContext<'a> {
         criteria: &CellValue,
         col_values: value_types::ColumnView<'_>,
     ) -> Option<compute_functions::helpers::column_bitset::ColumnBitset> {
-        #[cfg(feature = "native")]
         {
             if self.access.pending_override.is_some() {
                 return None;
@@ -675,11 +645,6 @@ impl<'a> EvalMetadata for EvalContext<'a> {
             let key = (*sheet, col, row_start, row_end, criteria_hash);
             // The evaluator already clipped this view to the requested range.
             cache.get_or_build_bitmask(key, self.access.cell_store, criteria, &col_values)
-        }
-        #[cfg(not(feature = "native"))]
-        {
-            let _ = (sheet, col, row_start, row_end, criteria, col_values);
-            None
         }
     }
 }

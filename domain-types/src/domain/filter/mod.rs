@@ -43,7 +43,6 @@ pub use runtime::{
 };
 
 /// Monotonic counter for generating unique filter IDs.
-/// Replaces `SystemTime::now()` which panics on `wasm32-unknown-unknown`.
 static NEXT_FILTER_ID: AtomicU64 = AtomicU64::new(0);
 
 #[cfg(test)]

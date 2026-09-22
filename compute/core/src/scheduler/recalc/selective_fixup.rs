@@ -76,13 +76,9 @@ impl ComputeCore {
         let mut errors = Vec::new();
         let mut projection_deltas = Vec::new();
 
-        #[cfg(feature = "native")]
         let use_parallel = fixup_cells.len() >= super::super::level_eval::PARALLEL_THRESHOLD;
-        #[cfg(not(feature = "native"))]
-        let use_parallel = false;
 
         if use_parallel {
-            #[cfg(feature = "native")]
             {
                 self.topo_evaluate_level_parallel(
                     cell_store,
@@ -202,14 +198,10 @@ impl ComputeCore {
 
                     let changes_before = changed_cells.len();
 
-                    #[cfg(feature = "native")]
                     let use_parallel =
                         dirty_level.len() >= super::super::level_eval::PARALLEL_THRESHOLD;
-                    #[cfg(not(feature = "native"))]
-                    let use_parallel = false;
 
                     if use_parallel {
-                        #[cfg(feature = "native")]
                         {
                             self.topo_evaluate_level_parallel(
                                 cell_store,

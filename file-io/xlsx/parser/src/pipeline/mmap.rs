@@ -7,7 +7,6 @@
 //! It is a trusted-local-file optimization; untrusted XLSX byte imports should
 //! use the owned-bytes parser path.
 
-#![cfg(not(target_arch = "wasm32"))]
 
 use memmap2::Mmap;
 use std::fs::File;
@@ -119,7 +118,7 @@ pub fn should_use_mmap(file_size: u64) -> bool {
     file_size > MMAP_THRESHOLD as u64
 }
 
-#[cfg(all(test, not(target_arch = "wasm32"), feature = "native"))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Write;

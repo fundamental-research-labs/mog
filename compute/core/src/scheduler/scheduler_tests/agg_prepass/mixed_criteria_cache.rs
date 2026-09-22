@@ -73,7 +73,6 @@ fn mixed_criteria_aggregates_reuse_masks_and_refresh_after_edits() {
         }
     };
     check(&core, &cell_store, &data);
-    #[cfg(feature = "native")]
     {
         let stats = core.workbook_cache.stats_snapshot();
         assert!(stats.bitmask.rebuilds > 0, "exact filters must build masks");

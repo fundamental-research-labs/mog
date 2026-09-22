@@ -4,7 +4,6 @@ mod comment_package_metadata;
 mod dimensions;
 mod dynamic_metadata;
 mod named_ranges;
-#[cfg(feature = "native")]
 mod native_parallel;
 mod palette;
 mod pivot_cache_reconciliation;
@@ -55,7 +54,6 @@ use domain_types::{
 use value_types::ComputeError;
 
 use named_ranges::export_workbook_named_ranges;
-#[cfg(feature = "native")]
 use palette::SharedPalette;
 use workbook::{
     export_calculation_properties, export_custom_workbook_views_xml, export_document_properties,
@@ -395,7 +393,6 @@ pub(in crate::storage::engine) fn build_parse_output(
     let imported_style_prefix_len =
         palette::rebind_imported_xf_prefix(&mut seeded_style_palette, workbook_stylesheet.as_ref());
 
-    #[cfg(feature = "native")]
     let (mut output_sheets, table_projection_inputs, style_palette) = {
         use rayon::prelude::*;
         let palette = SharedPalette::from_vec_with_imported_prefix(
@@ -422,29 +419,6 @@ pub(in crate::storage::engine) fn build_parse_output(
         (sheets, table_projection_inputs, palette.into_vec())
     };
 
-    #[cfg(not(feature = "native"))]
-    let (mut output_sheets, table_projection_inputs, style_palette) = {
-        let palette = LocalPalette::from_vec_with_imported_prefix(
-            &mut seeded_style_palette,
-            imported_style_prefix_len,
-        );
-        let exported_sheets: Vec<ExportedSheetData> = sheet_ids
-            .iter()
-            .enumerate()
-            .filter_map(|(sheet_idx, sheet_id)| {
-                export_single_sheet(stores, cell_store, sheet_id, sheet_idx, &palette)
-            })
-            .collect();
-        let table_projection_inputs: Vec<Vec<ExportedTableProjectionInput>> = exported_sheets
-            .iter()
-            .map(|sheet| sheet.table_projection_inputs.clone())
-            .collect();
-        let sheets: Vec<SheetData> = exported_sheets
-            .into_iter()
-            .map(|sheet| sheet.sheet)
-            .collect();
-        (sheets, table_projection_inputs, palette.into_vec())
-    };
 
     let table_projection: TableExportProjection =
         finalize_table_export_projection(&mut output_sheets, &table_projection_inputs);

@@ -318,10 +318,7 @@ impl ComputeCore {
             let deltas_before = projection_deltas.len();
 
             // Decide: parallel or sequential based on level size
-            #[cfg(feature = "native")]
             let use_parallel = level.len() >= level_eval::PARALLEL_THRESHOLD;
-            #[cfg(not(feature = "native"))]
-            let use_parallel = false;
 
             #[cfg(feature = "journal")]
             {
@@ -334,7 +331,6 @@ impl ComputeCore {
             }
 
             if use_parallel {
-                #[cfg(feature = "native")]
                 {
                     metrics.levels_parallel += 1;
                     metrics.parallel_batch_cells += level.len() as u64;
@@ -415,7 +411,6 @@ impl ComputeCore {
             // invalidation for the projection ranges above. This block handles
             // the projection_changes (which have the per-cell col info) for
             // any additional columns not covered by deltas.
-            #[cfg(feature = "native")]
             {
                 for proj in &projection_changes[projections_before..] {
                     if let Ok(sheet_id) = SheetId::from_uuid_str(&proj.sheet_id) {
@@ -805,10 +800,7 @@ impl ComputeCore {
             let deltas_before = projection_deltas.len();
 
             // Decide: parallel or sequential based on level size
-            #[cfg(feature = "native")]
             let use_parallel = level.len() >= level_eval::PARALLEL_THRESHOLD;
-            #[cfg(not(feature = "native"))]
-            let use_parallel = false;
 
             #[cfg(feature = "journal")]
             {
@@ -821,7 +813,6 @@ impl ComputeCore {
             }
 
             if use_parallel {
-                #[cfg(feature = "native")]
                 {
                     metrics.levels_parallel += 1;
                     metrics.parallel_batch_cells += level.len() as u64;
@@ -893,7 +884,6 @@ impl ComputeCore {
 
             // Invalidate LookupIndexCache for columns written by spill
             // materialization in this level (same fix as main recalc loop).
-            #[cfg(feature = "native")]
             {
                 for proj in &projection_changes[projections_before..] {
                     if let Ok(sheet_id) = SheetId::from_uuid_str(&proj.sheet_id) {

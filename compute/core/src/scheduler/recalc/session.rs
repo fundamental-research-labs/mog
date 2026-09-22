@@ -1,20 +1,15 @@
-// ---------------------------------------------------------------------------
-// Deadline abstraction — uses WasmSafeInstant which works on both native and
-// WASM targets (delegates to js_sys::Date::now() on WASM).
-// ---------------------------------------------------------------------------
+use crate::time_compat::ElapsedInstant;
 
-use crate::time_compat::WasmSafeInstant;
-
-pub(in super::super) type Deadline = WasmSafeInstant;
+pub(in super::super) type Deadline = ElapsedInstant;
 
 pub(in super::super) fn make_deadline(timeout: std::time::Duration) -> Deadline {
-    WasmSafeInstant::now()
+    ElapsedInstant::now()
         .checked_add(timeout)
-        .unwrap_or_else(|| WasmSafeInstant::now() + std::time::Duration::from_secs(365 * 24 * 3600))
+        .unwrap_or_else(|| ElapsedInstant::now() + std::time::Duration::from_secs(365 * 24 * 3600))
 }
 
 pub(in super::super) fn past_deadline(deadline: &Deadline) -> bool {
-    WasmSafeInstant::now() > *deadline
+    ElapsedInstant::now() > *deadline
 }
 
 /// Clear all thread-local caches to avoid stale entries from previous recalc
@@ -33,7 +28,6 @@ pub(in super::super) fn past_deadline(deadline: &Deadline) -> bool {
 /// thread pool so every worker invalidates its thread-local.
 pub(in super::super) fn clear_thread_local_caches() {
     clear_current_thread_caches();
-    #[cfg(feature = "native")]
     rayon::broadcast(|_| clear_current_thread_caches());
 }
 

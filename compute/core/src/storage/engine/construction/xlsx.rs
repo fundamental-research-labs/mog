@@ -86,7 +86,6 @@ fn from_xlsx_bytes_with_layout(
 ///
 /// The mapping avoids an owned full-file `Vec<u8>`. Worksheet XML is inflated
 /// in chunks rather than materialized as a complete document.
-#[cfg(all(not(target_arch = "wasm32"), feature = "native"))]
 pub(in crate::storage::engine) fn from_xlsx_path(
     path: &str,
 ) -> Result<(ComputeEngine, RecalcResult), ComputeError> {

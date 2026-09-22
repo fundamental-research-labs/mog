@@ -83,7 +83,6 @@ impl ComputeEngine {
     }
 
     /// Stream-load a local `.xlsx` without copying the package into a `Vec<u8>`.
-    #[cfg(all(not(target_arch = "wasm32"), feature = "native"))]
     pub fn from_xlsx_path(path: &str) -> Result<(Self, RecalcResult), ComputeError> {
         construction::from_xlsx_path(path)
     }

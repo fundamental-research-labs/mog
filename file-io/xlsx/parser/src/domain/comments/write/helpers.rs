@@ -74,7 +74,6 @@ pub(super) fn current_timestamp() -> String {
 }
 
 fn standalone_unix_millis() -> u64 {
-    #[cfg(not(target_arch = "wasm32"))]
     {
         use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -83,14 +82,9 @@ fn standalone_unix_millis() -> u64 {
             .map(|duration| duration.as_millis() as u64)
             .unwrap_or(0)
     }
-    #[cfg(target_arch = "wasm32")]
-    {
-        js_sys::Date::now() as u64
-    }
 }
 
 fn standalone_unix_nanos() -> u128 {
-    #[cfg(not(target_arch = "wasm32"))]
     {
         use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -98,10 +92,6 @@ fn standalone_unix_nanos() -> u128 {
             .duration_since(UNIX_EPOCH)
             .map(|duration| duration.as_nanos())
             .unwrap_or(0)
-    }
-    #[cfg(target_arch = "wasm32")]
-    {
-        (js_sys::Date::now() * 1_000_000.0) as u128
     }
 }
 

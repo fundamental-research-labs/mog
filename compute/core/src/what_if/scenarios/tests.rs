@@ -673,7 +673,7 @@ fn test_scenario_timestamps_set() {
     assert!(result.success);
 
     let scenario = get_by_id(&storage, &result.scenario_id.unwrap()).unwrap();
-    assert!(scenario.created_at.get() > 0.0 || cfg!(target_arch = "wasm32"));
+    assert!(scenario.created_at.get() > 0.0);
     assert!(scenario.modified_at.is_some());
 }
 

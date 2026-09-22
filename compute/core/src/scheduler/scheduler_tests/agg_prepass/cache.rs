@@ -1,7 +1,6 @@
 use super::super::*;
 use super::helpers::*;
 
-#[cfg(feature = "native")]
 fn wrapped_sumifs_parallel_snapshot() -> WorkbookSnapshot {
     let categories = ["Alpha", "Beta", "Gamma", "Delta"];
     let formula_count = level_eval::PARALLEL_THRESHOLD + 100;
@@ -30,7 +29,6 @@ fn wrapped_sumifs_parallel_snapshot() -> WorkbookSnapshot {
     single_sheet_snapshot("Sheet1", formula_count as u32 + 20, 6, cells)
 }
 
-#[cfg(feature = "native")]
 #[test]
 fn test_wrapped_sumifs_warm_cache_seeds_parallel_eval() {
     let (mut core, mut cell_store) = init_core(wrapped_sumifs_parallel_snapshot());
@@ -61,7 +59,6 @@ fn test_wrapped_sumifs_warm_cache_seeds_parallel_eval() {
     );
 }
 
-#[cfg(feature = "native")]
 #[test]
 fn test_sumifs_worker_tls_entries_do_not_survive_recalc_epoch() {
     let (mut core, mut cell_store) = init_core(wrapped_sumifs_parallel_snapshot());

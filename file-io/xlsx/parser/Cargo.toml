@@ -62,7 +62,7 @@ bridge-types = { path = "../../../infra/rust-bridge/bridge-types" }
 # ZIP decompression (pure Rust, no std dependency)
 miniz_oxide = "0.7"
 
-# Incremental ZIP deflate writing on native and WASM.
+# Incremental ZIP deflate writing.
 flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }
 
 # Fast byte searching with SIMD support
@@ -106,26 +106,20 @@ quick-xml = "0.36"
 # Observability — read-path loud warnings on unknown OOXML tokens
 tracing = { workspace = true }
 
+# Memory-mapped reads of local XLSX files
+memmap2 = "0.9"
+
+# Parallel worksheet parsing
+rayon = "1.8"
+
 [dev-dependencies]
 tempfile = "3.10"
 
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-js-sys = "0.3"
-
-# Native-only dependencies (not compiled for WASM)
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-memmap2 = { version = "0.9", optional = true }
-rayon = { version = "1.8", optional = true }
-
 [features]
 default = []
-# CLI feature for the roundtrip testing tool (native only)
+# CLI feature for the roundtrip testing tool
 cli = []
-# Native feature for memory-mapped I/O and fast DEFLATE decompression (not available on WASM)
-native = ["memmap2"]
-# Parallel parsing feature for multi-core systems (native only)
-parallel = ["native", "rayon"]
-# Test corpus generator feature (native only, generates malformed test files)
+# Test corpus generator feature (generates malformed test files)
 corpus-gen = []
 # Slow corpus-walk tests that should not run in default focused test commands.
 slow-tests = []

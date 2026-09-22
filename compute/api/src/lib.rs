@@ -1,8 +1,8 @@
 //! `compute-api` — Ergonomic Rust API facade for the spreadsheet compute engine.
 //!
 //! Provides `Workbook` and `Sheet` handles with actor-based thread-safe access
-//! to the underlying `ComputeEngine`. The engine lives on a dedicated thread
-//! (native) or is accessed directly (WASM). Handles are `Clone + Send + Sync`.
+//! to the underlying `ComputeEngine`. The engine lives on a dedicated thread.
+//! Handles are `Clone + Send + Sync`.
 //!
 //! # Stateless pure APIs
 //!

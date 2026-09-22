@@ -6,11 +6,6 @@ edition.workspace = true
 authors = ["Shortcut Team"]
 description = "Ergonomic Rust API facade for the XLSX parser — clean types, rich errors, no FFI constraints"
 
-[features]
-default = []
-native = ["xlsx-parser/native"]
-parallel = ["native", "xlsx-parser/parallel"]
-
 [dependencies]
 # The parser we wrap
 xlsx-parser = { path = "../xlsx/parser" }
@@ -23,10 +18,7 @@ bridge-core = { path = "../../infra/rust-bridge/bridge-core" }
 
 # Error handling
 thiserror = { workspace = true }
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tempfile = "3.10"
-memmap2 = "0.9"
 
 [dev-dependencies]
 domain-types = { path = "../../domain-types" }

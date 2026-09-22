@@ -5,7 +5,7 @@
 
 use std::sync::OnceLock;
 
-use crate::time_compat::WasmSafeInstant;
+use crate::time_compat::ElapsedInstant;
 
 const ENV_VAR: &str = "MOG_XLSX_ROUNDTRIP_PROFILE";
 
@@ -27,7 +27,7 @@ pub(crate) fn enabled() -> bool {
 pub(crate) struct PhaseTimer {
     operation: &'static str,
     phase: &'static str,
-    start: Option<WasmSafeInstant>,
+    start: Option<ElapsedInstant>,
     counters: Vec<(&'static str, u64)>,
 }
 
@@ -37,7 +37,7 @@ impl PhaseTimer {
         Self {
             operation,
             phase,
-            start: enabled().then(WasmSafeInstant::now),
+            start: enabled().then(ElapsedInstant::now),
             counters: Vec::new(),
         }
     }

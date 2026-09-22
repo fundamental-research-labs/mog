@@ -114,7 +114,6 @@ use ast_transform::{contains_volatile_function, shift_ast_for_cf};
 #[cfg(test)]
 use dep_extract::extract_dependencies;
 use dep_extract::extract_deps_and_volatility;
-#[cfg(feature = "native")]
 use resolvers::ConcurrentIdentityResolver;
 use resolvers::CoreIdentityResolver;
 use value_utils::{truncate_chars, values_equal};
@@ -700,13 +699,8 @@ impl ComputeCore {
 
     /// Get a snapshot of workbook cache statistics (hit/miss/eviction counters, memory estimates).
     pub fn workbook_cache_stats(&self) -> crate::eval::WorkbookCacheStatsSnapshot {
-        #[cfg(feature = "native")]
         {
             self.workbook_cache.stats_snapshot()
-        }
-        #[cfg(not(feature = "native"))]
-        {
-            crate::eval::WorkbookCacheStatsSnapshot::default()
         }
     }
 

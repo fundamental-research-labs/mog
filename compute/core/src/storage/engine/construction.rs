@@ -70,7 +70,6 @@ pub(in crate::storage::engine) use table_auto_filter_projection::{
 pub(super) use types::{XlsxHydrateResult, XlsxRecalculation, XlsxStreamHydrateResult};
 pub(super) use xlsx::{from_xlsx_bytes, from_xlsx_bytes_with_progress, import_from_xlsx_bytes};
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "native"))]
 pub(super) use xlsx::from_xlsx_path;
 
 #[cfg(test)]

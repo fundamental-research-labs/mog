@@ -43,13 +43,6 @@ pub(crate) struct LocalPalette {
 }
 
 impl LocalPalette {
-    #[cfg(not(feature = "native"))]
-    pub(super) fn new() -> Self {
-        Self {
-            palette: std::cell::RefCell::new(Vec::new()),
-            index: std::cell::RefCell::new(rustc_hash::FxHashMap::default()),
-        }
-    }
 
     pub(crate) fn from_vec(existing: &mut Vec<DocumentFormat>) -> Self {
         Self::from_vec_with_imported_prefix(existing, 0)
@@ -93,7 +86,6 @@ impl PaletteOps for LocalPalette {
     }
 }
 
-#[cfg(feature = "native")]
 pub(super) struct SharedPalette {
     inner: parking_lot::Mutex<(
         Vec<DocumentFormat>,
@@ -101,7 +93,6 @@ pub(super) struct SharedPalette {
     )>,
 }
 
-#[cfg(feature = "native")]
 impl SharedPalette {
     pub(super) fn from_vec_with_imported_prefix(
         existing: Vec<DocumentFormat>,
@@ -127,7 +118,6 @@ impl SharedPalette {
     }
 }
 
-#[cfg(feature = "native")]
 impl PaletteOps for SharedPalette {
     fn get_or_insert(&self, fmt: DocumentFormat) -> u32 {
         let mut guard = self.inner.lock();

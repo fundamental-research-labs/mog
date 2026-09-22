@@ -12,5 +12,4 @@ pub mod metadata;
 pub mod streaming;
 
 // Memory-mapped I/O module (native only)
-#[cfg(all(not(target_arch = "wasm32"), feature = "native"))]
 pub mod mmap;

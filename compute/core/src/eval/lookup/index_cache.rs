@@ -3,17 +3,12 @@
 
 use super::index::LookupIndex;
 
-#[cfg(feature = "native")]
 use cell_types::SheetId;
 
-#[cfg(feature = "native")]
 use dashmap::DashMap;
 
-#[cfg(feature = "native")]
 use value_types::CellValue;
 
-#[cfg(not(feature = "native"))]
-use rustc_hash::FxHashMap;
 
 // ---------------------------------------------------------------------------
 // LookupIndexCache — available on both native and WASM
@@ -23,12 +18,10 @@ use rustc_hash::FxHashMap;
 // On WASM: use RefCell<HashMap> for single-threaded access.
 
 /// Thread-safe cache of lookup indexes (native: DashMap, WASM: RefCell<HashMap>).
-#[cfg(feature = "native")]
 pub struct LookupIndexCache {
     indexes: DashMap<(SheetId, u32), LookupIndex>,
 }
 
-#[cfg(feature = "native")]
 impl LookupIndexCache {
     /// Create a new empty cache.
     pub fn new() -> Self {
@@ -90,7 +83,6 @@ impl LookupIndexCache {
     }
 }
 
-#[cfg(feature = "native")]
 impl Default for LookupIndexCache {
     fn default() -> Self {
         Self::new()
@@ -100,80 +92,7 @@ impl Default for LookupIndexCache {
 // === Single-threaded LookupIndexCache using RefCell<HashMap> ===
 
 /// Single-threaded cache of lookup indexes (builds without `native`).
-#[cfg(not(feature = "native"))]
-pub struct LookupIndexCache {
-    indexes: std::cell::RefCell<FxHashMap<(cell_types::SheetId, u32), LookupIndex>>,
-}
 
-#[cfg(not(feature = "native"))]
-impl LookupIndexCache {
-    /// Create a new empty cache.
-    pub fn new() -> Self {
-        Self {
-            indexes: std::cell::RefCell::new(FxHashMap::default()),
-        }
-    }
-
-    /// Search an existing index using the given closure. Returns `None` if the
-    /// index for `(sheet, col)` has not been built yet. Otherwise calls `f` with
-    /// a reference to the cached `LookupIndex`.
-    pub fn with_index<F, R>(&self, sheet: cell_types::SheetId, col: u32, f: F) -> Option<R>
-    where
-        F: FnOnce(&LookupIndex) -> R,
-    {
-        let indexes = self.indexes.borrow();
-        indexes.get(&(sheet, col)).map(f)
-    }
-
-    /// Ensure an index exists for `(sheet, col)`, building it with `builder` if absent.
-    /// Then call `f` on the cached index and return the result.
-    pub fn get_or_build_with<F, B, R>(
-        &self,
-        sheet: cell_types::SheetId,
-        col: u32,
-        builder: B,
-        f: F,
-    ) -> R
-    where
-        B: FnOnce() -> LookupIndex,
-        F: FnOnce(&LookupIndex) -> R,
-    {
-        let key = (sheet, col);
-        // Check if already present (fast path — separate borrow scope)
-        {
-            let indexes = self.indexes.borrow();
-            if let Some(idx) = indexes.get(&key) {
-                return f(idx);
-            }
-        }
-        // Build and insert
-        let built = builder();
-        let mut indexes = self.indexes.borrow_mut();
-        indexes.entry(key).or_insert(built);
-        // Re-borrow immutably to call f (drop mut borrow first)
-        drop(indexes);
-        let indexes = self.indexes.borrow();
-        f(indexes.get(&key).expect("just inserted"))
-    }
-
-    /// Clear all cached indexes.
-    pub fn clear(&self) {
-        self.indexes.borrow_mut().clear();
-    }
-
-    /// Remove the cached lookup index for a specific (sheet, col) pair.
-    /// Used during incremental invalidation when a cell in that column changes.
-    pub fn remove_column(&self, sheet: cell_types::SheetId, col: u32) {
-        self.indexes.borrow_mut().remove(&(sheet, col));
-    }
-}
-
-#[cfg(not(feature = "native"))]
-impl Default for LookupIndexCache {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 // ===========================================================================
 // Tests
@@ -194,7 +113,6 @@ mod tests {
     // test_cache_get_or_build (native only)
     // -----------------------------------------------------------------------
 
-    #[cfg(feature = "native")]
     #[test]
     fn test_cache_get_or_build() {
         use std::sync::atomic::{AtomicUsize, Ordering};
@@ -227,7 +145,6 @@ mod tests {
     // test_cache_clear (native only)
     // -----------------------------------------------------------------------
 
-    #[cfg(feature = "native")]
     #[test]
     fn test_cache_clear() {
         use std::sync::atomic::{AtomicUsize, Ordering};

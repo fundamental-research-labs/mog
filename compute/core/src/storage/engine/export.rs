@@ -104,8 +104,7 @@ impl ComputeEngine {
 // =============================================================================
 
 impl ComputeEngine {
-    /// Stream XLSX output to a validated temporary file and replace the destination.
-    #[cfg(not(target_arch = "wasm32"))]
+    /// Stream XLSX output to a temporary file and replace the destination.
     pub fn export_to_xlsx_path(&self, path: &std::path::Path) -> Result<(), ComputeError> {
         let result = self.export_to_parse_output()?;
         xlsx_api::export_owned_parse_output_to_path(result.parse_output, path).map_err(|error| {

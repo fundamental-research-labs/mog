@@ -19,12 +19,8 @@ use crate::eval::context::traits::DataSource;
 use crate::eval::engine::aggregate_range::direct_aggregate_range;
 use crate::eval::functions::dense_aggregate::AggregateOp;
 
-#[cfg(feature = "native")]
 use crate::eval::lookup::index_cache::LookupIndexCache;
-#[cfg(feature = "native")]
 use dashmap::DashMap;
-#[cfg(not(feature = "native"))]
-use std::cell::RefCell;
 
 // ---------------------------------------------------------------------------
 // RangeKey — type alias for RangePos
@@ -302,13 +298,9 @@ pub struct RangeStore {
     pre_materialized: FxHashMap<RangeKey, Arc<CellArray>>,
 
     /// On-demand cache for dynamic ranges (INDIRECT, OFFSET, RangeOp).
-    #[cfg(feature = "native")]
     on_demand: DashMap<RangeKey, Arc<CellArray>>,
-    #[cfg(not(feature = "native"))]
-    on_demand: RefCell<FxHashMap<RangeKey, Arc<CellArray>>>,
 
     /// Unified lookup index cache for O(1) VLOOKUP/MATCH.
-    #[cfg(feature = "native")]
     lookup_indexes: LookupIndexCache,
 }
 
@@ -317,11 +309,7 @@ impl RangeStore {
     pub fn new() -> Self {
         Self {
             pre_materialized: FxHashMap::default(),
-            #[cfg(feature = "native")]
             on_demand: DashMap::new(),
-            #[cfg(not(feature = "native"))]
-            on_demand: RefCell::new(FxHashMap::default()),
-            #[cfg(feature = "native")]
             lookup_indexes: LookupIndexCache::new(),
         }
     }
@@ -337,11 +325,7 @@ impl RangeStore {
         }
         Self {
             pre_materialized,
-            #[cfg(feature = "native")]
             on_demand: DashMap::new(),
-            #[cfg(not(feature = "native"))]
-            on_demand: RefCell::new(FxHashMap::default()),
-            #[cfg(feature = "native")]
             lookup_indexes: LookupIndexCache::new(),
         }
     }
@@ -376,7 +360,6 @@ impl RangeStore {
         }
 
         // 2 + 3. Check on-demand cache, materializing on miss
-        #[cfg(feature = "native")]
         {
             if let Some(entry) = self.on_demand.get(&key) {
                 #[cfg(feature = "journal")]
@@ -420,49 +403,6 @@ impl RangeStore {
             data
         }
 
-        #[cfg(not(feature = "native"))]
-        {
-            if let Some(data) = self.on_demand.borrow().get(&key) {
-                #[cfg(feature = "journal")]
-                {
-                    let sheet_str = &key.sheet().to_uuid_string()[..8];
-                    crate::journal::record(crate::journal::JournalEvent::CacheAccess {
-                        cell: None,
-                        tier: "range_store_demand",
-                        key_summary: format!(
-                            "{}:{}-{}:{}-{}",
-                            sheet_str,
-                            key.start_row(),
-                            key.end_row(),
-                            key.start_col(),
-                            key.end_col()
-                        ),
-                        hit: true,
-                    });
-                }
-                return Arc::clone(data);
-            }
-            #[cfg(feature = "journal")]
-            {
-                let sheet_str = &key.sheet().to_uuid_string()[..8];
-                crate::journal::record(crate::journal::JournalEvent::CacheAccess {
-                    cell: None,
-                    tier: "range_store",
-                    key_summary: format!(
-                        "{}:{}-{}:{}-{}",
-                        sheet_str,
-                        key.start_row(),
-                        key.end_row(),
-                        key.start_col(),
-                        key.end_col()
-                    ),
-                    hit: false,
-                });
-            }
-            let data = materialize_range(&key, source, None);
-            self.on_demand.borrow_mut().insert(key, Arc::clone(&data));
-            data
-        }
     }
 
     /// Check if a key is already cached (either pre-materialized or on-demand).
@@ -471,16 +411,9 @@ impl RangeStore {
         if let Some(data) = self.pre_materialized.get(key) {
             return Some(Arc::clone(data));
         }
-        #[cfg(feature = "native")]
         {
             if let Some(entry) = self.on_demand.get(key) {
                 return Some(Arc::clone(entry.value()));
-            }
-        }
-        #[cfg(not(feature = "native"))]
-        {
-            if let Some(data) = self.on_demand.borrow().get(key) {
-                return Some(Arc::clone(data));
             }
         }
         None
@@ -489,13 +422,8 @@ impl RangeStore {
     /// Insert a range into the on-demand cache.
     /// Used by demand contexts that compute range data with dirty-cell awareness.
     pub fn insert(&self, key: RangeKey, data: Arc<CellArray>) {
-        #[cfg(feature = "native")]
         {
             self.on_demand.insert(key, data);
-        }
-        #[cfg(not(feature = "native"))]
-        {
-            self.on_demand.borrow_mut().insert(key, data);
         }
     }
 
@@ -552,16 +480,10 @@ impl RangeStore {
 
         self.pre_materialized.retain(|key, _| !overlaps(key));
 
-        #[cfg(feature = "native")]
         {
             self.on_demand.retain(|key, _| !overlaps(key));
         }
-        #[cfg(not(feature = "native"))]
-        {
-            self.on_demand.borrow_mut().retain(|key, _| !overlaps(key));
-        }
 
-        #[cfg(feature = "native")]
         {
             for &(sheet, _row, col) in changes {
                 self.lookup_indexes.remove_column(sheet, col);
@@ -596,18 +518,10 @@ impl RangeStore {
 
         self.pre_materialized.retain(|key, _| !rect_overlaps(key));
 
-        #[cfg(feature = "native")]
         {
             self.on_demand.retain(|key, _| !rect_overlaps(key));
         }
-        #[cfg(not(feature = "native"))]
-        {
-            self.on_demand
-                .borrow_mut()
-                .retain(|key, _| !rect_overlaps(key));
-        }
 
-        #[cfg(feature = "native")]
         {
             for &(_sheet, _sr, sc, _er, ec) in ranges {
                 let sheet = _sheet;
@@ -619,7 +533,6 @@ impl RangeStore {
     }
 
     /// Access the unified lookup index cache (native only).
-    #[cfg(feature = "native")]
     pub fn lookup_cache(&self) -> &LookupIndexCache {
         &self.lookup_indexes
     }

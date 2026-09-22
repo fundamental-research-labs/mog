@@ -10,7 +10,6 @@ use super::*;
 // IdentityResolver implementation for ComputeCore
 // ---------------------------------------------------------------------------
 
-#[cfg(feature = "native")]
 use dashmap::DashMap;
 use std::cell::RefCell;
 
@@ -73,7 +72,6 @@ impl IdentityResolver for CoreIdentityResolver<'_> {
 // ConcurrentIdentityResolver for parallel init (native only — uses DashMap)
 // ---------------------------------------------------------------------------
 
-#[cfg(feature = "native")]
 /// Thread-safe identity resolver for parallel identity resolution during bulk init.
 ///
 /// Uses the immutable `CellStore` for lookups and a shared `DashMap` for
@@ -86,7 +84,6 @@ pub(super) struct ConcurrentIdentityResolver<'a> {
     pub current_sheet: SheetId,
 }
 
-#[cfg(feature = "native")]
 impl IdentityResolver for ConcurrentIdentityResolver<'_> {
     fn get_or_create_cell_id(&self, sheet: &SheetId, row: u32, col: u32) -> CellId {
         let pos = SheetPos::new(row, col);

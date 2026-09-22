@@ -28,6 +28,3 @@ compute-solver = { path = "../compute-solver" }
 # Expose internal SPI modules (helpers, math_primitives, lookup) to compute-core.
 # External consumers should NOT enable this feature.
 __internal = []
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { version = "0.2", features = ["js"] }

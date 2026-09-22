@@ -76,7 +76,6 @@ impl ComputeCore {
     /// Surface existing CacheCounters from WorkbookCache into metrics (Task 1.5d).
     #[allow(unused_variables)]
     pub(super) fn collect_cache_metrics(&self, metrics: &mut RecalcMetrics) {
-        #[cfg(feature = "native")]
         {
             let cache_snap = self.workbook_cache.stats_snapshot();
             metrics.cache_hits = cache_snap.sorted.hits

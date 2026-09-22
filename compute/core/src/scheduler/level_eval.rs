@@ -11,7 +11,6 @@ use crate::formula_text::FormulaTextProvider;
 /// with 213 levels where most have < 100 cells, rayon workers spend 77% of their
 /// time sleeping (`wait_until_cold`). A threshold of 500 ensures only levels with
 /// enough work to amortize the ~10-50us dispatch overhead use parallelism.
-#[cfg(feature = "native")]
 pub(super) const PARALLEL_THRESHOLD: usize = 500;
 
 impl ComputeCore {
@@ -42,22 +41,12 @@ impl ComputeCore {
                 None => continue,
             };
 
-            #[cfg(feature = "native")]
             let mut ctx = EvalContext::with_range_store(cell_store, cell_id, sheet_id, range_store)
                 .with_sumifs_cache_epoch(self.current_sumifs_cache_epoch())
                 .with_recalc_clock(self.recalc_clock());
-            #[cfg(not(feature = "native"))]
-            let mut ctx = {
-                let mut c = EvalContext::new(cell_store, cell_id, sheet_id);
-                c.range_store = Some(range_store);
-                c.sumifs_cache_epoch = self.current_sumifs_cache_epoch();
-                c
-            }
-            .with_recalc_clock(self.recalc_clock());
             ctx.ast_cache = Some(&self.ast_cache);
             ctx.access.ordered_sheets = ordered_sheets.clone();
             ctx.access.formula_text_provider = self.formula_text_provider();
-            #[cfg(feature = "native")]
             {
                 ctx.workbook_cache = Some(&self.workbook_cache);
             }
@@ -217,7 +206,6 @@ impl ComputeCore {
     /// prepass. If `Some`, each rayon worker thread seeds its thread-local cache
     /// before evaluating formulas, enabling O(1) cache hits for SUMIFS lookups
     /// that were pre-computed on the main thread.
-    #[cfg(feature = "native")]
     #[allow(clippy::too_many_arguments)]
     pub(super) fn topo_evaluate_level_parallel(
         &mut self,
@@ -299,7 +287,7 @@ impl ComputeCore {
                     };
 
                     let start = if has_subscriber {
-                        Some(crate::time_compat::WasmSafeInstant::now())
+                        Some(crate::time_compat::ElapsedInstant::now())
                     } else {
                         None
                     };
@@ -468,7 +456,6 @@ impl ComputeCore {
     /// Find which sheet a cell belongs to (static helper for parallel evaluation).
     /// Takes `&CellStore` instead of `&self` to avoid capturing `&mut self`.
     /// Uses O(1) reverse index lookup.
-    #[cfg(feature = "native")]
     pub(super) fn find_sheet_for_cell_in_store(
         cell_store: &CellStore,
         cell_id: &CellId,

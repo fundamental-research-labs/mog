@@ -367,7 +367,6 @@ impl ComputeCore {
     fn extract_formula_cells_from_snapshot(
         snapshot: &WorkbookSnapshot,
     ) -> Vec<(CellId, SheetId, String)> {
-        #[cfg(feature = "native")]
         {
             use rayon::prelude::*;
             snapshot
@@ -384,33 +383,6 @@ impl ComputeCore {
                     })
                 })
                 .collect()
-        }
-        #[cfg(not(feature = "native"))]
-        {
-            // Pre-count formula cells to avoid Vec reallocation during collection.
-            let formula_estimate: usize = snapshot
-                .sheets
-                .iter()
-                .map(|s| s.cells.iter().filter(|c| c.formula.is_some()).count())
-                .sum();
-            let mut result = Vec::with_capacity(formula_estimate);
-            for sheet_snap in &snapshot.sheets {
-                let sheet_id = match SheetId::from_uuid_str(&sheet_snap.id) {
-                    Ok(id) => id,
-                    Err(_) => continue,
-                };
-                for cell_data in &sheet_snap.cells {
-                    if let Some(formula) = &cell_data.formula {
-                        let cell_id = match CellId::from_uuid_str(&cell_data.cell_id) {
-                            Ok(id) => id,
-                            Err(_) => continue,
-                        };
-                        let normalized = compute_parser::normalize_xlsx_formula(formula);
-                        result.push((cell_id, sheet_id, normalized));
-                    }
-                }
-            }
-            result
         }
     }
 
@@ -431,7 +403,6 @@ impl ComputeCore {
         let ordered_sheets = self.ordered_sheets_cache.clone();
         self.formula_text_deps.clear_all();
 
-        #[cfg(feature = "native")]
         {
             use dashmap::DashMap;
             use rayon::prelude::*;
@@ -576,141 +547,6 @@ impl ComputeCore {
             self.graph = builder.build();
         }
 
-        #[cfg(not(feature = "native"))]
-        {
-            use std::cell::RefCell;
-
-            // WASM: sequential parse but BATCHED graph construction.
-            // Per-formula set_precedents is 3-5x slower than bulk_set_precedents due
-            // to per-edge graph updates vs pre-sized batch insertion.
-            let registry = &crate::eval::GLOBAL_REGISTRY;
-            let formula_count_hint = formula_cells.len();
-            let mut builder = GraphBuilder::with_capacity(formula_count_hint);
-            let mut graph_edges: Vec<(CellId, Vec<DepTarget>)> =
-                Vec::with_capacity(formula_count_hint);
-            let ghost_cells: RefCell<FxHashMap<(SheetId, SheetPos), CellId>> = RefCell::new(
-                FxHashMap::with_capacity_and_hasher(formula_count_hint / 16, Default::default()),
-            );
-
-            for (cell_id, sheet_id, formula) in formula_cells {
-                let resolver = StoreCellRefResolver {
-                    cell_store: &*cell_store,
-                    current_sheet: sheet_id,
-                };
-                match parse_formula(&formula, Some(&resolver)) {
-                    Ok(spanned) => {
-                        let ast = spanned.into_inner();
-                        let current_row =
-                            cell_store.resolve_position(&cell_id).map(|pos| pos.row());
-                        let extracted = extract_deps_and_volatility(
-                            &ast,
-                            &sheet_id,
-                            &*cell_store,
-                            &ordered_sheets,
-                            current_row,
-                        );
-                        // Identity resolution (sequential, using FxHashMap for ghost cells)
-                        let identity_formula = {
-                            struct SeqResolver<'a> {
-                                cell_store: &'a CellStore,
-                                ghost_cells: &'a RefCell<FxHashMap<(SheetId, SheetPos), CellId>>,
-                                id_alloc: &'a IdAllocator,
-                                current_sheet: SheetId,
-                            }
-                            impl compute_parser::IdentityResolver for SeqResolver<'_> {
-                                fn get_or_create_cell_id(
-                                    &self,
-                                    sheet: &SheetId,
-                                    row: u32,
-                                    col: u32,
-                                ) -> CellId {
-                                    let pos = SheetPos::new(row, col);
-                                    if let Some(id) = self.cell_store.resolve_cell_id(sheet, pos) {
-                                        return id;
-                                    }
-                                    let key = (*sheet, pos);
-                                    *self
-                                        .ghost_cells
-                                        .borrow_mut()
-                                        .entry(key)
-                                        .or_insert_with(|| self.id_alloc.next_cell_id())
-                                }
-                                fn get_row_id(&self, _sheet: &SheetId, _row: u32) -> Option<RowId> {
-                                    None
-                                }
-                                fn get_col_id(&self, _sheet: &SheetId, _col: u32) -> Option<ColId> {
-                                    None
-                                }
-                                fn resolve_sheet_name(&self, name: &str) -> Option<SheetId> {
-                                    self.cell_store.sheet_by_name(name)
-                                }
-                                fn current_sheet(&self) -> SheetId {
-                                    self.current_sheet
-                                }
-                            }
-                            let resolver = SeqResolver {
-                                cell_store: &*cell_store,
-                                ghost_cells: &ghost_cells,
-                                id_alloc: &self.id_alloc,
-                                current_sheet: sheet_id,
-                            };
-                            compute_parser::ast_to_identity(&ast, &resolver).ok()
-                        };
-                        let is_dynamic_array = Self::ast_contains_array_function(&ast, registry);
-                        let range_keys = {
-                            let sheet_ctx = cell_store.sheet_for_cell(&cell_id);
-                            let mut plan = crate::eval::cache::range_store::DataPlan::default();
-                            crate::eval::cache::range_store::collect_static_ranges_pub(
-                                &ast,
-                                sheet_ctx,
-                                &*cell_store,
-                                &mut plan,
-                            );
-                            plan.into_iter().collect::<Vec<_>>()
-                        };
-
-                        let rendered_formula = Self::rendered_formula_string_or_fallback(
-                            cell_store,
-                            sheet_id,
-                            identity_formula.as_ref(),
-                            &formula,
-                        );
-                        cell_store.set_formula(&cell_id, identity_formula);
-                        graph_edges.push((cell_id, extracted.value_deps));
-                        self.formula_text_deps
-                            .replace(cell_id, extracted.formula_text_deps);
-                        if extracted.is_volatile {
-                            builder.mark_volatile(&cell_id);
-                        }
-                        self.ast_cache.insert(
-                            cell_id,
-                            AstEntry {
-                                ast,
-                                is_dynamic_array,
-                            },
-                        );
-                        self.formula_strings.insert(cell_id, rendered_formula);
-                        self.cell_formula_text.insert(cell_id, formula);
-                        if !range_keys.is_empty() {
-                            self.cell_range_keys.insert(cell_id, range_keys);
-                        }
-                    }
-                    Err(_) => {
-                        cell_store.set_value_mut(&cell_id, CellValue::Error(CellError::Name, None));
-                        self.formula_strings.insert(cell_id, formula.clone());
-                        self.cell_formula_text.insert(cell_id, formula);
-                    }
-                }
-            }
-
-            // Register ghost cells in cell_store
-            for ((sheet_id, pos), cell_id) in ghost_cells.into_inner() {
-                cell_store.register_ghost_cell(&sheet_id, pos, cell_id);
-            }
-
-            builder.bulk_set_precedents(graph_edges);
-            self.graph = builder.build();
-        }
 
         // Pass 3: Range index is rebuilt automatically:
         // - Native path: builder.build() handles it

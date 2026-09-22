@@ -199,9 +199,7 @@ pub const DEFAULT_COL_WIDTH: CharWidth = CharWidth(8.43);
 /// Runtime layout metrics used to convert canonical spreadsheet dimensions
 /// into pixels.
 ///
-/// Native Rust can choose metrics from `cfg!(target_os)`, but browser WASM
-/// cannot infer the host OS from Rust. Kernel resolves the browser profile once
-/// during compute initialization and passes it through this explicit contract.
+/// Callers pass the host profile explicitly. Rust does not infer it from the OS.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutMetrics {

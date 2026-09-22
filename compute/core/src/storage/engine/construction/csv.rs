@@ -22,7 +22,7 @@ pub(in crate::storage::engine) fn parse_and_hydrate_csv(
     use crate::import;
     use crate::storage::infra::hydration::{DefaultIdAllocator, allocate_sheet_ids};
 
-    let t0 = crate::time_compat::WasmSafeInstant::now();
+    let t0 = crate::time_compat::ElapsedInstant::now();
     let parsed = csv_parser::parse_csv_to_parse_output(csv_data, options.clone()).map_err(|e| {
         ComputeError::Deserialize {
             message: format!("CSV parse error: {}", e),
@@ -70,7 +70,7 @@ pub(in crate::storage::engine) fn parse_and_hydrate_csv(
         m
     };
 
-    let t1 = crate::time_compat::WasmSafeInstant::now();
+    let t1 = crate::time_compat::ElapsedInstant::now();
     let mut workbook_snap = import::parse_output_to_snapshot::parse_output_to_workbook_snapshot(
         &parse_output,
         Some(&id_map),
@@ -81,7 +81,7 @@ pub(in crate::storage::engine) fn parse_and_hydrate_csv(
         t1.elapsed().as_millis()
     );
 
-    let t2 = crate::time_compat::WasmSafeInstant::now();
+    let t2 = crate::time_compat::ElapsedInstant::now();
     let mut ranged_positions: Vec<std::collections::HashSet<(u32, u32)>> =
         Vec::with_capacity(parse_output.sheets.len());
     let mut range_style_positions: Vec<std::collections::HashSet<(u32, u32)>> =

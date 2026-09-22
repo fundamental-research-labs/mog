@@ -226,7 +226,6 @@ fn multidim_best_tracking() {
 // 1. Wall-clock time limit (max_time_ms)
 // ---------------------------------------------------------------------------
 
-#[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn wall_clock_time_limit_triggers_budget_exhausted() {
     use std::thread;
@@ -656,7 +655,6 @@ fn best_f_monotonically_non_increasing_target() {
 // 6. max_time_ms=0 means no time limit
 // ---------------------------------------------------------------------------
 
-#[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn max_time_ms_zero_means_no_time_limit() {
     use std::thread;

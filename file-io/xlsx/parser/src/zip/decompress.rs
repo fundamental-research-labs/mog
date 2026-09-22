@@ -17,7 +17,6 @@ pub fn decompress_deflate(compressed: &[u8], expected_size: usize) -> Result<Vec
 /// Successful output is exactly the decompressed byte stream. Malformed raw
 /// DEFLATE returns `DecompressionFailed`; output beyond `limit` returns
 /// `FileTooLarge`.
-#[cfg(all(not(target_arch = "wasm32"), feature = "native"))]
 pub(crate) fn decompress_deflate_with_limit(
     compressed: &[u8],
     expected_size: usize,
@@ -41,85 +40,7 @@ pub(crate) fn decompress_deflate_with_limit(
 }
 
 /// Decompress DEFLATE data using pure-Rust miniz_oxide (WASM / non-native path).
-#[cfg(not(all(not(target_arch = "wasm32"), feature = "native")))]
-pub(crate) fn decompress_deflate_with_limit(
-    compressed: &[u8],
-    expected_size: usize,
-    limit: usize,
-) -> Result<Vec<u8>, ZipError> {
-    if expected_size > limit {
-        return Err(ZipError::FileTooLargeDetail {
-            limit,
-            actual: expected_size,
-        });
-    }
 
-    match decompress_raw_miniz_with_limit(compressed, limit) {
-        Err(ZipError::DecompressionFailed) => decompress_zlib_with_limit(compressed, limit),
-        other => other,
-    }
-}
-
-#[cfg(not(all(not(target_arch = "wasm32"), feature = "native")))]
-fn decompress_raw_miniz_with_limit(compressed: &[u8], limit: usize) -> Result<Vec<u8>, ZipError> {
-    use miniz_oxide::inflate::TINFLStatus;
-    use miniz_oxide::inflate::core::{DecompressorOxide, decompress, inflate_flags};
-
-    let mut decompressor = DecompressorOxide::new();
-    let mut input_pos = 0usize;
-    let mut output = Vec::new();
-    let mut buffer = vec![0u8; 64 * 1024];
-
-    loop {
-        if input_pos >= compressed.len() {
-            return Err(ZipError::DecompressionFailed);
-        }
-
-        let input = &compressed[input_pos..];
-        let (status, bytes_read, bytes_written) = decompress(
-            &mut decompressor,
-            input,
-            &mut buffer,
-            0,
-            inflate_flags::TINFL_FLAG_HAS_MORE_INPUT,
-        );
-
-        input_pos = input_pos
-            .checked_add(bytes_read)
-            .ok_or(ZipError::DecompressionFailed)?;
-        let new_total = output
-            .len()
-            .checked_add(bytes_written)
-            .ok_or(ZipError::FileTooLarge)?;
-        if new_total > limit {
-            return Err(ZipError::FileTooLargeDetail {
-                limit,
-                actual: new_total,
-            });
-        }
-        output.extend_from_slice(&buffer[..bytes_written]);
-
-        match status {
-            TINFLStatus::Done => return Ok(output),
-            TINFLStatus::HasMoreOutput => {
-                if bytes_written == 0 {
-                    return Err(ZipError::DecompressionFailed);
-                }
-            }
-            TINFLStatus::NeedsMoreInput => {
-                if bytes_written == 0 {
-                    return Err(ZipError::DecompressionFailed);
-                }
-            }
-            TINFLStatus::Failed
-            | TINFLStatus::BadParam
-            | TINFLStatus::Adler32Mismatch
-            | TINFLStatus::FailedCannotMakeProgress => {
-                return Err(ZipError::DecompressionFailed);
-            }
-        }
-    }
-}
 
 fn decompress_zlib_with_limit(compressed: &[u8], limit: usize) -> Result<Vec<u8>, ZipError> {
     match miniz_oxide::inflate::decompress_to_vec_zlib_with_limit(compressed, limit) {

@@ -295,7 +295,6 @@ fn fixed_clock_date_functions_compose_in_both_workbook_date_systems() {
     }
 }
 
-#[cfg(feature = "native")]
 #[test]
 fn injected_session_clock_reaches_parallel_workers() {
     crate::eval::clock::set_current_time(FIXED_TIMESTAMP);

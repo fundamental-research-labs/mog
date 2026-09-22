@@ -246,19 +246,11 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
 
 /// Export an owned projection without cloning the workbook during preflight.
 pub fn write_xlsx_from_owned_parse_output(output: ParseOutput) -> Result<Vec<u8>, WriteError> {
-    let bytes = write_xlsx_from_owned_parse_output_to(output, Vec::new())?;
-    validate_xlsx_export(&bytes)?;
-    Ok(bytes)
-}
-
-/// Validate the serialized package, including cross-part relationship references.
-pub fn validate_xlsx_export(bytes: &[u8]) -> Result<(), WriteError> {
-    zip_assembly::validate_exported_archive(bytes)
+    write_xlsx_from_owned_parse_output_to(output, Vec::new())
 }
 
 /// Stream the package into a sequential sink. The package graph is checked before
-/// writing; callers needing serialized-package validation can validate the result
-/// with `validate_xlsx_export` (the bytes and file entry points do this).
+/// writing.
 pub fn write_xlsx_from_parse_output_to<W: std::io::Write>(
     output: &ParseOutput,
     sink: W,

@@ -787,59 +787,6 @@ pub(super) fn write_zip_package<W: std::io::Write>(
     zip.finish().map_err(WriteError::from)
 }
 
-pub(super) fn validate_exported_archive(xlsx_bytes: &[u8]) -> Result<(), WriteError> {
-    let archive = crate::XlsxArchive::new(xlsx_bytes)
-        .map_err(|e| WriteError::PackageIntegrity(format!("exported ZIP is invalid: {e}")))?;
-    if let Err(errors) =
-        crate::infra::package_integrity::validate_archive_package_integrity(&archive)
-    {
-        let blocking_errors: Vec<_> = errors
-            .into_iter()
-            .filter(|error| !export_validation_error_is_quarantined(error))
-            .collect();
-        if !blocking_errors.is_empty() {
-            let message = blocking_errors
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join("; ");
-            return Err(WriteError::PackageIntegrity(message));
-        }
-    }
-    Ok(())
-}
-
-fn export_validation_error_is_quarantined(
-    error: &crate::infra::package_integrity::PackageIntegrityError,
-) -> bool {
-    match error {
-        crate::infra::package_integrity::PackageIntegrityError::MissingPartRelationshipReference {
-            part_path,
-            rels_path,
-            ..
-        } => {
-            is_rich_data_xml_part(part_path)
-                && rels_path == &crate::write::package_graph::part_relationships_path(part_path)
-        }
-        crate::infra::package_integrity::PackageIntegrityError::InvalidRelationshipTarget {
-            rels_path,
-            ..
-        }
-        | crate::infra::package_integrity::PackageIntegrityError::MissingRelationshipTarget {
-            rels_path,
-            ..
-        } => crate::infra::opc::relationship_owner_from_rels_path(rels_path)
-            .as_deref()
-            .is_some_and(is_rich_data_xml_part),
-        _ => false,
-    }
-}
-
-fn is_rich_data_xml_part(path: &str) -> bool {
-    let path = path.trim_start_matches('/');
-    path.starts_with("xl/richData/") && path.ends_with(".xml")
-}
-
 fn table_relationships_path(table_path: &str) -> String {
     let Some(file_name) = table_path.rsplit('/').next() else {
         return format!("{table_path}.rels");

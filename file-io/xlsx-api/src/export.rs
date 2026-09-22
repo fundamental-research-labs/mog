@@ -23,9 +23,7 @@ pub fn export_from_parse_output_with_report(
 
 /// Stream serialized parts and their deflated data directly to the output sink.
 ///
-/// Checks the package graph before writing. The bytes and file helpers additionally
-/// validate references in the serialized XML; use those helpers when the sink
-/// cannot be reopened for validation.
+/// Checks the package graph before writing.
 pub fn export_from_parse_output_to<W: std::io::Write>(
     output: &ParseOutput,
     sink: W,
@@ -34,9 +32,8 @@ pub fn export_from_parse_output_to<W: std::io::Write>(
         .map_err(XlsxApiError::from)
 }
 
-/// Stream to a temporary file, validate the package, then replace the destination.
-/// A failed export leaves an existing destination intact. Memory mapping permits
-/// the same archive validation used by byte exports without copying the archive.
+/// Stream to a temporary file, then replace the destination.
+/// A failed export leaves an existing destination intact.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn export_from_parse_output_to_path(
     output: &ParseOutput,
@@ -45,7 +42,7 @@ pub fn export_from_parse_output_to_path(
     export_owned_parse_output_to_path(output.clone(), path)
 }
 
-/// Stream an owned projection to a validated file without cloning it.
+/// Stream an owned projection to a file without cloning it.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn export_owned_parse_output_to_path(
     output: ParseOutput,
@@ -64,11 +61,6 @@ pub fn export_owned_parse_output_to_path(
     )?;
     sink.flush().map_err(io_error)?;
     drop(sink);
-    // SAFETY: this freshly created temporary file is owned here and is not
-    // mutated while its read-only mapping is alive.
-    let mapped = unsafe { memmap2::Mmap::map(temporary.as_file()) }.map_err(io_error)?;
-    xlsx_parser::write::from_parse_output::validate_xlsx_export(&mapped)?;
-    drop(mapped);
     if let Ok(metadata) = std::fs::metadata(path) {
         temporary
             .as_file()

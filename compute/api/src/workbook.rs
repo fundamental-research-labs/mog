@@ -140,7 +140,7 @@ impl Workbook {
     }
 
     /// Stream the workbook to an xlsx file on disk.
-    /// Replaces the destination only after export and package validation succeed.
+    /// Replaces the destination only after the streamed write succeeds.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn to_xlsx_path(&self, path: &str) -> Result<(), ComputeApiError> {
         if let Some(parent) = std::path::Path::new(path).parent()

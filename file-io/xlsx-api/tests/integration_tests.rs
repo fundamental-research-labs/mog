@@ -169,7 +169,7 @@ fn export_round_trip_preserves_basic_structure() {
 
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
-fn streamed_file_export_matches_validated_byte_export() {
+fn streamed_file_export_matches_byte_export() {
     let input = read_test_file("basic/with_strings.xlsx");
     let parsed = parse(&input).unwrap();
     let expected = xlsx_api::export_from_parse_output(&parsed.output).unwrap();
@@ -191,6 +191,7 @@ fn failed_streamed_file_export_preserves_destination_and_cleans_temporary() {
     let input = read_test_file("basic/minimal.xlsx");
     let mut parsed = parse(&input).unwrap();
     parsed.output.workbook_conformance = Some("strict".into());
+    assert!(xlsx_api::export_from_parse_output(&parsed.output).is_err());
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("existing.xlsx");
     std::fs::write(&path, &input).unwrap();
@@ -220,27 +221,24 @@ fn streamed_export_propagates_output_failure() {
 
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
-fn serialized_validation_failure_does_not_replace_destination() {
+fn preserved_mismatched_worksheet_xml_is_exported() {
     let input = read_test_file("basic/minimal.xlsx");
     let mut parsed = parse(&input).unwrap();
+    let original_sheet_count = parsed.output.sheets.len();
     parsed.output.sheets[0].worksheet_ext_lst_xml =
         Some(r#"<extLst><ext uri="stream-save-test"><custom></mismatched></ext></extLst>"#.into());
-    // Preflight succeeds and the streamed package is emitted; the serialized
-    // XML validation must catch malformed preserved metadata before publishing it.
-    let raw = xlsx_api::export_from_parse_output_to(&parsed.output, Vec::new()).unwrap();
-    let archive = xlsx_api::zip::OoxmlArchive::open(&raw).unwrap();
-    let sheet = archive.read_entry("xl/worksheets/sheet1.xml").unwrap();
-    assert!(String::from_utf8(sheet).unwrap().contains("</mismatched>"));
-    let byte_error = match xlsx_api::export_from_parse_output(&parsed.output) {
-        Err(error) => error,
-        Ok(_) => panic!("serialized XML validation accepted mismatched tags"),
-    };
-    assert!(byte_error.to_string().contains("sheet1.xml"));
+    let exported = xlsx_api::export_from_parse_output(&parsed.output)
+        .expect("byte export publishes preserved worksheet XML");
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("existing.xlsx");
     std::fs::write(&path, &input).unwrap();
-    let file_error = xlsx_api::export_from_parse_output_to_path(&parsed.output, &path).unwrap_err();
-    assert!(file_error.to_string().contains("sheet1.xml"));
-    assert_eq!(std::fs::read(&path).unwrap(), input);
+    xlsx_api::export_from_parse_output_to_path(&parsed.output, &path)
+        .expect("file export publishes preserved worksheet XML");
+    let written = std::fs::read(&path).unwrap();
+    assert_eq!(written, exported);
+    assert_eq!(
+        parse(&written).unwrap().output.sheets.len(),
+        original_sheet_count
+    );
     assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
 }

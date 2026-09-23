@@ -12,6 +12,8 @@
 // ASCII-boundary justification. See `AGENTS.md` at repo root.
 #![warn(clippy::string_slice)]
 
+pub use xlsx_api::file_output::Publication;
+
 // Cross-platform time utilities (std::time::Instant panics on some targets)
 #[doc(hidden)]
 pub mod time_compat;

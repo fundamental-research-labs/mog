@@ -29,6 +29,7 @@ pub use workbook::Workbook;
 
 // Re-export engine types for convenience
 pub use compute_core::CellInfo;
+pub use compute_core::Publication;
 
 // Module shim so bridge_delegate macro expansions in bridge_service.rs can
 // resolve `super::mutation::BridgeSortOptions` (the descriptor in features.rs

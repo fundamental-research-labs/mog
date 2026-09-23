@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::diagnostics::Stage;
 use args::Args;
+use xlsx_api::file_output::{self, Publication};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -56,7 +57,9 @@ pub fn run() -> Result<()> {
         } else {
             let mut state = State::load(&config)?;
             let output = state.apply(&config.request)?;
-            state.save()?;
+            if let Some(warning) = state.save()? {
+                eprintln!("{warning}");
+            }
             print_output(&output);
         }
     }
@@ -147,43 +150,49 @@ impl State {
         Ok(output)
     }
 
-    fn save(&self) -> Result<()> {
+    fn save(&self) -> Result<Option<String>> {
         let stage = Stage::start("save_workbook");
-        if let Some(path) = &self.output {
+        let (path, publication) = if let Some(path) = &self.output {
             // Follow an existing symlink just as loading the input does.
             let path = if path.exists() {
                 fs::canonicalize(path)?
             } else {
                 path.clone()
             };
-            self.export(&path)?;
+            let publication = self.export(&path)?;
+            (path, publication)
         } else {
-            // The API already streams the export to a temporary file before atomic replacement.
             // Stage once, then claim an automatic name without overwriting a racer.
-            let mut temporary = tempfile::NamedTempFile::new_in(&self.directory)?.into_temp_path();
+            let mut temporary = file_output::temporary_in(&self.directory)?.into_temp_path();
             self.export(&temporary)?;
-            for index in 1u64.. {
+            let mut index = 1u64;
+            loop {
                 let name = if index == 1 {
                     "workbook.xlsx".into()
                 } else {
                     format!("workbook-{index}.xlsx")
                 };
-                match temporary.persist_noclobber(self.directory.join(name)) {
-                    Ok(()) => break,
+                let path = self.directory.join(name);
+                match file_output::publish(temporary, &path, false) {
+                    Ok(publication) => break (path, publication),
                     Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
                         temporary = error.path;
+                        index += 1;
                     }
                     Err(error) => return Err(error.into()),
                 }
             }
-        }
+        };
         stage.complete();
-        Ok(())
+        Ok((publication == Publication::Copied).then(|| format!(
+            "warning: saved {} using copy-and-remove because rename is unavailable; replacement was not atomic",
+            path.display()
+        )))
     }
 
-    fn export(&self, path: &std::path::Path) -> Result<()> {
+    fn export(&self, path: &std::path::Path) -> Result<Publication> {
         self.workbook
-            .to_xlsx_path(path.to_str().ok_or("output path must be UTF-8")?)
+            .to_xlsx_path_with_publication(path.to_str().ok_or("output path must be UTF-8")?)
             .map_err(|e| format!("failed to save {}: {e}", path.display()).into())
     }
 }

@@ -1222,6 +1222,7 @@ dependencies = [
  "tokio",
  "uuid",
  "value-types",
+ "xlsx-api",
  "xlsx-parser",
 ]
 

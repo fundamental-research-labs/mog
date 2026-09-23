@@ -106,12 +106,19 @@ impl ComputeEngine {
 impl ComputeEngine {
     /// Stream XLSX output to a temporary file and replace the destination.
     pub fn export_to_xlsx_path(&self, path: &std::path::Path) -> Result<(), ComputeError> {
+        self.export_to_xlsx_path_with_publication(path).map(|_| ())
+    }
+
+    /// Export to a file and report whether publication required a non-atomic copy.
+    pub fn export_to_xlsx_path_with_publication(
+        &self,
+        path: &std::path::Path,
+    ) -> Result<crate::Publication, ComputeError> {
         let result = self.export_to_parse_output()?;
-        xlsx_api::export_owned_parse_output_to_path(result.parse_output, path).map_err(|error| {
-            ComputeError::ExportError {
+        xlsx_api::export_owned_parse_output_to_path_with_publication(result.parse_output, path)
+            .map_err(|error| ComputeError::ExportError {
                 message: error.to_string(),
-            }
-        })
+            })
     }
 
     /// Build a `ParseOutput` from the current native storage state.

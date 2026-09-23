@@ -33,6 +33,8 @@ struct Envelope {
 struct Reply {
     output: String,
     error: Option<String>,
+    #[serde(default)]
+    warning: Option<String>,
 }
 
 impl Reply {
@@ -41,10 +43,12 @@ impl Reply {
             Ok(output) => Self {
                 output,
                 error: None,
+                warning: None,
             },
             Err(error) => Self {
                 output: String::new(),
                 error: Some(error.to_string()),
+                warning: None,
             },
         }
     }
@@ -52,7 +56,12 @@ impl Reply {
     fn into_result(self) -> Result<String> {
         match self.error {
             Some(error) => Err(error.into()),
-            None => Ok(self.output),
+            None => {
+                if let Some(warning) = self.warning {
+                    eprintln!("{warning}");
+                }
+                Ok(self.output)
+            }
         }
     }
 }
@@ -172,6 +181,7 @@ pub(super) fn worker() -> Result<()> {
         stream.set_write_timeout(Some(IO_TIMEOUT))?;
         let request = receive::<Envelope>(&mut stream);
         let mut close = false;
+        let mut warning = None;
         let result = (|| -> Result<String> {
             let envelope = request?;
             if envelope.token != record.token {
@@ -181,7 +191,7 @@ pub(super) fn worker() -> Result<()> {
             let output = state.apply(&request)?;
             if request.close {
                 if !request.discard {
-                    state
+                    warning = state
                         .save()
                         .map_err(|error| format!("{error}\nSession remains open."))?;
                 }
@@ -195,7 +205,9 @@ pub(super) fn worker() -> Result<()> {
             fs::remove_file(&registration.0)?;
         }
         // A disconnected caller must not kill the workbook or undo a completed close.
-        let _ = send(&mut stream, &Reply::from_result(result));
+        let mut reply = Reply::from_result(result);
+        reply.warning = warning;
+        let _ = send(&mut stream, &reply);
         if close {
             break;
         }

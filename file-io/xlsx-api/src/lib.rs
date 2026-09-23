@@ -17,6 +17,7 @@
 pub mod bridge;
 mod error;
 mod export;
+pub mod file_output;
 mod options;
 mod parse;
 pub mod streaming;
@@ -32,4 +33,7 @@ pub use options::{ParseMode, ParseOptions};
 pub use parse::{ParsedWorkbook, parse, parse_with_options};
 pub use types::*;
 
-pub use export::{export_from_parse_output_to_path, export_owned_parse_output_to_path};
+pub use export::{
+    export_from_parse_output_to_path, export_owned_parse_output_to_path,
+    export_owned_parse_output_to_path_with_publication,
+};

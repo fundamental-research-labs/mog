@@ -1,6 +1,7 @@
 //! XLSX export — domain types in, .xlsx bytes out.
 
 use crate::error::XlsxApiError;
+use crate::file_output::{self, Publication, context};
 use domain_types::ParseOutput;
 pub use xlsx_parser::write::ExportReport;
 
@@ -33,7 +34,8 @@ pub fn export_from_parse_output_to<W: std::io::Write>(
 }
 
 /// Stream to a temporary file, then replace the destination.
-/// A failed export leaves an existing destination intact.
+/// Serialization failure leaves an existing destination intact. Filesystems
+/// without rename support use a non-atomic copy of the completed export.
 pub fn export_from_parse_output_to_path(
     output: &ParseOutput,
     path: impl AsRef<std::path::Path>,
@@ -46,29 +48,49 @@ pub fn export_owned_parse_output_to_path(
     output: ParseOutput,
     path: impl AsRef<std::path::Path>,
 ) -> Result<(), XlsxApiError> {
+    export_owned_parse_output_to_path_with_publication(output, path).map(|_| ())
+}
+
+/// Export an owned projection and report whether publication required copying.
+pub fn export_owned_parse_output_to_path_with_publication(
+    output: ParseOutput,
+    path: impl AsRef<std::path::Path>,
+) -> Result<Publication, XlsxApiError> {
     use std::io::Write;
     let path = path.as_ref();
     let parent = path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or(std::path::Path::new("."));
-    let mut temporary = tempfile::NamedTempFile::new_in(parent).map_err(io_error)?;
+    let mut temporary = file_output::temporary_in(parent).map_err(io_error)?;
     let mut sink = std::io::BufWriter::new(temporary.as_file_mut());
     xlsx_parser::write::from_parse_output::write_xlsx_from_owned_parse_output_to(
         output, &mut sink,
     )?;
-    sink.flush().map_err(io_error)?;
+    sink.flush()
+        .map_err(|error| io_error(context("flush temporary export for", path, error)))?;
     drop(sink);
-    if let Ok(metadata) = std::fs::metadata(path) {
-        temporary
-            .as_file()
-            .set_permissions(metadata.permissions())
-            .map_err(io_error)?;
+    match std::fs::metadata(path) {
+        Ok(metadata) => {
+            if let Err(error) = temporary.as_file().set_permissions(metadata.permissions())
+                && error.kind() != std::io::ErrorKind::Unsupported
+            {
+                return Err(io_error(context(
+                    "set temporary export permissions for",
+                    path,
+                    error,
+                )));
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(io_error(context("read destination metadata", path, error))),
     }
     temporary
-        .persist(path)
-        .map_err(|error| io_error(error.error))?;
-    Ok(())
+        .as_file()
+        .sync_all()
+        .map_err(|error| io_error(context("sync temporary export for", path, error)))?;
+    file_output::publish(temporary.into_temp_path(), path, true)
+        .map_err(|error| io_error(error.error))
 }
 
 fn io_error(error: std::io::Error) -> XlsxApiError {

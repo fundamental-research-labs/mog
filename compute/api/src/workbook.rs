@@ -124,8 +124,17 @@ impl Workbook {
     }
 
     /// Stream the workbook to an xlsx file on disk.
-    /// Replaces the destination only after the streamed write succeeds.
+    /// Publishes only after serialization succeeds, using a non-atomic copy if
+    /// the filesystem cannot rename.
     pub fn to_xlsx_path(&self, path: &str) -> Result<(), ComputeApiError> {
+        self.to_xlsx_path_with_publication(path).map(|_| ())
+    }
+
+    /// Export to a file and report whether publication required a non-atomic copy.
+    pub fn to_xlsx_path_with_publication(
+        &self,
+        path: &str,
+    ) -> Result<crate::Publication, ComputeApiError> {
         if let Some(parent) = std::path::Path::new(path).parent()
             && !parent.as_os_str().is_empty()
         {
@@ -135,7 +144,7 @@ impl Workbook {
         }
         let path = std::path::PathBuf::from(path);
         self.dispatch
-            .query_engine(move |engine| engine.export_to_xlsx_path(&path))
+            .query_engine(move |engine| engine.export_to_xlsx_path_with_publication(&path))
             .and_then(|result| result.map_err(ComputeApiError::from))
     }
 

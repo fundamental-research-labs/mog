@@ -91,8 +91,20 @@ formulas before export. Scripts automatically trigger full recalculation after
 they finish, including workbooks imported in manual calculation mode. Within a
 script, `context.sync()` retains the Office.js calculation behavior.
 
-Exports complete before replacing an explicit destination, so a failed export
-does not truncate the input. Script failures do not save the workbook. Script
+Exports finish serialization before touching an explicit destination, so a
+serialization failure does not truncate the input. Mog first tries atomic rename.
+If the filesystem does not support it, or the move crosses filesystems, Mog
+copies the completed file sequentially, syncs the destination, then removes the
+temporary source. A warning on stderr identifies this non-atomic fallback:
+transfer failures can leave an incomplete destination. Other errors, including
+permission failures, are reported without retrying as a copy. Temporary files
+are staged beside the destination where supported, otherwise in the host's
+standard temporary directory (respecting its temporary-directory configuration).
+Permission bits are preserved where supported; bucket mounts can use fixed modes.
+This applies to explicit paths, automatic filenames, and session saves. A writable
+bucket mount must also allow overwriting to replace an existing file.
+
+Script failures do not save the workbook. Script
 console output is printed once; a non-null return value is printed as JSON if
 there was no console output.
 

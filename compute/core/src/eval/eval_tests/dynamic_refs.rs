@@ -622,3 +622,103 @@ fn workbook_qualified_names_bypass_sheet_local_shadowing() {
         assert_eq!(first, &CellValue::number(expected), "{formula}");
     }
 }
+
+#[test]
+fn offset_resolves_reference_bases_before_resizing() {
+    let (store, sheet) = test_store_with_named_ranges(
+        [
+            ("SingleCellBase", "=Sheet1!B2"),
+            ("BlockBase", "=Sheet1!B2:C3"),
+            ("WholeRow", "=Sheet1!2:2"),
+            ("FormulaBase", "=OFFSET(Sheet1!B2,0,0,2,2)"),
+        ]
+        .into_iter()
+        .map(|(name, expression)| {
+            NamedRangeDef::from_expression(name.into(), Scope::Workbook, expression.into())
+        })
+        .collect(),
+    );
+    let context = make_ctx(&store, sheet);
+    for base in [
+        "SingleCellBase",
+        "BlockBase",
+        "FormulaBase",
+        "(BlockBase)",
+        "Sheet1!SingleCellBase",
+        "INDEX(Sheet1!B2:D3,1,1)",
+        "INDEX(BlockBase,0,1)",
+        "INDEX(WholeRow,,2)",
+        "OFFSET(SingleCellBase,0,0)",
+        "INDIRECT(\"Sheet1!B2\")",
+    ] {
+        // SUM consumes OFFSET's values; the range operator consumes its area.
+        // Both must retain B2 as the origin, including for INDEX/name results.
+        for formula in [
+            format!("=SUM(OFFSET({base},0,0,2,2))"),
+            format!("=SUM(Sheet1!B2:OFFSET({base},1,1,1,1))"),
+        ] {
+            let node = compute_parser::parse_formula(&formula, None)
+                .unwrap()
+                .into_inner();
+            assert_eq!(eval(&node, &context), CellValue::number(66.0), "{formula}");
+        }
+    }
+    for (formula, expected) in [
+        ("=SUM(OFFSET(BlockBase,1,1))", 110.0),
+        ("=SUM(OFFSET(BlockBase,-1,-1))", 22.0),
+        ("=SUM(OFFSET(WholeRow,,,,3))", 33.0),
+    ] {
+        let node = compute_parser::parse_formula(formula, None)
+            .unwrap()
+            .into_inner();
+        assert_eq!(
+            eval(&node, &context),
+            CellValue::number(expected),
+            "{formula}"
+        );
+    }
+    for (formula, expected) in [
+        ("=OFFSET(42,0,0)", CellError::Ref),
+        ("=OFFSET({1,2},0,0)", CellError::Ref),
+        ("=OFFSET(SingleCellBase,NA(),0)", CellError::Na),
+        ("=OFFSET(SingleCellBase,0,0,0,1)", CellError::Ref),
+    ] {
+        let node = compute_parser::parse_formula(formula, None)
+            .unwrap()
+            .into_inner();
+        assert_eq!(
+            eval(&node, &context),
+            CellValue::Error(expected, None),
+            "{formula}"
+        );
+    }
+}
+
+#[test]
+fn offset_rejects_cross_sheet_base_range() {
+    let (store, sheet) = test_store();
+    let context = make_ctx(&store, sheet);
+    let base = ASTNode::Range(RangeRef {
+        start: CellRef::Positional {
+            sheet,
+            row: 0,
+            col: 0,
+        },
+        end: CellRef::Positional {
+            sheet: SheetId::from_uuid_str("00000000-0000-0000-0000-000000000002").unwrap(),
+            row: 1,
+            col: 1,
+        },
+        abs_start: AbsFlags::default(),
+        abs_end: AbsFlags::default(),
+        range_type: RangeType::CellRange,
+    });
+    let offset = func(
+        "OFFSET",
+        vec![base, ASTNode::Number(0.0), ASTNode::Number(0.0)],
+    );
+    assert_eq!(
+        eval(&offset, &context),
+        CellValue::Error(CellError::Ref, None)
+    );
+}

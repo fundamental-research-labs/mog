@@ -1,13 +1,26 @@
 use cell_types::SheetId;
 use compute_parser::ASTNode;
-use compute_parser::{CellRefNode, RangeRef};
 use formula_types::{CellRef, RangeType};
 use value_types::{CellError, CellValue, ComputeError};
 
 use crate::eval::context::traits::{EvalDataAccess, EvalMetadata};
 use crate::eval::engine::evaluator::Evaluator;
 
-use super::range_geometry::resolve_cellref;
+// Preserve the reference geometry before OFFSET resizes it. Materializing a
+// name or INDEX result first loses its sheet/origin and can read a whole row.
+async fn resolve_offset_base<D: EvalDataAccess, M: EvalMetadata>(
+    evaluator: &mut Evaluator<'_, D, M>,
+    node: &ASTNode,
+) -> Result<(SheetId, i64, i64, i64, i64), ComputeError> {
+    let (sheet, start_row, start_col, end_row, end_col) = evaluator.eval_node_as_area(node).await?;
+    Ok((
+        sheet,
+        i64::from(start_row),
+        i64::from(start_col),
+        i64::from(end_row) - i64::from(start_row) + 1,
+        i64::from(end_col) - i64::from(start_col) + 1,
+    ))
+}
 
 pub(in crate::eval) async fn eval_offset<'a, D: EvalDataAccess, M: EvalMetadata>(
     evaluator: &mut Evaluator<'a, D, M>,
@@ -17,42 +30,14 @@ pub(in crate::eval) async fn eval_offset<'a, D: EvalDataAccess, M: EvalMetadata>
         return Ok(CellValue::Error(CellError::Value, None));
     }
 
-    // --- Extract base reference position from the first argument (AST) ---
-    let arg0 = match &args[0] {
-        ASTNode::SheetRef { inner, .. } => inner.as_ref(),
-        other => other,
-    };
-
-    let (base_sheet, base_row, base_col, base_height, base_width) = match arg0 {
-        ASTNode::CellReference(CellRefNode { reference, .. }) => {
-            let (sheet, row, col) =
-                resolve_cellref(reference, evaluator.meta).ok_or_else(|| ComputeError::Eval {
-                    message: "OFFSET: cannot resolve base reference".into(),
-                })?;
-            (sheet, row as i64, col as i64, 1i64, 1i64)
-        }
-        ASTNode::Range(RangeRef { start, end, .. }) => {
-            let (s_sheet, s_row, s_col) =
-                resolve_cellref(start, evaluator.meta).ok_or_else(|| ComputeError::Eval {
-                    message: "OFFSET: cannot resolve range start".into(),
-                })?;
-            let (e_sheet, e_row, e_col) =
-                resolve_cellref(end, evaluator.meta).ok_or_else(|| ComputeError::Eval {
-                    message: "OFFSET: cannot resolve range end".into(),
-                })?;
-            if s_sheet != e_sheet {
+    let (base_sheet, base_row, base_col, base_height, base_width) =
+        match resolve_offset_base(evaluator, &args[0]).await {
+            Ok(base) => base,
+            Err(ComputeError::Eval { .. }) => {
                 return Ok(CellValue::Error(CellError::Ref, None));
             }
-            let min_row = s_row.min(e_row) as i64;
-            let min_col = s_col.min(e_col) as i64;
-            let h = (s_row.max(e_row) as i64 - min_row) + 1;
-            let w = (s_col.max(e_col) as i64 - min_col) + 1;
-            (s_sheet, min_row, min_col, h, w)
-        }
-        _ => {
-            return Ok(CellValue::Error(CellError::Ref, None));
-        }
-    };
+            Err(error) => return Err(error),
+        };
 
     // --- Evaluate numeric arguments ---
     let rows_offset = {
@@ -192,46 +177,8 @@ pub(in crate::eval) async fn eval_offset_as_area<'a, D: EvalDataAccess, M: EvalM
         });
     }
 
-    // Extract base reference position from first argument (same as eval_offset)
-    let arg0 = match &args[0] {
-        ASTNode::SheetRef { inner, .. } => inner.as_ref(),
-        other => other,
-    };
-
-    let (base_sheet, base_row, base_col, base_height, base_width) = match arg0 {
-        ASTNode::CellReference(CellRefNode { reference, .. }) => {
-            let (sheet, row, col) =
-                resolve_cellref(reference, evaluator.meta).ok_or_else(|| ComputeError::Eval {
-                    message: "OFFSET: cannot resolve base reference".into(),
-                })?;
-            (sheet, row as i64, col as i64, 1i64, 1i64)
-        }
-        ASTNode::Range(RangeRef { start, end, .. }) => {
-            let (s_sheet, s_row, s_col) =
-                resolve_cellref(start, evaluator.meta).ok_or_else(|| ComputeError::Eval {
-                    message: "OFFSET: cannot resolve range start".into(),
-                })?;
-            let (e_sheet, e_row, e_col) =
-                resolve_cellref(end, evaluator.meta).ok_or_else(|| ComputeError::Eval {
-                    message: "OFFSET: cannot resolve range end".into(),
-                })?;
-            if s_sheet != e_sheet {
-                return Err(ComputeError::Eval {
-                    message: "OFFSET: cross-sheet range".into(),
-                });
-            }
-            let min_row = s_row.min(e_row) as i64;
-            let min_col = s_col.min(e_col) as i64;
-            let h = (s_row.max(e_row) as i64 - min_row) + 1;
-            let w = (s_col.max(e_col) as i64 - min_col) + 1;
-            (s_sheet, min_row, min_col, h, w)
-        }
-        _ => {
-            return Err(ComputeError::Eval {
-                message: "OFFSET: first argument must be a reference".into(),
-            });
-        }
-    };
+    let (base_sheet, base_row, base_col, base_height, base_width) =
+        resolve_offset_base(evaluator, &args[0]).await?;
 
     // Evaluate numeric arguments
     let rows_offset = {

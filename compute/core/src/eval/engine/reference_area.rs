@@ -235,11 +235,16 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
                         .ok_or_else(|| ComputeError::Eval {
                             message: "RangeOp: cannot resolve range start".into(),
                         })?;
-                let (_, e_row, e_col) =
+                let (e_sheet, e_row, e_col) =
                     self.resolve_cell_ref_position(end)
                         .ok_or_else(|| ComputeError::Eval {
                             message: "RangeOp: cannot resolve range end".into(),
                         })?;
+                if s_sheet != e_sheet {
+                    return Err(ComputeError::Eval {
+                        message: "Range endpoints belong to different sheets".into(),
+                    });
+                }
                 Ok((
                     s_sheet,
                     s_row.min(e_row),

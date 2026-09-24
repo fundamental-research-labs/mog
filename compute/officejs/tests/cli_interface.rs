@@ -409,9 +409,12 @@ fn session_worker_persists_diagnostics() {
     );
     let id = String::from_utf8(output.stdout).unwrap();
     f.ok(&["-s", id.trim(), "--close"]);
+    // Close acknowledges the save before the detached worker exits. Its final
+    // CLI record may still be in progress, so only parse newline-terminated records.
     let records: Vec<serde_json::Value> = fs::read_to_string(path)
         .unwrap()
-        .lines()
+        .split_inclusive('\n')
+        .filter(|line| line.ends_with('\n'))
         .map(|line| serde_json::from_str(line).unwrap())
         .collect();
     assert!(

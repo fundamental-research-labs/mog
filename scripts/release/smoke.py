@@ -73,8 +73,7 @@ def main():
             assert run('-i', 'session.xlsx', '-e', read_result).stdout.strip() == '42'
         finally:
             run('--close-all', '--discard')
-        # Missing optional binaries fail clearly; they must never fall back to
-        # a legacy SDK or download code at runtime.
+        # Missing optional binaries fail clearly without downloading code.
         binary_package = directory / f'node_modules/{NAME}-{suffix}'
         binary_package.rename(binary_package.with_name('hidden-native-package'))
         assert 'optional dependencies enabled' in run('--version', success=False).stderr

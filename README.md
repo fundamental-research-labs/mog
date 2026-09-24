@@ -89,9 +89,6 @@ Excel or Office.js compatibility. See [scripting support](docs/guides/officejs.m
 [supported workbook functions](compute/officejs/FUNCTIONS.md), and the
 [verification corpus](vendor/calipers/verification/README.md).
 
-Version 1 replaces the earlier `@mog-sdk/cli` SDK-based CLI. Its commands and
-scripting interface are different; see [migration notes](docs/guides/migrating-to-1.md).
-
 ## Develop
 
 ```sh

@@ -18,8 +18,8 @@ application-specific API:
 
 Additional supported operations include named items, filters and sorting,
 conditional formatting, validation, comments, and selected pivot operations.
-See the [API expansion inventory](officejs-api-expansion.md) for verification
-coverage; availability of an object does not imply support for all its members.
+See [verification](verification.md) for coverage checks. Availability of an
+object does not imply support for all its members.
 
 Fresh proxy properties require `load` and `sync` before reading. Assigning a
 writable property also caches that value on the same proxy; use a fresh proxy

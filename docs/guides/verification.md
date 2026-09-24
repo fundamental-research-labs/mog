@@ -19,3 +19,10 @@ adapter from Calipers' pinned `save` / `run` protocol to Mog's flags; `mog` itse
 has no subcommands. The HTML also reports Office.js Excel API coverage
 (Microsoft method catalog vs Mog host vs verification scripts). See
 `vendor/calipers` `bench` / `bench-report` and `scripts/officejs-coverage`.
+
+## Engine microbenchmarks
+
+`scripts/bench/storage_bench.py` measures storage and Office.js workloads in
+fresh processes and records timing, peak memory, and source provenance. It
+requires Linux, GNU time, and Python 3. Use `--help` for workload and output
+options; keep generated reports outside the source tree.

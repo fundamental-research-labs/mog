@@ -1,14 +1,14 @@
 # Releasing the native CLI
 
 The release unit is `mog` in `compute/officejs`. Internal Rust crates remain
-unpublished. The npm name stays `@mog-sdk/cli`; it contains only a launcher and
+unpublished. The npm package is `@mog-sdk/cli`; it contains only a launcher and
 exact-version optional dependencies on native binary packages.
 
 ## Preparation
 
 1. Set `compute/officejs/Cargo.toml` to the release version and update the `mog`
    entry in `Cargo.lock`. This is the only version source for all release assets.
-2. Update `docs/release-notes-1.0.md`, the README, and installation/migration docs.
+2. Update `docs/release-notes-1.0.md`, the README, and installation docs.
    The website is maintained separately; keep its installation copy consistent.
 3. Run `cargo test -p mog --locked` and `cargo check --workspace --locked`.
    The normal CI also runs workspace tests and Calipers verification.
@@ -42,8 +42,7 @@ applicable 2FA policy. No credentials belong in Git.
 
 Once the packages exist, configure npm trusted publishing for all six packages:
 GitHub owner `fundamental-research-labs`, repository `mog`, workflow
-`publish-cli.yml`, environment `npm-production`. The old SDK publisher binding
-is not sufficient for this new workflow. After verifying OIDC publication,
+`publish-cli.yml`, environment `npm-production`. After verifying OIDC publication,
 remove the bootstrap token. The workflow grants `id-token: write` for OIDC and
 provenance. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers).
 

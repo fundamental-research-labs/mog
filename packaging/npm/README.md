@@ -14,10 +14,9 @@ enabled. Node.js 22+ is required for the launcher. No Node bindings, SDK, or
 install scripts are included. JavaScript scripts execute inside Mog's embedded
 QuickJS runtime.
 
-Version 1 replaces the earlier SDK-based CLI. Use `Excel.run`,
+Use `Excel.run`,
 `context.workbook`, `load`, and `context.sync()` to work with spreadsheets.
 Office.js support is incomplete; 1.0 does not imply full Excel compatibility.
 
 [Documentation](https://github.com/fundamental-research-labs/mog/tree/main/docs) ·
-[Installation and platforms](https://github.com/fundamental-research-labs/mog/blob/main/docs/guides/installation.md) ·
-[Migration](https://github.com/fundamental-research-labs/mog/blob/main/docs/guides/migrating-to-1.md)
+[Installation and platforms](https://github.com/fundamental-research-labs/mog/blob/main/docs/guides/installation.md)

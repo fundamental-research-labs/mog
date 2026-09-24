@@ -55,7 +55,3 @@ Keep optional dependencies enabled. The launcher passes arguments, standard
 input/output, and exit status through to that binary. There are no install
 scripts, downloads at launch, Node bindings, or additional spreadsheet APIs.
 Scripts still run in the binary's embedded QuickJS runtime, not in Node.js.
-
-The unversioned npm package may still resolve to the older SDK-based CLI until
-1.0 is published. Version 1 uses the Office.js interface; see
-[migration notes](migrating-to-1.md).

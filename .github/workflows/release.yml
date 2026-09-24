@@ -17,7 +17,7 @@ permissions:
 
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -50,6 +50,8 @@ jobs:
     name: Native / ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
+    env:
+      RUSTFLAGS: ${{ matrix.platform == 'win32' && '-C target-feature=+crt-static' || '' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
@@ -69,15 +71,17 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
-      - name: Build and test native CLI
+      - name: Build native CLI and tests
         shell: bash
         run: |
-          if [ '${{ matrix.platform }}' = win32 ]; then
-            export RUSTFLAGS='-C target-feature=+crt-static'
-          fi
           cargo build -p mog --release --locked --target '${{ matrix.target }}'
-          cargo test -p mog --release --locked --target '${{ matrix.target }}' --test cli_interface
+          cargo test -p mog --release --locked --target '${{ matrix.target }}' --test cli_interface --no-run
+      - name: Test native CLI
+        timeout-minutes: 10
+        shell: bash
+        run: cargo test -p mog --release --locked --target '${{ matrix.target }}' --test cli_interface
       - name: Package and test installed CLI
+        timeout-minutes: 10
         shell: bash
         run: |
           binary='target-native/${{ matrix.target }}/release/mog'

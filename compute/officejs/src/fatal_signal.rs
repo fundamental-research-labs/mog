@@ -5,11 +5,10 @@
 //! restores the default action before the handler runs, and the handler raises
 //! the same signal again so the shell still reports it.
 
-use std::env;
-
 #[cfg(unix)]
 use std::{
     cell::UnsafeCell,
+    env,
     os::unix::ffi::OsStrExt,
     sync::atomic::{AtomicBool, AtomicUsize, Ordering, compiler_fence},
 };

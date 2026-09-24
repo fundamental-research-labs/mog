@@ -131,6 +131,28 @@ pub(super) fn start(config: Config) -> Result<(String, String)> {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
+        use windows_sys::Win32::{
+            Foundation::{HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation},
+            System::Console::{
+                GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+            },
+        };
+        // Windows inherits every inheritable handle, including our own captured
+        // stdio, even when the worker has different pipes. Keeping those handles
+        // in the worker prevents callers from seeing EOF after this process exits.
+        for id in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+            // SAFETY: GetStdHandle returns borrowed process handles. We only
+            // clear their inheritance flag; we neither close nor replace them.
+            unsafe {
+                let handle = GetStdHandle(id);
+                if !handle.is_null()
+                    && handle != INVALID_HANDLE_VALUE
+                    && SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0) == 0
+                {
+                    return Err(std::io::Error::last_os_error().into());
+                }
+            }
+        }
         command.creation_flags(0x00000008 | 0x00000200); // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
     }
     let mut child = command.spawn()?;

@@ -37,7 +37,8 @@ def main():
         command = [shutil.which('node'), str(launcher)]
 
         def run(*args, success=True):
-            result = subprocess.run(command + list(args), cwd=directory, text=True, capture_output=True)
+            result = subprocess.run(command + list(args), cwd=directory, text=True,
+                                    capture_output=True, timeout=30)
             assert (result.returncode == 0) == success, (result.returncode, result.stdout, result.stderr)
             return result
 

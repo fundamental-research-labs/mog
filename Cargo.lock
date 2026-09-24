@@ -1223,6 +1223,7 @@ dependencies = [
  "tokio",
  "uuid",
  "value-types",
+ "windows-sys",
  "xlsx-api",
  "xlsx-parser",
 ]

@@ -35,8 +35,9 @@ The platform packages are new:
 
 The publisher must have access to `@mog-sdk/cli` and permission to create public
 packages in the `@mog-sdk` scope. For the first publication, set a suitable
-**granular npm token** as `NPM_TOKEN` in the repository's `npm-production`
-environment. Its settings must allow the intended CI publication, including any
+**granular npm token** as `NPM_TOKEN` in repository secrets or the
+`npm-production` environment. An existing repository token can be used if it
+has the required package/scope access. Its settings must allow the intended CI publication, including any
 applicable 2FA policy. No credentials belong in Git.
 
 Once the packages exist, configure npm trusted publishing for all six packages:
@@ -57,9 +58,17 @@ git push origin v1.0.0
 
 The **Release** workflow checks the tag against Cargo, rebuilds and verifies
 artifacts, and creates a **draft** GitHub release containing native archives,
-npm tarballs, and `SHA256SUMS`. Review the draft and checksums. Publishing that
-GitHub release triggers **Publish CLI to npm**, subject to the `npm-production`
-environment's protection rules. Platform packages publish before the launcher.
+npm tarballs, and `SHA256SUMS`. Review the draft and checksums, then publish the
+GitHub release. Run **Publish CLI to npm** from `main` with tag `v1.0.0`:
+
+```sh
+gh workflow run publish-cli.yml --ref main -f tag=v1.0.0
+```
+
+This separate publication step uses the existing `npm-production` protection
+rules, which allow `main` and release branches rather than tag refs. It requires
+a published stable GitHub release, verifies its downloaded artifacts, and
+publishes platform packages before the launcher.
 The publisher permits a retry only when already-published packages have the
 exact same integrity hash. It never overwrites published versions.
 

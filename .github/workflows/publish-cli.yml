@@ -1,9 +1,14 @@
 name: Publish CLI to npm
 
-# Publishing a reviewed GitHub release is the explicit publication step.
+# Run from main so the existing npm-production branch protection applies.
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published stable GitHub release to publish to npm
+        required: true
+        default: v1.0.0
+        type: string
 
 permissions:
   contents: read
@@ -11,13 +16,13 @@ permissions:
 
 jobs:
   publish:
-    if: startsWith(github.event.release.tag_name, 'v') && !github.event.release.prerelease
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: npm-production
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ inputs.tag }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
@@ -25,9 +30,10 @@ jobs:
       - name: Download and verify the reviewed artifacts
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
           python3 -c 'import os, tomllib; assert os.environ["RELEASE_TAG"] == "v" + tomllib.load(open("compute/officejs/Cargo.toml", "rb"))["package"]["version"]'
+          gh release view "$RELEASE_TAG" --json isDraft,isPrerelease | python3 -c 'import json, sys; release = json.load(sys.stdin); assert not release["isDraft"] and not release["isPrerelease"], "Publish a stable GitHub release first"'
           gh release download "$RELEASE_TAG" --dir artifacts/release
           cd artifacts/release
           sha256sum --check SHA256SUMS

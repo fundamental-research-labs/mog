@@ -1,10 +1,11 @@
 # Quickstart
 
-Run Office.js against the Mog compute engine.
+Run Office.js against the native Mog spreadsheet engine.
 
 ## Prerequisites
 
-Rust (stable), including a C compiler so QuickJS can build.
+[Install Mog](installation.md). To run directly from this repository, install
+stable Rust and a C compiler so QuickJS can build.
 
 ## Run a script
 

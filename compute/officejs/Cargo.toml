@@ -1,12 +1,12 @@
 [package]
 name = "mog"
-version = "0.1.0"
+version = "1.0.0"
 publish = false
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Headless Mog spreadsheet engine with an embedded Office.js Excel API"
+description = "Native spreadsheet CLI with an embedded Office.js Excel API"
 
 [[bin]]
 name = "mog"
@@ -28,6 +28,10 @@ uuid = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+errno = "0.3"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Console"] }
 
 [dev-dependencies]
 xlsx-parser = { path = "../../file-io/xlsx/parser" }

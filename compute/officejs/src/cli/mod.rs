@@ -22,6 +22,10 @@ pub fn run() -> Result<()> {
         print!("{}", args::HELP);
         return Ok(());
     }
+    if args.version {
+        println!("mog {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
     let request = Request {
         source: match (args.eval, args.script) {
             (Some(source), _) => Some(source),

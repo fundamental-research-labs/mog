@@ -1208,10 +1208,11 @@ dependencies = [
 
 [[package]]
 name = "mog"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "compute-api",
  "domain-types",
+ "errno",
  "libc",
  "regex",
  "rquickjs",
@@ -1222,6 +1223,7 @@ dependencies = [
  "tokio",
  "uuid",
  "value-types",
+ "windows-sys",
  "xlsx-api",
  "xlsx-parser",
 ]

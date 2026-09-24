@@ -345,7 +345,10 @@ fn fatal_signal_records_address_and_backtrace_then_reraises() {
     if !cfg!(debug_assertions) {
         return;
     }
-    for (hook, signal, status) in [("sigbus", 7, "sigbus"), ("sigsegv", 11, "sigsegv")] {
+    for (hook, signal, status) in [
+        ("sigbus", libc::SIGBUS, "sigbus"),
+        ("sigsegv", libc::SIGSEGV, "sigsegv"),
+    ] {
         let f = Fixture::new();
         let path = f.path().join(format!("{status}.jsonl"));
         let output = f
@@ -862,4 +865,14 @@ fn file_flag_supports_session_scripts_and_hyphenated_filenames() {
     assert_eq!(f.ok(&["-s", &id, "--file", "read.js"]), "42");
     f.ok(&["-s", &id, "--close"]);
     assert_eq!(f.value("workbook.xlsx", "B1"), CellValue::number(42.0));
+}
+
+#[test]
+fn version_has_no_workbook_side_effects() {
+    let f = Fixture::new();
+    let expected = format!("mog {}", env!("CARGO_PKG_VERSION"));
+    assert_eq!(f.ok(&["--version"]), expected);
+    assert_eq!(f.ok(&["-V"]), expected);
+    assert_eq!(f.ok(&["--version", "-o", "unused.xlsx"]), expected);
+    assert_eq!(fs::read_dir(f.path()).unwrap().count(), 0);
 }

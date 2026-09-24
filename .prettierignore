@@ -1,8 +1,0 @@
-# Build outputs
-target/
-target-native/
-target-wasm/
-
-# Markdown and Rust are not Prettier-formatted here
-*.md
-**/*.rs

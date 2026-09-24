@@ -2,8 +2,7 @@
 
 Mog keeps local undo/redo in the native engine. History records typed inverses
 for touched cells, metadata, and structural changes. Undo restores authored
-state and recalculates dependent formulas; redo reapplies the action. Yrs and
-collaboration are not part of this implementation.
+state and recalculates dependent formulas; redo reapplies the action.
 
 ## Rust API
 

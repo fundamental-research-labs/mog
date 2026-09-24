@@ -4,7 +4,7 @@ Pure Rust data structures for every domain concept in the spreadsheet engine (co
 
 ## Purpose
 
-These structs are the **canonical data definitions** — they specify what the data looks like (fields, types, defaults) with no persistence or serialization logic beyond `serde`. They are used everywhere: XLSX parser, native compute storage, evaluator, and bridge codegen.
+These structs are the **canonical data definitions** — they specify what the data looks like (fields, types, defaults) with no persistence or serialization logic beyond `serde`. They are used everywhere: XLSX parser, native compute storage, and evaluator.
 
 ## Conventions
 

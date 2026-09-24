@@ -144,7 +144,7 @@ fabricating structure.
 ## Testing
 
 ```bash
-cargo test -p compute-graph         # 239 tests (unit + property + doc)
+cargo test -p compute-graph         # unit, property, and doc tests
 cargo bench -p compute-graph        # criterion benchmarks (1K–50K cells)
 cargo run -p compute-graph --example spreadsheet_recalc
 ```

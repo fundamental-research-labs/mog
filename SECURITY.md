@@ -2,15 +2,14 @@
 
 ## Supported Versions
 
-Mog is currently in the `experimental` release channel. Only the latest published version receives security fixes. There are no long-term support branches yet.
+Only the latest stable Mog CLI release receives security fixes. Before 1.0 is
+published, fixes land on `main`. There are no long-term support branches.
 
-| Channel | Supported |
+| Version | Supported |
 | --- | --- |
-| Latest experimental release | Yes |
-| Older experimental releases | No |
+| Latest stable native CLI release | Yes |
+| Older releases | No |
 | Unreleased / main branch | Best-effort |
-
-Once a `stable` release channel exists, this table will expand with backport commitments.
 
 ## Reporting a Vulnerability
 
@@ -60,7 +59,6 @@ The following are generally out of scope for this policy:
 - Vulnerabilities in dependencies that are already publicly disclosed and tracked upstream. (We still want to hear about them if we are shipping an affected version.)
 - Issues that require physical access to the user's machine.
 - Social engineering attacks against Mog maintainers or users.
-- Denial-of-service attacks against self-hosted instances caused by resource exhaustion from authorized users.
 - Issues in example code or documentation that do not affect the published packages.
 
 ## PGP Key

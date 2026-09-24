@@ -1,6 +1,5 @@
 # Cargo
 target-native/
-target-wasm/
 target/
 /artifacts/
 

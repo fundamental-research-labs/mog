@@ -1212,6 +1212,7 @@ version = "1.0.0"
 dependencies = [
  "compute-api",
  "domain-types",
+ "errno",
  "libc",
  "regex",
  "rquickjs",

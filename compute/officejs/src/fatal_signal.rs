@@ -282,7 +282,7 @@ fn write_fd(fd: libc::c_int, record: &[u8]) {
             )
         };
         if wrote < 0 {
-            let err = unsafe { *libc::__errno_location() };
+            let err = errno::errno().0;
             if err == libc::EINTR {
                 continue;
             }

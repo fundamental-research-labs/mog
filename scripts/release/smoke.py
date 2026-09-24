@@ -56,10 +56,21 @@ def main():
         env_dir = directory / 'sessions'
         os.environ['MOG_SESSION_DIR'] = str(env_dir)
         session = run('-s', '-i', 'output with spaces.xlsx').stdout.strip()
+        read_result = '''await Excel.run(async c => {
+            const r = c.workbook.worksheets.getItem("Sheet1").getRange("A2");
+            r.load("values");
+            await c.sync();
+            console.log(r.values[0][0]);
+        });'''
         try:
-            assert run('-s', session, '-f', str(script)).stdout.strip() == '20'
+            assert run('-s', session, '-e', read_result).stdout.strip() == '20'
+            run('-s', session, '-e', '''await Excel.run(async c => {
+                c.workbook.worksheets.getItem("Sheet1").getRange("A1").values = [[21]];
+                await c.sync();
+            });''')
+            assert run('-s', session, '-e', read_result).stdout.strip() == '42'
             run('-s', session, '--close', '-o', 'session.xlsx')
-            assert (directory / 'session.xlsx').stat().st_size > 0
+            assert run('-i', 'session.xlsx', '-e', read_result).stdout.strip() == '42'
         finally:
             run('--close-all', '--discard')
         # Missing optional binaries fail clearly; they must never fall back to

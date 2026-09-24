@@ -345,7 +345,10 @@ fn fatal_signal_records_address_and_backtrace_then_reraises() {
     if !cfg!(debug_assertions) {
         return;
     }
-    for (hook, signal, status) in [("sigbus", 7, "sigbus"), ("sigsegv", 11, "sigsegv")] {
+    for (hook, signal, status) in [
+        ("sigbus", libc::SIGBUS, "sigbus"),
+        ("sigsegv", libc::SIGSEGV, "sigsegv"),
+    ] {
         let f = Fixture::new();
         let path = f.path().join(format!("{status}.jsonl"));
         let output = f

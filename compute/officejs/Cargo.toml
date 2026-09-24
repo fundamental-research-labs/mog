@@ -28,6 +28,7 @@ uuid = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+errno = "0.3"
 
 [dev-dependencies]
 xlsx-parser = { path = "../../file-io/xlsx/parser" }

@@ -2,15 +2,14 @@
 
 ## Supported Versions
 
-Mog is currently in the `experimental` release channel. Only the latest published version receives security fixes. There are no long-term support branches yet.
+Only the latest stable Mog CLI release receives security fixes. Before 1.0 is
+published, fixes land on `main`. There are no long-term support branches.
 
-| Channel | Supported |
+| Version | Supported |
 | --- | --- |
-| Latest experimental release | Yes |
-| Older experimental releases | No |
+| Latest stable native CLI release | Yes |
+| Older releases, including the legacy SDK/UI packages | No |
 | Unreleased / main branch | Best-effort |
-
-Once a `stable` release channel exists, this table will expand with backport commitments.
 
 ## Reporting a Vulnerability
 

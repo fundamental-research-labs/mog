@@ -863,3 +863,13 @@ fn file_flag_supports_session_scripts_and_hyphenated_filenames() {
     f.ok(&["-s", &id, "--close"]);
     assert_eq!(f.value("workbook.xlsx", "B1"), CellValue::number(42.0));
 }
+
+#[test]
+fn version_has_no_workbook_side_effects() {
+    let f = Fixture::new();
+    let expected = format!("mog {}", env!("CARGO_PKG_VERSION"));
+    assert_eq!(f.ok(&["--version"]), expected);
+    assert_eq!(f.ok(&["-V"]), expected);
+    assert_eq!(f.ok(&["--version", "-o", "unused.xlsx"]), expected);
+    assert_eq!(fs::read_dir(f.path()).unwrap().count(), 0);
+}

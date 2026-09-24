@@ -13,6 +13,7 @@ pub const HELP: &str = "Usage: mog [OPTIONS]
       --close              Save and end the session selected with -s ID
       --close-all          Save and end all sessions for this user
       --discard            End without saving (with --close or --close-all)
+  -V, --version            Show the version
   -h, --help               Show this help
 ";
 
@@ -28,6 +29,7 @@ pub struct Args {
     pub close_all: bool,
     pub discard: bool,
     pub help: bool,
+    pub version: bool,
 }
 
 impl Args {
@@ -70,6 +72,7 @@ impl Args {
                 "--close" if inline.is_none() => result.close = true,
                 "--close-all" if inline.is_none() => result.close_all = true,
                 "--discard" if inline.is_none() => result.discard = true,
+                "-V" | "--version" if inline.is_none() => result.version = true,
                 "-h" | "--help" if inline.is_none() => result.help = true,
                 _ if arg.starts_with('-') => {
                     return Err(format!("unknown option: {arg}\nUse mog --help for usage.").into());

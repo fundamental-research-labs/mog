@@ -1,48 +1,51 @@
 # Mog
 
-Mog is a headless spreadsheet engine. Scripts use the Excel JavaScript API
-(`Excel.run`, `context.sync`, `Range.load`) against the native compute engine.
-There is no UI, Node runtime, or custom `wb`/`ws` API.
+**A native spreadsheet CLI, scripted with the Office.js Excel API.**
 
-## Build
+Mog opens, edits, recalculates, and saves `.xlsx` workbooks from your terminal.
+The engine is written in Rust; JavaScript runs inside the binary through
+QuickJS. No Excel installation, browser, or server is required.
 
-```bash
-cargo build -p mog
+The primary interface is Office.js: `Excel.run`, `context.workbook`,
+`Range.load`, and `context.sync()`. Mog implements a growing subset of the
+Excel JavaScript API, not a separate spreadsheet scripting language.
+
+[Website](https://sheetmog.ai) · [Documentation](docs/README.md) ·
+[Release preparation](docs/releasing.md)
+
+## Install
+
+Mog 1.0 is being prepared for release. Until it is published, build from source
+with stable Rust and a C compiler:
+
+```sh
+cargo install --path compute/officejs --locked
+mog --version
 ```
 
-## Diagnostics
+The 1.0 release will provide standalone binaries for macOS (Apple Silicon and
+Intel), Linux (x64 and ARM64, glibc), and Windows (x64), plus npm distribution:
 
-Release builds retain function names and source line tables for native crash
-symbolication while keeping release optimizations. They do not include local
-variable debug information. A native signal still requires a captured stack or
-core dump from the host; `RUST_BACKTRACE=1` only prints Rust panic backtraces.
-
-Set `MOG_DIAGNOSTICS_FILE=/absolute/path/mog-events.jsonl` to append timestamped
-stage records (also echoed to stderr). The parent directory must exist. Records
-identify the process, workbook loading, JavaScript initialization, Office.js
-bootstrap, user-script evaluation, recalculation, and saving. They contain no
-script source or workbook contents. A native crash leaves a `started` record
-without its matching terminal record; nested stages identify the narrowest
-operation reached. `evaluate_javascript` covers execution of the user script;
-`run_script` also reports a returned JavaScript exception as `failed`. Persistent
-session workers inherit the file destination. Logging is best effort and does
-not change command results when the destination is unavailable.
-
-## Quickstart
-
-```bash
-cargo run -p mog -- -f compute/officejs/examples/formula.js
+```sh
+# Once 1.0 is published:
+npm install -g @mog-sdk/cli@1
+mog --help
 ```
 
-The example writes `10` to `A1`, `=A1*2` to `A2`, loads the computed value,
-prints `20`, and saves `workbook.xlsx` in the current directory (or the next
-available `workbook-2.xlsx`, `workbook-3.xlsx`, and so on).
+The npm package only launches the native binary. It adds no JavaScript SDK,
+Node bindings, or spreadsheet functionality. Standalone binaries do not need
+Node.js. See [installation](docs/guides/installation.md) for platform requirements.
+
+## Run an Office.js script
+
+Save this as `formula.js`:
 
 ```js
 await Excel.run(async (context) => {
   const sheet = context.workbook.worksheets.getItem("Sheet1");
   sheet.getRange("A1").values = [[10]];
   sheet.getRange("A2").formulas = [["=A1*2"]];
+
   const result = sheet.getRange("A2");
   result.load("values");
   await context.sync();
@@ -50,182 +53,58 @@ await Excel.run(async (context) => {
 });
 ```
 
-Inline scripts:
-
-```bash
-cargo run -p mog -- --eval 'await Excel.run(async (context) => {
-  const sheet = context.workbook.worksheets.getItem("Sheet1");
-  sheet.getRange("A1").values = [[6]];
-  sheet.getRange("A2").formulas = [["=A1*7"]];
-  const r = sheet.getRange("A2");
-  r.load("values");
-  await context.sync();
-  console.log(r.values[0][0]);
-});'
+```sh
+mog -f formula.js -o result.xlsx
+# Prints 20 and saves result.xlsx
 ```
 
-## CLI
+Writes queue until `context.sync()`. Load properties and sync before reading
+results. The [quickstart](docs/guides/quickstart.md) explains this model.
 
-Running `mog` with no arguments shows help without creating a file.
-For workbook operations, Mog starts blank unless `-i` / `--input` is supplied. It saves
-in place when an input is supplied; `-o` / `--output` chooses another destination.
-Without either path, it saves in the current directory with the first available
-name: `workbook.xlsx`, `workbook-2.xlsx`, `workbook-3.xlsx`, and so on. Existing
-automatic filenames are never overwritten, including concurrent invocations.
+## Work with files
 
-```bash
-mog                                      # show help
-mog -o workbook.xlsx                     # create a blank workbook
-mog -i input.xlsx                         # open and save in place
-mog -i input.xlsx -o copy.xlsx            # save a copy
-mog -i input.xlsx -r                      # recalculate and save in place
-mog -i input.xlsx -f script.js            # run a script file, then save
-mog -e 'console.log("hello")' -o new.xlsx  # run inline JavaScript
-mog --help
+```sh
+mog -i input.xlsx -f script.js -o output.xlsx  # edit a copy
+mog -i input.xlsx -r                          # recalculate in place
+mog -o blank.xlsx                            # create a workbook
+mog -e 'console.log("hello")' -o hello.xlsx   # inline JavaScript
 ```
 
-`-e` / `--eval` takes inline JavaScript; `-f` / `--file` loads a script file.
-Use `--file=-script.js` for a filename beginning with `-`. Opening and saving without
-a script preserves imported formula caches. `-r` / `--recalculate` evaluates
-formulas before export. Scripts automatically trigger full recalculation after
-they finish, including workbooks imported in manual calculation mode. Within a
-script, `context.sync()` retains the Office.js calculation behavior.
+With `-i` and no `-o`, Mog saves **in place**. Without either, it chooses an
+unused `workbook.xlsx`, `workbook-2.xlsx`, and so on. Scripts trigger
+recalculation before saving; a script failure does not save the workbook.
+Running `mog` alone shows help.
 
-Exports finish serialization before touching an explicit destination, so a
-serialization failure does not truncate the input. Mog first tries atomic rename.
-If the filesystem does not support it, or the move crosses filesystems, Mog
-copies the completed file sequentially, syncs the destination, then removes the
-temporary source. A warning on stderr identifies this non-atomic fallback:
-transfer failures can leave an incomplete destination. Other errors, including
-permission failures, are reported without retrying as a copy. Temporary files
-are staged beside the destination where supported, otherwise in the host's
-standard temporary directory (respecting its temporary-directory configuration).
-Permission bits are preserved where supported; bucket mounts can use fixed modes.
-This applies to explicit paths, automatic filenames, and session saves. A writable
-bucket mount must also allow overwriting to replace an existing file.
+For repeated edits, `mog -s -i input.xlsx` starts a background session and prints
+an ID. Use `mog -s ID -f script.js` to edit, then `mog -s ID --close` to save and
+exit. Sessions keep work in memory until closed. See the
+[CLI reference](docs/guides/cli.md) for save behavior and session commands.
 
-Script failures do not save the workbook. Script
-console output is printed once; a non-null return value is printed as JSON if
-there was no console output.
+## Scope and compatibility
 
-### Sessions
+Mog is a headless, native CLI. There is no spreadsheet UI or browser runtime.
+Office.js support includes ranges, formulas, formatting, tables, names, and
+other worksheet operations. Coverage is incomplete: 1.0 does **not** mean full
+Excel or Office.js compatibility. See [scripting support](docs/guides/officejs.md),
+[supported workbook functions](compute/officejs/FUNCTIONS.md), and the
+[verification corpus](vendor/calipers/verification/README.md).
 
-Start a session with `-s` / `--session`. This launches
-a detached background process that keeps the workbook in memory and prints its
-ID. Pass the ID to later invocations:
+Version 1 replaces the earlier `@mog-sdk/cli` SDK-based CLI. Its commands and
+scripting interface are different; see [migration notes](docs/guides/migrating-to-1.md).
 
-```bash
-ID=$(mog -s -i input.xlsx)
-mog -s "$ID" -e 'await Excel.run(async c => {
-  c.workbook.worksheets.getItem("Sheet1").getRange("A1").values = [[42]];
-  await c.sync();
-});'
-mog -s "$ID" -f another-script.js
-mog -s "$ID" --close                       # save and end the session
+## Develop
+
+```sh
+cargo build -p mog --locked
+cargo test -p mog --locked
+cargo test -p compute-api --locked
 ```
 
-| Action | Command |
-| --- | --- |
-| Save to another path and end | `mog -s ID --close -o result.xlsx` |
-| End without saving | `mog -s ID --close --discard` |
-| Save and end every session | `mog --close-all` |
-| End every session without saving | `mog --close-all --discard` |
-
-A session writes no workbook file until closed. Its default output is the input
-path, or an available `workbook*.xlsx` in the directory where it started. `-o`
-changes the session's destination; relative paths are resolved from the caller's
-current directory. The automatic filename is selected at save time. `--input`
-is only valid when starting a session. A script may also run during startup;
-its output goes to stderr so stdout contains only the ID.
-
-Requests to a session run sequentially. Workbook state persists; each script has
-a fresh JavaScript scope. A script error leaves the session alive, and earlier
-successful `context.sync()` calls remain applied. A failed save also leaves the
-session alive so you can retry with another output path. Closing all sessions
-attempts each one and reports failures without discarding unsaved workbooks.
-Sessions survive the launching shell, but their unsaved contents do not survive
-a process crash or reboot.
-
-Sessions use authenticated loopback connections and a private registry under
-`~/.mog/sessions` (`%USERPROFILE%\.mog\sessions` on Windows). `MOG_SESSION_DIR`
-can select another private directory, including for isolated test runs.
-`--close-all` covers sessions in that registry. Stale records from crashed
-workers are removed when a connection is refused.
-
-## Scripting surface
-
-Random, clock, path, and platform-dependent results require controlled inputs
-or separate assertions, including dependent cells and spill ranges, when
-comparing against an Excel-generated workbook. Exact cached-value equality
-does not verify calculation accuracy.
-
-The engine implements a growing portion of the Office.js Excel
-application-specific API:
-
-- `Excel.run` with a `RequestContext`
-- Proxy objects that queue work until `await context.sync()`
-- `load(...)` with string, array, and nested property projections
-- `context.workbook.worksheets.getItem` / `add` / `getActiveWorksheet`
-- `worksheet.getRange`
-- `Range.values` (2-D get/set)
-- `Range.formulas` writes, with computed values readable after `load` + `sync`
-- Range addresses, dimensions, and row/column indices
-- Range formatting through `format`, `font`, `fill`, and `protection`
-- Worksheet table creation, name/ID lookup, scalar properties, and table ranges
-- 50 `workbook.functions` methods with loadable `FunctionResult.value` / `error`
-  (see [supported functions and verification cases](compute/officejs/FUNCTIONS.md))
-
-Fresh proxy properties require `load` and `sync` before reading. Assigning a
-writable property also caches that value on the same proxy; use a fresh proxy
-with `load` and `sync` to read the engine's resulting state. A `null` cell in
-a values write preserves the existing cell, while an empty string clears it.
-
-Callers and scripts have full access to the workbook they receive. Applications
-embedding Mog are responsible for authorizing workbook access; the compute
-engine does not enforce caller-specific workbook, sheet, or cell permissions.
-Excel sheet protection remains a separate document feature.
-
-The target contract is Microsoft's Excel JavaScript API. Implementation and
-behavioral coverage are incomplete; the listed features do not establish
-support for an entire Excel API requirement set. Charts, pivots, and many other
-Excel members remain unimplemented. Word, PowerPoint, and Office dialogs are
-outside this spreadsheet engine's scope.
-
-Each mutating `context.sync()` is one native undo action. Rust callers use
-`workbook.history().undo()` / `redo()` and can group multiple operations with
-`begin_undo_group()` / `end_undo_group()`. See [undo and redo](docs/guides/undo-redo.md)
-for grouping, error handling, and redo behavior.
-
-## Excel vs Mog speed/memory
-
-`./run-calipers-bench.sh` walks the calipers verify corpus **one case at a time** and writes wall time + peak working set to JSON, then a US Letter HTML/SVG report. Open the HTML and use **Export as PDF** (stacked 8.5×11in pages).
-
-```bash
-# Mog-only (any OS) — inspect HTML before a Windows Excel run
-./run-calipers-bench.sh
-./run-calipers-bench.sh --suite default
-
-# Both series on one Windows machine (build Mog, run Mog, then Excel COM)
-./run-calipers-bench.sh --excel
-```
-
-Excel is desktop `Excel.Application` via COM plus a sideloaded Office.js add-in
-(not AppSource / Office Scripts). The repository runners build a small native
-adapter from Calipers' pinned `save` / `run` protocol to Mog's flags; `mog` itself
-has no subcommands. The HTML also reports Office.js Excel API coverage
-(Microsoft method catalog vs Mog host vs verification scripts). See
-`vendor/calipers` `bench` / `bench-report` and `scripts/officejs-coverage`.
-
-## Tests
-
-```bash
-cargo test -p mog
-cargo test -p compute-api
-```
-
-Pull requests and `main` run `cargo build -p mog --locked` and
-`cargo test --workspace --locked` on GitHub Actions.
+Pull requests run the workspace tests and Calipers verification on GitHub
+Actions. [Architecture](docs/guides/architecture-overview.md),
+[benchmarks](docs/guides/verification.md), and
+[native diagnostics](docs/guides/diagnostics.md) cover the internals.
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+[Apache-2.0](LICENSE). See [trademark notices](TRADEMARKS.md).

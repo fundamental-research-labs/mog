@@ -1,12 +1,12 @@
 [package]
 name = "mog"
-version = "0.1.0"
+version = "1.0.0"
 publish = false
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Headless Mog spreadsheet engine with an embedded Office.js Excel API"
+description = "Native spreadsheet CLI with an embedded Office.js Excel API"
 
 [[bin]]
 name = "mog"

@@ -1,0 +1,41 @@
+name: Publish CLI to npm
+
+# Publishing a reviewed GitHub release is the explicit publication step.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    if: startsWith(github.event.release.tag_name, 'v') && !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    environment: npm-production
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      - name: Download and verify the reviewed artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python3 -c 'import os, tomllib; assert os.environ["RELEASE_TAG"] == "v" + tomllib.load(open("compute/officejs/Cargo.toml", "rb"))["package"]["version"]'
+          gh release download "$RELEASE_TAG" --dir artifacts/release
+          cd artifacts/release
+          sha256sum --check SHA256SUMS
+          cd ../..
+          python3 scripts/release/check.py
+      - name: Publish platform packages, then the launcher
+        env:
+          # OIDC is preferred. A granular token can bootstrap new platform
+          # packages before their npm trusted publishers have been configured.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: python3 scripts/release/publish.py

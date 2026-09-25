@@ -19,3 +19,6 @@ rust_out
 
 # Python benchmark tooling
 __pycache__/
+
+# Assembled website (see website/assemble.sh)
+/website/out/

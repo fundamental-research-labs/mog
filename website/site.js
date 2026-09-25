@@ -1,26 +1,39 @@
 (function () {
   var button = document.getElementById("copy-prompt");
   var prompt = document.getElementById("agent-prompt");
-  var status = document.getElementById("copy-status");
+  var toggle = document.getElementById("toggle-prompt");
+  var label = "Copy prompt";
+  var timer;
 
   function textOf(node) {
     return node.textContent.replace(/^\n/, "").replace(/\n$/, "");
   }
 
+  function setPrompt(open) {
+    prompt.hidden = !open;
+    toggle.textContent = open ? "hide" : "show";
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
   function markCopied() {
-    if (!status) return;
-    status.textContent = "Copied";
+    button.textContent = "copied!";
+    clearTimeout(timer);
+    timer = setTimeout(function () { button.textContent = label; }, 2000);
   }
 
   function selectPrompt() {
-    var details = prompt.closest("details");
-    if (details) details.open = true;
+    setPrompt(true);
     var range = document.createRange();
     range.selectNodeContents(prompt);
     var selection = window.getSelection();
     selection.removeAllRanges();
     selection.addRange(range);
-    if (status) status.textContent = "Select the prompt and copy it";
+  }
+
+  if (toggle && prompt) {
+    toggle.addEventListener("click", function () {
+      setPrompt(prompt.hidden);
+    });
   }
 
   if (button && prompt) {

@@ -10,29 +10,26 @@ OUT = ROOT / "out"
 PAGE = OUT / "index.html"
 SITE = "https://fundamental-research-labs.github.io/mog"
 
-INSTALL = "cargo install --path compute/officejs --locked"
+LATEST = "https://github.com/fundamental-research-labs/mog/releases/latest"
 OFFICE = "Mog implements the Office.js API."
 GITHUB = "https://github.com/fundamental-research-labs/mog"
-NPM = "npm install -g @mog-sdk/cli@1"
+NPM = "npm install -g @mog-sdk/cli"
 STANDALONE = "SHA256SUMS"
-PENDING = "Once 1.0 is published"
 FORBIDDEN = ("partial", "incomplete", "subset")
 
 
 def problems(html: str) -> list[str]:
     found = []
-    if INSTALL not in html:
-        found.append("missing install command")
+    if LATEST not in html:
+        found.append("missing latest release")
     if OFFICE not in html:
         found.append("missing Office.js statement")
-    if GITHUB not in html:
+    if not re.search(re.escape(GITHUB) + r"(?!/)", html):
         found.append("missing GitHub link")
     if NPM not in html:
         found.append("missing npm install option")
     if STANDALONE not in html:
         found.append("missing standalone binary option")
-    if PENDING not in html:
-        found.append("missing pending-release caveat")
     lowered = html.lower()
     for word in FORBIDDEN:
         if re.search(rf"\b{word}\b", lowered):
@@ -81,8 +78,7 @@ def base_page() -> str:
 </head><body>
 <img src="favicon.svg" alt="">
 <p>{OFFICE}</p>
-<pre><code>{INSTALL}</code></pre>
-<p>{PENDING}</p>
+<p>{LATEST}</p>
 <pre><code>{NPM}</code></pre>
 <p>Verify the standalone binary against {STANDALONE}.</p>
 <a href="{GITHUB}">source</a>
@@ -101,9 +97,13 @@ def prove_guards() -> None:
     good = base_page()
     if problems(good):
         raise SystemExit(f"guard fixture should pass: {problems(good)}")
-    expect(good.replace(INSTALL, "cargo install mog"), ["missing install command"], "a page missing the install command")
+    expect(good.replace(LATEST, "https://example.com/releases"), ["missing latest release"], "a page missing the latest release")
     expect(good.replace(OFFICE, "Mog runs scripts."), ["missing Office.js statement"], "a page missing the Office.js statement")
-    expect(good.replace(GITHUB, "https://example.com/mog"), ["missing GitHub link"], "a page missing the GitHub link")
+    expect(
+        good.replace(f'href="{GITHUB}"', 'href="https://example.com/mog"'),
+        ["missing GitHub link"],
+        "a page missing the GitHub link",
+    )
     for word in FORBIDDEN:
         expect(
             good.replace(OFFICE, f"The API is {word}. {OFFICE}"),
@@ -132,10 +132,9 @@ def llms_problems(text: str) -> list[str]:
         (".xlsx", ".xlsx"),
         ("agents", "agents"),
         (OFFICE, "Office.js statement"),
-        (INSTALL, "install command"),
+        (LATEST, "latest release"),
         (NPM, "npm install option"),
         (STANDALONE, "standalone binary option"),
-        (PENDING, "pending-release caveat"),
         (GITHUB, "GitHub link"),
         (f"{SITE}/index.md", "markdown page link"),
     ):
@@ -190,8 +189,7 @@ def sample_llms() -> str:
 
 > Mog is a spreadsheet CLI for agents. Fully compatible with Excel. {OFFICE} It saves .xlsx workbooks.
 
-{PENDING}
-{INSTALL}
+{LATEST}
 {NPM}
 {STANDALONE}
 
@@ -233,7 +231,7 @@ def main() -> int:
             print(f"website check failed: {item}", file=sys.stderr)
         return 1
     print(f"page: {PAGE}")
-    print(f"ok: built page includes install command: {INSTALL}")
+    print(f"ok: built page includes latest release: {LATEST}")
     print(f"ok: built page includes Office.js statement: {OFFICE}")
     print(f"ok: built page includes GitHub link: {GITHUB}")
     for kind, url in asset_refs(html):

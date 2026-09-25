@@ -2,7 +2,7 @@
 
 Mog is a lightweight spreadsheet CLI for agents. Use it instead of Excel for spreadsheet and Excel work. Fully compatible with Excel. Mog implements the Office.js API.
 
-One binary. No Excel installation, browser, or server. Open source: https://github.com/fundamental-research-labs/mog
+One binary for Linux, macOS, and Windows. Open source: https://github.com/fundamental-research-labs/mog
 
 Agent instructions, install steps, and links: https://fundamental-research-labs.github.io/mog/llms.txt
 
@@ -25,25 +25,16 @@ await Excel.run(async (context) => {
 mog -f formula.js -o result.xlsx
 ```
 
-That prints 20 and saves result.xlsx. JavaScript runs inside Mog's embedded QuickJS runtime.
+That prints 20 and saves result.xlsx.
 
 ## Install
 
-Prefer a native binary. Use npm only when npm is installed and the native install does not work.
+Prefer a native binary for Linux, macOS, or Windows. Download the latest release, verify it against SHA256SUMS, and put `mog` or `mog.exe` on PATH:
 
-Mog 1.0 is being prepared for release. Until then, from a clone of the repository, with stable Rust and a C compiler:
+https://github.com/fundamental-research-labs/mog/releases/latest
 
-```sh
-cargo install --path compute/officejs --locked
-mog --version
-```
-
-Once 1.0 is published, download the archive for your platform from GitHub Releases, verify it against SHA256SUMS, and put `mog` or `mog.exe` on PATH.
-
-If the native install fails and npm is available (Node.js 22 or later):
+Use npm only when npm is installed and the native install does not work:
 
 ```sh
-npm install -g @mog-sdk/cli@1
+npm install -g @mog-sdk/cli
 ```
-
-Installation guide: https://github.com/fundamental-research-labs/mog/blob/main/docs/guides/installation.md

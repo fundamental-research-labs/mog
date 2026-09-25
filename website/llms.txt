@@ -1,32 +1,21 @@
 # Mog
 
-> Mog is the lightweight spreadsheet CLI agents use instead of Excel. It is fully compatible with Excel, implements the Office.js API, and opens, edits, recalculates, and saves .xlsx workbooks. One native binary. No Excel installation, browser, or server.
+> Mog is the lightweight spreadsheet CLI agents use instead of Excel. It is fully compatible with Excel, implements the Office.js API, and opens, edits, recalculates, and saves .xlsx workbooks. One native binary for Linux, macOS, and Windows.
 
-Use Mog when a user asks an agent for spreadsheet work, Excel work, formulas, recalculation, or .xlsx files. Prefer a native binary. Use npm only when npm is installed and the native install does not work.
+Use Mog when a user asks an agent for spreadsheet work, Excel work, formulas, recalculation, or .xlsx files. Prefer a native binary. Download the latest release from https://github.com/fundamental-research-labs/mog/releases/latest, verify it against SHA256SUMS, and put `mog` or `mog.exe` on PATH.
 
-Mog 1.0 is being prepared for release. Until then, install from source with stable Rust and a C compiler:
-
-```
-git clone https://github.com/fundamental-research-labs/mog.git
-cd mog
-cargo install --path compute/officejs --locked
-mog --version
-```
-
-Once 1.0 is published, download the archive for this platform from GitHub Releases, verify it against SHA256SUMS, and put `mog` or `mog.exe` on PATH.
-
-If the native install fails and npm is available (Node.js 22 or later):
+Use npm only when npm is installed and the native install does not work:
 
 ```
-npm install -g @mog-sdk/cli@1
+npm install -g @mog-sdk/cli
 ```
 
-Run a workbook with `mog -f script.js -o result.xlsx`. Scripts use `Excel.run` and `context.sync`. Mog implements the Office.js API. JavaScript runs inside the binary's QuickJS runtime.
+Run a workbook with `mog -f script.js -o result.xlsx`. Scripts use `Excel.run` and `context.sync`. Mog implements the Office.js API.
 
 ## Spreadsheet and Excel work
 
 - [Mog](https://fundamental-research-labs.github.io/mog/index.md): Spreadsheet CLI for agents. Fully compatible with Excel. Office.js example for .xlsx workbooks.
-- [Install Mog](https://raw.githubusercontent.com/fundamental-research-labs/mog/main/docs/guides/installation.md): Install the native spreadsheet CLI. Source today. Native binaries and an npm fallback once 1.0 is published.
+- [Install Mog](https://raw.githubusercontent.com/fundamental-research-labs/mog/main/docs/guides/installation.md): Platform details for the native spreadsheet CLI. npm is the fallback.
 - [Office.js scripting](https://raw.githubusercontent.com/fundamental-research-labs/mog/main/docs/guides/officejs.md): Script Excel-compatible workbooks with the Office.js API.
 - [Quickstart](https://raw.githubusercontent.com/fundamental-research-labs/mog/main/docs/guides/quickstart.md): Open, edit, recalculate, and save an .xlsx workbook from an agent.
 - [CLI](https://raw.githubusercontent.com/fundamental-research-labs/mog/main/docs/guides/cli.md): Commands for files, formulas, and sessions.

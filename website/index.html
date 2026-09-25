@@ -44,12 +44,14 @@
         <p class="eyebrow"><span aria-hidden="true">$</span> Spreadsheet CLI for agents</p>
         <h1 id="headline">Excel,<br><span class="accent">for agents.</span></h1>
         <p class="lede">The lightweight CLI agents use instead of Excel.<br class="desktop-break"> Fully compatible with Excel. <strong>Mog implements the Office.js API.</strong></p>
-        <p class="intro-note">One binary. No Excel installation, browser, or server.</p>
+        <p class="intro-note">One binary for Linux, macOS, and Windows.</p>
         <a class="button" href="#start">Get started <span aria-hidden="true">↓</span></a>
       </section>
       <section class="example" aria-labelledby="example-title">
-        <div class="section-heading"><h2 id="example-title">The Office.js API.</h2><span class="file-label">formula.js</span></div>
-        <pre class="code"><code><span class="keyword">await</span> <span class="fn">Excel.run</span>(<span class="keyword">async</span> (context) =&gt; {
+        <h2 id="example-title" class="sample-title">Sample script</h2>
+        <div class="snippet">
+          <div class="snippet-bar"><span class="file-label">formula.js</span></div>
+          <pre class="code"><code><span class="keyword">await</span> <span class="fn">Excel.run</span>(<span class="keyword">async</span> (context) =&gt; {
   <span class="keyword">const</span> sheet = context.workbook.worksheets.<span class="fn">getItem</span>(<span class="string">"Sheet1"</span>);
   sheet.<span class="fn">getRange</span>(<span class="string">"A1"</span>).values = [[<span class="num">10</span>]];
   sheet.<span class="fn">getRange</span>(<span class="string">"A2"</span>).formulas = [[<span class="string">"=A1*2"</span>]];
@@ -59,35 +61,25 @@
   <span class="keyword">await</span> context.<span class="fn">sync</span>();
   console.<span class="fn">log</span>(result.values[<span class="num">0</span>][<span class="num">0</span>]);
 });</code></pre>
-        <div class="terminal"><pre><code><span class="prompt">$</span> mog -f formula.js -o result.xlsx
+          <div class="terminal"><pre><code><span class="prompt">$</span> mog -f formula.js -o result.xlsx
 <span class="result">20</span></code></pre><span class="save-note">Saved to result.xlsx</span></div>
-        <p class="caption">Script with <code>Excel.run</code>, queue edits, and sync to read the results.
-          JavaScript runs inside Mog's embedded QuickJS runtime.</p>
+        </div>
       </section>
       <section id="start" class="install" aria-labelledby="install-title">
         <p class="eyebrow">Get started</p>
         <h2 id="install-title" class="sr">Give this prompt to your agent</h2>
-        <button type="button" class="button" id="copy-prompt">Copy prompt</button>
-        <p id="copy-status" class="copy-status" role="status"></p>
         <p class="install-lead">Give this prompt to your agent when you want any spreadsheet work done.</p>
-        <details class="reveal">
-          <summary>Show the prompt</summary>
-          <pre id="agent-prompt"><code>Use Mog for spreadsheet work. Mog is a lightweight spreadsheet CLI for agents, fully compatible with Excel. Mog implements the Office.js API. Use Mog instead of Excel.
+        <div class="prompt-row">
+          <button type="button" class="button" id="copy-prompt">Copy prompt</button>
+          <button type="button" class="text-toggle" id="toggle-prompt" aria-controls="agent-prompt" aria-expanded="false">show</button>
+        </div>
+        <pre id="agent-prompt" hidden><code>Use Mog for spreadsheet work. Mog is a lightweight spreadsheet CLI for agents, fully compatible with Excel. Mog implements the Office.js API. Use Mog instead of Excel. It runs on Linux, macOS, and Windows.
 
-Prefer a native binary. Use npm only when npm is installed and the native install does not work.
+Prefer a native binary. Download the latest release (https://github.com/fundamental-research-labs/mog/releases/latest), verify it against SHA256SUMS, and put mog or mog.exe on PATH.
 
-Until 1.0 is published, install from source with stable Rust and a C compiler:
+Use npm only when npm is installed and the native install does not work:
 
-git clone https://github.com/fundamental-research-labs/mog.git
-cd mog
-cargo install --path compute/officejs --locked
-mog --version
-
-Once 1.0 is published, download the archive for this platform from GitHub Releases (https://github.com/fundamental-research-labs/mog/releases), verify it against SHA256SUMS, and put mog or mog.exe on PATH.
-
-If the native install fails and npm is available (Node.js 22 or later):
-
-npm install -g @mog-sdk/cli@1
+npm install -g @mog-sdk/cli
 
 Run workbooks with the Office.js API:
 
@@ -103,25 +95,13 @@ await Excel.run(async (context) => {
   console.log(result.values[0][0]);
 });
 
-Installation guide: https://github.com/fundamental-research-labs/mog/blob/main/docs/guides/installation.md
 Source: https://github.com/fundamental-research-labs/mog</code></pre>
-        </details>
         <details class="reveal">
           <summary>Install it yourself</summary>
-          <p>Mog 1.0 is being prepared for release. Prefer a native binary. Use npm only when npm is installed and the native install does not work. Build from source in the meantime, with stable Rust and a C compiler:</p>
-          <pre><code>git clone https://github.com/fundamental-research-labs/mog.git
-cd mog
-cargo install --path compute/officejs --locked
-mog --version</code></pre>
-          <p><strong>Standalone binary.</strong> Once 1.0 is published, download the archive for your platform from GitHub Releases. Verify it against <code>SHA256SUMS</code>, extract it, and put <code>mog</code> (or <code>mog.exe</code>) on your <code>PATH</code>. No Node.js or Excel installation is needed. Linux (x64 and ARM64), macOS (Apple Silicon and Intel), and Windows (x64) archives are listed in the installation guide.</p>
-          <p><strong>npm.</strong> Once 1.0 is published, if the native install fails and npm is available, with Node.js 22 or later:</p>
-          <pre><code><span class="comment"># Once 1.0 is published</span>
-npm install -g @mog-sdk/cli@1
-mog --version</code></pre>
-          <p>Or run without a global install:</p>
-          <pre><code><span class="comment"># Once 1.0 is published</span>
-npx @mog-sdk/cli@1 -f formula.js -o result.xlsx</code></pre>
-          <a class="text-link" href="https://github.com/fundamental-research-labs/mog/blob/main/docs/guides/installation.md">Installation and platform requirements <span aria-hidden="true">↗</span></a>
+          <p>Prefer the native binary. Download the latest release for Linux, macOS, or Windows, verify it against <code>SHA256SUMS</code>, and put <code>mog</code> on your PATH.</p>
+          <p><a class="text-link" href="https://github.com/fundamental-research-labs/mog/releases/latest">Latest release <span aria-hidden="true">↗</span></a></p>
+          <p>If that does not work and npm is installed:</p>
+          <pre><code>npm install -g @mog-sdk/cli</code></pre>
         </details>
       </section>
       <section class="scope" aria-labelledby="scope-title">

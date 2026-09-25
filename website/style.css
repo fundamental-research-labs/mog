@@ -20,37 +20,57 @@ a:focus-visible { outline: 2px solid var(--gold); outline-offset: 6px; }
 header { display: flex; align-items: center; justify-content: space-between; padding: 30px 0; border-bottom: 1px solid var(--line); }
 .brand { display: flex; align-items: center; gap: 10px; font-size: 30px; font-weight: 750; letter-spacing: -1.5px; text-decoration: none; }
 .brand-dot { margin-left: -9px; color: var(--gold); }
-nav { display: flex; gap: 28px; font-size: 14px; }
+nav { display: flex; align-items: center; gap: 22px; font-size: 14px; }
 nav a { text-decoration: none; }
-.intro { padding: 88px 0 60px; }
+.github { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px 7px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--text); font-size: 13px; font-weight: 650; line-height: 1; }
+.github svg { display: block; }
+.github:hover { border-color: var(--gold); color: var(--text); }
+#github-stars:empty { display: none; }
+.intro { padding: 92px 0 64px; }
 .eyebrow { color: var(--gold); font-size: 12px; text-transform: uppercase; letter-spacing: .15em; font-weight: 650; }
 .eyebrow span { margin-right: 8px; }
-h1 { font-size: clamp(44px, 7.5vw, 76px); font-weight: 600; line-height: 1.06; letter-spacing: -.055em; margin: 26px 0; }
+h1 { font-size: clamp(56px, 9vw, 92px); font-weight: 640; line-height: .98; letter-spacing: -.06em; margin: 22px 0 28px; }
+.accent { color: var(--gold); }
 p { color: var(--muted); line-height: 1.7; }
-.lede { font-size: 21px; line-height: 1.6; letter-spacing: -.02em; }
-strong { color: var(--text); font-weight: 500; }
-.intro-note { font-size: 14px; margin-top: 22px; }
-.button { display: inline-flex; gap: 35px; padding: 14px 20px; margin-top: 16px; border-radius: 5px; background: var(--gold); color: var(--bg); text-decoration: none; font-weight: 650; font-size: 14px; }
+.lede { font-size: clamp(18px, 2.4vw, 23px); line-height: 1.45; letter-spacing: -.02em; max-width: 680px; color: var(--text); }
+.lede strong { color: var(--gold); font-weight: 600; }
+strong { color: var(--text); font-weight: 600; }
+.intro-note { font-size: 14px; margin-top: 18px; }
+.button { display: inline-flex; align-items: center; gap: 8px; padding: 14px 18px; margin-top: 18px; border: 0; border-radius: 5px; background: var(--gold); color: var(--bg); text-decoration: none; font: inherit; font-weight: 700; font-size: 14px; cursor: pointer; }
 .button:hover { background: #e6c67e; color: var(--bg); }
+.button.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
+.button.secondary:hover { border-color: var(--gold); color: var(--gold); background: transparent; }
 h2 { font-size: 25px; font-weight: 550; line-height: 1.3; letter-spacing: -.025em; }
 .section-heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .section-heading h2 { font-size: 18px; margin: 0; }
 .file-label { font: 12px ui-monospace, monospace; color: var(--muted); }
-pre { background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 24px; overflow-x: auto; font-size: 13px; line-height: 1.9; tab-size: 2; }
+pre { background: #10100e; border: 1px solid #4a4638; border-radius: 7px; padding: 24px; overflow-x: auto; font-size: 13.5px; line-height: 1.85; tab-size: 2; color: #f7f4ec; }
 code { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
 .code { margin-bottom: 0; border-radius: 7px 7px 0 0; }
-.keyword { color: #cab79f; }
-.string, .result { color: #c1d0a2; }
-.prompt { color: var(--gold); }
-.comment { color: var(--muted); }
-.terminal { padding: 19px 24px; border: 1px solid var(--line); border-top: 0; border-radius: 0 0 7px 7px; background: #151513; }
+.keyword { color: #ff8ebf; }
+.fn { color: #8fd3ff; }
+.string { color: #b6f2a8; }
+.num, .result { color: #ffd56a; }
+.prompt { color: #ffd56a; }
+.comment { color: #b1aa96; }
+.terminal { padding: 19px 24px; border: 1px solid #4a4638; border-top: 0; border-radius: 0 0 7px 7px; background: #10100e; }
 .terminal pre { padding: 0; border: 0; margin: 0; background: none; }
 .save-note { display: block; margin-top: 4px; font: 11px ui-monospace, monospace; color: var(--muted); }
 .caption { font-size: 13px; max-width: 660px; }
 .install { border-top: 1px solid var(--line); margin-top: 55px; padding-top: 40px; scroll-margin-top: 25px; }
 .install p, .scope p { max-width: 690px; font-size: 15px; }
+.install-lead { margin-top: 14px; }
+.copy-status { min-height: 1.2em; margin: 8px 0 0; color: var(--gold); font-size: 13px; }
+.copy-status:empty { display: none; }
+.reveal { margin-top: 22px; }
+.reveal summary { cursor: pointer; width: fit-content; color: var(--muted); font-size: 14px; }
+.reveal summary:hover { color: var(--gold); }
+.reveal[open] summary { margin-bottom: 12px; }
+.reveal .text-link { display: inline-block; margin: 8px 0 18px; }
+.sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .text-link { font-size: 14px; color: var(--gold); }
-.scope { padding: 35px 0 55px; }
+.scope { padding: 8px 0 55px; }
+.scope .button { margin-top: 6px; }
 footer { border-top: 1px solid var(--line); padding: 24px 0 32px; display: flex; justify-content: space-between; gap: 20px; color: var(--muted); font-size: 11px; }
 footer a { text-decoration: none; }
 .skip { position: absolute; left: 24px; top: -100px; background: var(--gold); color: var(--bg); padding: 10px; }
@@ -58,7 +78,8 @@ footer a { text-decoration: none; }
 @media (max-width: 600px) {
   .page { width: calc(100% - 36px); }
   header { padding: 20px 0; }
-  nav { gap: 20px; }
+  nav { gap: 14px; }
+  .github { padding: 6px 10px; }
   .intro { padding: 55px 0 42px; }
   .lede { font-size: 18px; }
   .desktop-break { display: none; }

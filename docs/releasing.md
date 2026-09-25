@@ -8,8 +8,10 @@ exact-version optional dependencies on native binary packages.
 
 1. Set `compute/officejs/Cargo.toml` to the release version and update the `mog`
    entry in `Cargo.lock`. This is the only version source for all release assets.
-2. Update `docs/release-notes-1.0.md`, the README, and installation docs.
-   The website is maintained separately; keep its installation copy consistent.
+2. Update `docs/release-notes-1.0.md`, the README, installation docs, and
+   `website/index.html`. The site lives in this repository and is published
+   with GitHub Pages. Keep its installation copy consistent with
+   [installation](guides/installation.md).
 3. Run `cargo test -p mog --locked` and `cargo check --workspace --locked`.
    The normal CI also runs workspace tests and Calipers verification.
 4. Run the **Release** workflow without a tag (`workflow_dispatch`). It builds
@@ -84,9 +86,11 @@ npx --yes @mog-sdk/cli@1.0.0 --version
 ```
 
 Check downloads and installed binaries on the supported platforms. Then replace
-release-pending copy in README, installation docs, and the website with the
-published install instructions. Website source changes and production deployment
-are reviewed separately; no npm or website publication happens on a branch push.
+release-pending copy in the README, installation docs, and `website/index.html`
+with the published install instructions. A pull request assembles the site and
+does not deploy it. Website publication waits on the `github-pages` environment,
+which requires approval before the page goes live. npm publication stays a
+separate step and does not run on a branch push.
 
 ## Local packaging check
 

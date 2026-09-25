@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Mog is a native spreadsheet CLI. Install it, script .xlsx workbooks with the Office.js API, and read the open-source code on GitHub.">
+  <meta name="theme-color" content="#191917">
+  <title>Mog — Spreadsheets from your terminal</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <div class="page">
+    <header>
+      <a class="brand" href="./" aria-label="Mog home"><img src="favicon.svg" width="38" height="38" alt="">mog<span class="brand-dot">.</span></a>
+      <nav aria-label="Main navigation">
+        <a href="https://github.com/fundamental-research-labs/mog/tree/main/docs">Docs</a>
+        <a href="https://github.com/fundamental-research-labs/mog">GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
+    </header>
+    <main id="main">
+      <section class="intro" aria-labelledby="headline">
+        <p class="eyebrow"><span aria-hidden="true">$</span> A native spreadsheet CLI</p>
+        <h1 id="headline">Spreadsheets.<br>From your terminal.</h1>
+        <p class="lede">Open, edit, recalculate, and save <code>.xlsx</code> workbooks.<br class="desktop-break"> Rust underneath. <strong>Mog implements the Office.js API.</strong></p>
+        <p class="intro-note">One binary. No Excel installation, browser, or server.</p>
+        <a class="button" href="#start">Get started <span aria-hidden="true">↓</span></a>
+      </section>
+      <section class="example" aria-labelledby="example-title">
+        <div class="section-heading"><h2 id="example-title">The Office.js API.</h2><span class="file-label">formula.js</span></div>
+        <pre class="code"><code><span class="keyword">await</span> Excel.run(<span class="keyword">async</span> (context) =&gt; {
+  <span class="keyword">const</span> sheet = context.workbook.worksheets.getItem(<span class="string">"Sheet1"</span>);
+  sheet.getRange(<span class="string">"A1"</span>).values = [[10]];
+  sheet.getRange(<span class="string">"A2"</span>).formulas = [[<span class="string">"=A1*2"</span>]];
+
+  <span class="keyword">const</span> result = sheet.getRange(<span class="string">"A2"</span>);
+  result.load(<span class="string">"values"</span>);
+  <span class="keyword">await</span> context.sync();
+  console.log(result.values[0][0]);
+});</code></pre>
+        <div class="terminal"><pre><code><span class="prompt">$</span> mog -f formula.js -o result.xlsx
+<span class="result">20</span></code></pre><span class="save-note">Saved to result.xlsx</span></div>
+        <p class="caption">Script with <code>Excel.run</code>, queue edits, and sync to read the results.
+          JavaScript runs inside Mog's embedded QuickJS runtime.</p>
+      </section>
+      <section id="start" class="install" aria-labelledby="install-title">
+        <p class="eyebrow">Get started</p>
+        <h2 id="install-title">Install the CLI</h2>
+        <p>Mog 1.0 is being prepared for release. The standalone binary and npm
+          options below apply once that release is published. Build from source
+          in the meantime, with stable Rust and a C compiler:</p>
+        <pre><code>git clone https://github.com/fundamental-research-labs/mog.git
+cd mog
+cargo install --path compute/officejs --locked
+mog --version</code></pre>
+        <p><strong>Standalone binary.</strong> Once 1.0 is published, download the
+          archive for your platform from GitHub Releases. Verify it against
+          <code>SHA256SUMS</code>, extract it, and put <code>mog</code> (or
+          <code>mog.exe</code>) on your <code>PATH</code>. No Node.js or Excel
+          installation is needed. Linux (x64 and ARM64), macOS (Apple Silicon and
+          Intel), and Windows (x64) archives are listed in the installation guide.</p>
+        <p><strong>npm.</strong> Once 1.0 is published, with Node.js 22 or later:</p>
+        <pre><code><span class="comment"># Once 1.0 is published</span>
+npm install -g @mog-sdk/cli@1
+mog --version</code></pre>
+        <p>Or run without a global install:</p>
+        <pre><code><span class="comment"># Once 1.0 is published</span>
+npx @mog-sdk/cli@1 -f formula.js -o result.xlsx</code></pre>
+        <p>npm selects an optional package containing the binary for your OS and CPU.
+          The launcher passes arguments through to that binary. Scripts still run
+          in the binary's embedded QuickJS runtime, not in Node.js.</p>
+        <a class="text-link" href="https://github.com/fundamental-research-labs/mog/blob/main/docs/guides/installation.md">Installation and platform requirements <span aria-hidden="true">↗</span></a>
+      </section>
+      <section class="scope" aria-labelledby="scope-title">
+        <h2 id="scope-title">Open source.</h2>
+        <p>Mog implements the Office.js API. Scripts, agents, and pipelines can open,
+          edit, recalculate, and save <code>.xlsx</code> workbooks from the terminal.
+          One command edits a file, or a session keeps it in memory across commands.</p>
+        <p>Mog is open source under Apache-2.0.
+          <a href="https://github.com/fundamental-research-labs/mog">Read the code on GitHub <span aria-hidden="true">↗</span></a>.</p>
+        <a class="text-link" href="https://github.com/fundamental-research-labs/mog/blob/main/docs/guides/officejs.md">Office.js scripting <span aria-hidden="true">↗</span></a>
+      </section>
+    </main>
+    <footer><span>Mog · Open source · Apache-2.0</span><a href="https://github.com/fundamental-research-labs/mog">Made by Fundamental Research Labs <span aria-hidden="true">↗</span></a></footer>
+  </div>
+</body>
+</html>

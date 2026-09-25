@@ -87,10 +87,13 @@ npx --yes @mog-sdk/cli@1.0.0 --version
 
 Check downloads and installed binaries on the supported platforms. Then replace
 release-pending copy in the README, installation docs, and `website/index.html`
-with the published install instructions. A pull request assembles the site and
-does not deploy it. Website publication waits on the `github-pages` environment,
-which requires approval before the page goes live. npm publication stays a
-separate step and does not run on a branch push.
+with the published install instructions. Publish the site by running the
+**Website** workflow from `main` (`workflow_dispatch`). It does not run on pull
+requests. The deploy waits on the `github-pages` environment, which requires
+approval before the page goes live. Restrict who can start that workflow to
+repository admins with an Actions execution policy on
+`.github/workflows/website.yml` (actor role Admin, event `workflow_dispatch`).
+npm publication stays a separate step and does not run on a branch push.
 
 ## Local packaging check
 

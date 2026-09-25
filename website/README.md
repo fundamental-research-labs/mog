@@ -10,6 +10,6 @@ python3 website/check.py
 python3 -m http.server 8765 --bind 127.0.0.1 --directory website/out
 ```
 
-`website/out/` is generated. Publish by running the **Website** workflow
+`website/out/` is generated. It includes `llms.txt` for agents, a markdown copy of the page, `robots.txt`, and `sitemap.xml`. Publish by running the **Website** workflow
 from `main`. That run waits for approval on the `github-pages` environment.
 It does not run on pull requests.

@@ -6,6 +6,8 @@ repo=$(CDPATH= cd -- "$website/.." && pwd)
 out="$website/out"
 rm -rf "$out"
 mkdir -p "$out"
-cp "$website/index.html" "$website/style.css" "$out/"
+cp "$website/index.html" "$website/style.css" "$website/site.js" \
+  "$website/llms.txt" "$website/index.md" "$website/robots.txt" "$website/sitemap.xml" \
+  "$out/"
 cp "$repo/docs/brand/logo/mog-app-icon.svg" "$out/favicon.svg"
 echo "Assembled $out"

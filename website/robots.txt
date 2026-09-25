@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://fundamental-research-labs.github.io/mog/sitemap.xml

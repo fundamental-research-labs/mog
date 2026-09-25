@@ -3,11 +3,28 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Mog is a lightweight spreadsheet CLI for agents. Fully compatible with Excel. Mog implements the Office.js API.">
+  <meta name="description" content="Mog is a lightweight spreadsheet CLI for agents. Fully compatible with Excel. It opens, edits, recalculates, and saves .xlsx workbooks. Mog implements the Office.js API.">
   <meta name="theme-color" content="#191917">
   <title>Mog — Excel, for agents</title>
+  <link rel="canonical" href="https://fundamental-research-labs.github.io/mog/">
+  <link rel="describedby" href="llms.txt">
+  <link rel="alternate" type="text/markdown" href="index.md" title="Markdown version">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Mog",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Linux, macOS, Windows",
+    "url": "https://fundamental-research-labs.github.io/mog/",
+    "codeRepository": "https://github.com/fundamental-research-labs/mog",
+    "description": "Lightweight spreadsheet CLI for agents. Fully compatible with Excel. Implements the Office.js API and edits .xlsx workbooks.",
+    "featureList": ["spreadsheet CLI", "Excel-compatible .xlsx", "Office.js API", "agent automation"],
+    "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}
+  }
+  </script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -113,7 +130,7 @@ npx @mog-sdk/cli@1 -f formula.js -o result.xlsx</code></pre>
         <a class="button secondary" href="https://github.com/fundamental-research-labs/mog/issues/new?title=Feedback%20or%20bug&amp;body=What%20happened%3A%0A%0AWhat%20you%20expected%3A%0A">Open an issue</a>
       </section>
     </main>
-    <footer><span>Mog</span><a href="https://github.com/fundamental-research-labs/mog">Fundamental Research Labs <span aria-hidden="true">↗</span></a></footer>
+    <footer><span class="footer-meta">Mog <a href="llms.txt">llms.txt</a></span><a href="https://github.com/fundamental-research-labs/mog">Fundamental Research Labs <span aria-hidden="true">↗</span></a></footer>
   </div>
   <script src="site.js"></script>
 </body>

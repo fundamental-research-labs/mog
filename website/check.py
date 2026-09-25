@@ -6,7 +6,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-PAGE = ROOT / "out" / "index.html"
+OUT = ROOT / "out"
+PAGE = OUT / "index.html"
+SITE = "https://fundamental-research-labs.github.io/mog"
 
 INSTALL = "cargo install --path compute/officejs --locked"
 OFFICE = "Mog implements the Office.js API."
@@ -120,6 +122,106 @@ def prove_guards() -> None:
     )
 
 
+def llms_problems(text: str) -> list[str]:
+    found = []
+    if not text.startswith("# Mog\n"):
+        found.append("llms.txt missing Mog heading")
+    for needle, label in (
+        ("spreadsheet", "spreadsheet"),
+        ("Excel", "Excel"),
+        (".xlsx", ".xlsx"),
+        ("agents", "agents"),
+        (OFFICE, "Office.js statement"),
+        (INSTALL, "install command"),
+        (NPM, "npm install option"),
+        (STANDALONE, "standalone binary option"),
+        (PENDING, "pending-release caveat"),
+        (GITHUB, "GitHub link"),
+        (f"{SITE}/index.md", "markdown page link"),
+    ):
+        if needle not in text:
+            found.append(f"llms.txt missing {label}")
+    lowered = text.lower()
+    for word in FORBIDDEN:
+        if re.search(rf"\b{word}\b", lowered):
+            found.append(f"llms.txt forbidden wording: {word}")
+    return found
+
+
+def discovery_problems(html: str, out: Path) -> list[str]:
+    found = []
+    if 'rel="describedby" href="llms.txt"' not in html:
+        found.append("page missing describedby link to llms.txt")
+    if 'type="text/markdown" href="index.md"' not in html:
+        found.append("page missing markdown alternate")
+    if 'href="/llms.txt"' in html or 'href="/index.md"' in html:
+        found.append("agent discovery URL is root-absolute")
+    if f'href="{SITE}/"' not in html:
+        found.append("page missing canonical site URL")
+    llms_path = out / "llms.txt"
+    index_md = out / "index.md"
+    robots = out / "robots.txt"
+    sitemap = out / "sitemap.xml"
+    for path in (llms_path, index_md, robots, sitemap):
+        if not path.is_file():
+            found.append(f"missing {path.name}")
+    if not llms_path.is_file():
+        return found
+    found.extend(llms_problems(llms_path.read_text(encoding="utf-8")))
+    if index_md.is_file():
+        page = index_md.read_text(encoding="utf-8")
+        for needle, label in ((OFFICE, "Office.js statement"), ("spreadsheet", "spreadsheet"), ("Excel", "Excel"), (f"{SITE}/llms.txt", "llms.txt link")):
+            if needle not in page:
+                found.append(f"index.md missing {label}")
+    if robots.is_file():
+        rules = robots.read_text(encoding="utf-8")
+        if "Allow: /" not in rules or f"Sitemap: {SITE}/sitemap.xml" not in rules:
+            found.append("robots.txt does not allow crawlers and publish the sitemap")
+    if sitemap.is_file():
+        urls = sitemap.read_text(encoding="utf-8")
+        for loc in (f"{SITE}/", f"{SITE}/llms.txt", f"{SITE}/index.md"):
+            if f"<loc>{loc}</loc>" not in urls:
+                found.append(f"sitemap missing {loc}")
+    return found
+
+
+def sample_llms() -> str:
+    return f"""# Mog
+
+> Mog is a spreadsheet CLI for agents. Fully compatible with Excel. {OFFICE} It saves .xlsx workbooks.
+
+{PENDING}
+{INSTALL}
+{NPM}
+{STANDALONE}
+
+## Spreadsheet and Excel work
+
+- [Mog]({SITE}/index.md): spreadsheet CLI for Excel work
+- [Source]({GITHUB}): open source
+"""
+
+
+def prove_llms() -> None:
+    good = sample_llms()
+    if llms_problems(good):
+        raise SystemExit(f"llms fixture should pass: {llms_problems(good)}")
+    expect_llms(good.replace("spreadsheet", "grid"), ["llms.txt missing spreadsheet"], "an llms.txt that omits spreadsheet")
+    for word in FORBIDDEN:
+        expect_llms(
+            good.replace(OFFICE, f"The API is {word}. {OFFICE}"),
+            [f"llms.txt forbidden wording: {word}"],
+            f"llms.txt wording {word!r}",
+        )
+
+
+def expect_llms(text: str, expected: list[str], label: str) -> None:
+    found = llms_problems(text)
+    if found != expected:
+        raise SystemExit(f"guard failed for {label}: expected {expected}, found {found}")
+    print(f"guard: rejected {label}")
+
+
 def main() -> int:
     if not PAGE.is_file():
         print(f"website check failed: {PAGE} is missing; run website/assemble.sh", file=sys.stderr)
@@ -136,7 +238,14 @@ def main() -> int:
     print(f"ok: built page includes GitHub link: {GITHUB}")
     for kind, url in asset_refs(html):
         print(f"ok: built {kind} reference is relative: {url}")
+    discovered = discovery_problems(html, OUT)
+    if discovered:
+        for item in discovered:
+            print(f"website check failed: {item}", file=sys.stderr)
+        return 1
+    print(f"ok: llms.txt describes Mog for spreadsheet and Excel agents at {SITE}/llms.txt")
     prove_guards()
+    prove_llms()
     print("website check passed")
     return 0
 

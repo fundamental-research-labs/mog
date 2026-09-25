@@ -73,6 +73,7 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", m
 .scope .button { margin-top: 6px; }
 footer { border-top: 1px solid var(--line); padding: 24px 0 32px; display: flex; justify-content: space-between; gap: 20px; color: var(--muted); font-size: 11px; }
 footer a { text-decoration: none; }
+.footer-meta { display: inline-flex; gap: 14px; }
 .skip { position: absolute; left: 24px; top: -100px; background: var(--gold); color: var(--bg); padding: 10px; }
 .skip:focus { top: 10px; }
 @media (max-width: 600px) {

@@ -48,9 +48,11 @@
         <a class="button" href="#start">Get started <span aria-hidden="true">↓</span></a>
       </section>
       <section class="example" aria-labelledby="example-title">
-        <h2 id="example-title" class="sample-title">Sample script</h2>
+        <div class="sample-heading">
+          <h2 id="example-title" class="sample-title">Sample script</h2>
+          <span class="file-label">formula.js</span>
+        </div>
         <div class="snippet">
-          <div class="snippet-bar"><span class="file-label">formula.js</span></div>
           <pre class="code"><code><span class="keyword">await</span> <span class="fn">Excel.run</span>(<span class="keyword">async</span> (context) =&gt; {
   <span class="keyword">const</span> sheet = context.workbook.worksheets.<span class="fn">getItem</span>(<span class="string">"Sheet1"</span>);
   sheet.<span class="fn">getRange</span>(<span class="string">"A1"</span>).values = [[<span class="num">10</span>]];
@@ -106,7 +108,7 @@ Source: https://github.com/fundamental-research-labs/mog</code></pre>
       </section>
       <section class="scope" aria-labelledby="scope-title">
         <h2 id="scope-title">Open source.</h2>
-        <p>Mog is open source. <a href="https://github.com/fundamental-research-labs/mog">Come contribute</a>.</p>
+        <p>Mog is open source. Apache 2.0. <a href="https://github.com/fundamental-research-labs/mog">Come contribute!</a> ❤️</p>
         <a class="button secondary" href="https://github.com/fundamental-research-labs/mog/issues/new?title=Feedback%20or%20bug&amp;body=What%20happened%3A%0A%0AWhat%20you%20expected%3A%0A">Open an issue</a>
       </section>
     </main>

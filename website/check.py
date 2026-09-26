@@ -161,9 +161,12 @@ def discovery_problems(html: str, out: Path) -> list[str]:
     index_md = out / "index.md"
     robots = out / "robots.txt"
     sitemap = out / "sitemap.xml"
-    for path in (llms_path, index_md, robots, sitemap):
+    for path in (llms_path, index_md, robots, sitemap, out / "CNAME"):
         if not path.is_file():
             found.append(f"missing {path.name}")
+    cname = out / "CNAME"
+    if cname.is_file() and cname.read_text(encoding="utf-8").strip() != "sheetmog.ai":
+        found.append("CNAME must be sheetmog.ai")
     if not llms_path.is_file():
         return found
     found.extend(llms_problems(llms_path.read_text(encoding="utf-8")))

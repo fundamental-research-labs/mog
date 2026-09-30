@@ -1,16 +1,14 @@
 //! Topological ordering — full-graph and subset evaluation ordering.
 
 use cell_types::CellId;
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use rustc_hash::{FxBuildHasher, FxHashSet};
 
 use crate::positions::{AnalysisCompleteness, Analyzed, PositionResolver, TrackedResolver};
 use crate::{DependencyGraph, GraphError};
 
-type LevelGroups = Vec<Vec<CellId>>;
+use super::barrier_graph::RangeOrder;
 
-fn to_compact_index(value: usize) -> u32 {
-    u32::try_from(value).expect("cell-only topo node count exceeds u32::MAX")
-}
+type LevelGroups = Vec<Vec<CellId>>;
 
 impl DependencyGraph {
     // ═════════════════════════════════════════════════════════════════════════
@@ -36,7 +34,7 @@ impl DependencyGraph {
         // correct topological ordering while avoiding the full all_graph_cells()
         // scan of the entire dependency graph.
         let all_cells = self.formula_and_dep_cells();
-        let result = self.barrier_topo(&all_cells, &tracker);
+        let result = self.barrier_topo(RangeOrder::Aggregate, &all_cells, &tracker);
 
         if result.cycle_cores.is_empty() {
             let mut levels = result.levels;
@@ -66,7 +64,7 @@ impl DependencyGraph {
     ) -> Analyzed<(LevelGroups, LevelGroups, LevelGroups)> {
         let tracker = TrackedResolver::new(positions);
         let all_cells = self.formula_and_dep_cells();
-        let result = self.barrier_topo(&all_cells, &tracker);
+        let result = self.barrier_topo(RangeOrder::Aggregate, &all_cells, &tracker);
 
         Analyzed {
             value: (result.levels, result.cycle_cores, result.downstream_levels),
@@ -103,7 +101,7 @@ impl DependencyGraph {
             s
         };
 
-        let result = self.barrier_topo(&cell_set, &tracker);
+        let result = self.barrier_topo(RangeOrder::Aggregate, &cell_set, &tracker);
 
         // Sort each level by row-major position for deterministic evaluation order.
         let cmp_by_pos = |a: &CellId, b: &CellId| -> std::cmp::Ordering {
@@ -133,78 +131,27 @@ impl DependencyGraph {
         }
     }
 
-    /// Lightweight topological sort using only cell-to-cell edges (no range barriers).
+    /// Evaluation order for re-evaluating `cells` after the selective fixup
+    /// re-read a selective dep and its value changed.
     ///
-    /// Used for the selective dep fixup cascade where range ordering is already
-    /// satisfied by the main evaluation pass. Avoids the expensive barrier graph
-    /// construction (which requires position resolution and range containment
-    /// lookups for all cells).
+    /// The order of a recalc pass, and a range read selectively (INDEX,
+    /// VLOOKUP, ...) orders its reader after the cells it holds as well, so
+    /// each cell comes after every cell it can read.
     ///
-    /// Cycle cells (if any) are appended as a final level in arbitrary order.
-    #[must_use]
-    pub fn subset_levels_cell_only(&self, cells: &[CellId]) -> Vec<Vec<CellId>> {
-        if cells.is_empty() {
-            return Vec::new();
+    /// Returns `(levels, cycle_cores, downstream_levels)`. A cycle core that
+    /// only a selective range closes is a selective dep whose range holds
+    /// cells that depend on it: no order exists between them.
+    #[tracing::instrument(name = "fixup_levels", skip_all, fields(cell_count = cells.len()))]
+    pub fn fixup_levels(
+        &self,
+        cells: &FxHashSet<CellId>,
+        positions: &impl PositionResolver,
+    ) -> Analyzed<(LevelGroups, LevelGroups, LevelGroups)> {
+        let tracker = TrackedResolver::new(positions);
+        let result = self.barrier_topo(RangeOrder::All, cells, &tracker);
+        Analyzed {
+            value: (result.levels, result.cycle_cores, result.downstream_levels),
+            completeness: tracker.completeness(),
         }
-
-        let n = cells.len();
-
-        // Build CellId → u32 index mapping for compact graph
-        let cell_to_idx: FxHashMap<CellId, u32> = cells
-            .iter()
-            .enumerate()
-            .map(|(i, &c)| (c, to_compact_index(i)))
-            .collect();
-
-        // Compact adjacency list and in-degrees
-        let mut adj: Vec<Vec<u32>> = vec![Vec::new(); n];
-        let mut in_degree: Vec<u32> = vec![0; n];
-
-        for (i, &cell) in cells.iter().enumerate() {
-            if let Some(precs) = self.precedents.get(&cell) {
-                for dep in precs {
-                    if let super::super::DepTarget::Cell(dep_cell) = dep {
-                        if let Some(&dep_idx) = cell_to_idx.get(dep_cell) {
-                            adj[dep_idx as usize].push(to_compact_index(i));
-                            in_degree[i] += 1;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Kahn's algorithm on compact indices
-        let mut levels: Vec<Vec<CellId>> = Vec::new();
-        let n_u32 = to_compact_index(n);
-        let mut current: Vec<u32> = (0..n_u32).filter(|&i| in_degree[i as usize] == 0).collect();
-
-        let mut processed = 0usize;
-        while !current.is_empty() {
-            let mut next = Vec::new();
-            for &node in &current {
-                processed += 1;
-                for &dst in &adj[node as usize] {
-                    in_degree[dst as usize] -= 1;
-                    if in_degree[dst as usize] == 0 {
-                        next.push(dst);
-                    }
-                }
-            }
-            levels.push(current.iter().map(|&i| cells[i as usize]).collect());
-            current = next;
-        }
-
-        // Append leftover (cycle) cells as a final level
-        if processed < n {
-            let leftover: Vec<CellId> = (0..n_u32)
-                .filter(|&i| in_degree[i as usize] > 0)
-                .map(|i| cells[i as usize])
-                .collect();
-            if !leftover.is_empty() {
-                levels.push(leftover);
-            }
-        }
-
-        levels
     }
 }

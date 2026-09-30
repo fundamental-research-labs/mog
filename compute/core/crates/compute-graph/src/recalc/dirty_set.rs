@@ -11,6 +11,7 @@ use crate::positions::{
     AnalysisCompleteness, Analyzed, CellPosition, PositionResolver, TrackedResolver,
 };
 
+use super::barrier_graph::RangeOrder;
 use super::merge_completeness;
 
 impl DependencyGraph {
@@ -34,7 +35,7 @@ impl DependencyGraph {
         let tracker = TrackedResolver::new(positions);
         let (dirty, dirty_completeness) = self.collect_dirty_set(changed, &tracker);
         tracker.reset();
-        let result = self.barrier_topo(&dirty, &tracker);
+        let result = self.barrier_topo(RangeOrder::Aggregate, &dirty, &tracker);
         let completeness = merge_completeness(dirty_completeness, tracker.completeness());
 
         let mut cells: Vec<CellId> = result.levels.into_iter().flatten().collect();
@@ -80,7 +81,7 @@ impl DependencyGraph {
         let tracker = TrackedResolver::new(positions);
         let (dirty, dirty_completeness) = self.collect_dirty_set(changed, &tracker);
         tracker.reset();
-        let result = self.barrier_topo(&dirty, &tracker);
+        let result = self.barrier_topo(RangeOrder::Aggregate, &dirty, &tracker);
         let completeness = merge_completeness(dirty_completeness, tracker.completeness());
 
         let mut levels = result.levels;

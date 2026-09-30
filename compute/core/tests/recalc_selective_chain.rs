@@ -22,20 +22,28 @@ fn n(v: f64) -> CellValue {
 
 /// The value a full recalc ends with: the LAST change recorded for the cell (a cell repaired by
 /// the fixup pass is recorded once per evaluation that changed it).
+fn final_value(
+    result: &compute_core::snapshot::RecalcResult,
+    sheet: u32,
+    row: u32,
+    col: u32,
+) -> Option<CellValue> {
+    let id = cell_uuid(sheet, row, col);
+    result
+        .changed_cells
+        .iter()
+        .rev()
+        .find(|c| c.cell_id == id)
+        .map(|c| c.value.clone())
+}
+
 fn final_number(
     result: &compute_core::snapshot::RecalcResult,
     sheet: u32,
     row: u32,
     col: u32,
 ) -> f64 {
-    let id = cell_uuid(sheet, row, col);
-    match result
-        .changed_cells
-        .iter()
-        .rev()
-        .find(|c| c.cell_id == id)
-        .map(|c| c.value.clone())
-    {
+    match final_value(result, sheet, row, col) {
         Some(CellValue::Number(v)) => v.get(),
         other => panic!("cell ({sheet},{row},{col}) expected a number, got {other:?}"),
     }
@@ -43,7 +51,7 @@ fn final_number(
 
 /// Sheet1: A2=5, B2=A2*2 (X=10), D5=<hop1 over B2:C2>, D2=D5*1 (Y), H9=<hop2 over D2:E2>.
 /// Every formula arrives with no cached value, as in an XLSX written without them.
-fn two_hop(hop1: &str, hop2: &str) -> f64 {
+fn two_hop_value(hop1: &str, hop2: &str) -> Option<CellValue> {
     let snap = build_snapshot(vec![(
         "Sheet1",
         20,
@@ -58,7 +66,14 @@ fn two_hop(hop1: &str, hop2: &str) -> f64 {
             (8, 7, CellValue::Null, Some(hop2)),    // H9 = hop 2 -> 10
         ],
     )]);
-    final_number(&run_snapshot(snap), 0, 8, 7)
+    final_value(&run_snapshot(snap), 0, 8, 7)
+}
+
+fn two_hop(hop1: &str, hop2: &str) -> f64 {
+    match two_hop_value(hop1, hop2) {
+        Some(CellValue::Number(v)) => v.get(),
+        other => panic!("H9 expected a number, got {other:?}"),
+    }
 }
 
 #[test]
@@ -83,6 +98,52 @@ fn index_reading_an_hlookup_result_is_final() {
         two_hop("=HLOOKUP(1,$B$1:$B$2,2,FALSE)", "=INDEX($D$2:$E$2,1,1)"),
         10.0
     );
+}
+
+/// Every function whose range argument is selective, as the lookup that reads a cell computed
+/// from another lookup's result (D2 = D5*1, D5 = INDEX($B$2:$C$2,1,1) = 10; D1 = 1 is a key).
+#[test]
+fn every_selective_function_reads_the_final_value_of_a_lookup_result() {
+    let cases: [(&str, f64); 9] = [
+        ("=INDEX($D$2:$E$2,1,1)", 10.0),
+        ("=CHOOSE(1,$D$2:$D$2)", 10.0),
+        ("=XLOOKUP(1,$D$1:$D$1,$D$2:$D$2)", 10.0),
+        ("=VLOOKUP(10,$D$2:$D$2,1,FALSE)", 10.0),
+        ("=HLOOKUP(1,$D$1:$D$2,2,FALSE)", 10.0),
+        ("=MATCH(10,$D$2:$E$2,0)", 1.0),
+        ("=LOOKUP(1,$D$1:$D$1,$D$2:$D$2)", 10.0),
+        ("=SWITCH(1,1,$D$2:$D$2,0)", 10.0),
+        ("=IFS(TRUE,$D$2:$D$2)", 10.0),
+    ];
+    let wrong: Vec<String> = cases
+        .iter()
+        .filter_map(|(hop2, expected)| {
+            let got = two_hop_value("=INDEX($B$2:$C$2,1,1)", hop2);
+            let ok = matches!(&got, Some(CellValue::Number(v)) if v.get() == *expected);
+            (!ok).then(|| format!("{hop2}: expected {expected}, got {got:?}"))
+        })
+        .collect();
+    assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
+/// An array-valued calculation over a cell repaired by the fixup is recomputed, not served from
+/// the value cached before the repair (D2 = D5*1 with D5 a lookup; K1 sums |D2:D3| via ABS).
+#[test]
+fn array_subexpression_over_a_repaired_cell_is_final() {
+    let snap = build_snapshot(vec![(
+        "Sheet1",
+        20,
+        12,
+        vec![
+            (1, 0, n(5.0), None),                                          // A2 = 5
+            (1, 1, CellValue::Null, Some("=A2*2")),                        // B2 = 10
+            (4, 3, CellValue::Null, Some("=INDEX($B$2:$C$2,1,1)")),        // D5 = 10
+            (1, 3, CellValue::Null, Some("=D5*1")),                        // D2 = 10
+            (2, 3, n(-3.0), None),                                         // D3 = -3
+            (0, 10, CellValue::Null, Some("=SUMPRODUCT(ABS($D$2:$D$3))")), // K1 = 13
+        ],
+    )]);
+    assert_eq!(final_number(&run_snapshot(snap), 0, 0, 10), 13.0);
 }
 
 /// Controls: one lookup hop was already right before the fix and must stay right.

@@ -119,6 +119,13 @@ impl ComputeCore {
             return FixupRound::default();
         }
 
+        // A round re-evaluates cells whose inputs changed within this recalc,
+        // so the epoch-scoped caches can hold values computed from the old
+        // inputs (the subexpression cache keeps array-valued calls such as
+        // `CHOOSE(1,D2:D2)` for the whole epoch). Start each round from fresh
+        // caches, as the cycle handler does before re-evaluating dependents.
+        clear_thread_local_caches();
+
         let _fixup_span = tracing::info_span!(
             "selective_dep_fixup",
             selective_count = fixup_cells.len(),

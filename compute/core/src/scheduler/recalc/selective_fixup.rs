@@ -13,6 +13,22 @@ impl ComputeCore {
     /// When `scope` is `Some`, only selective deps in the scope set are
     /// checked (incremental recalc — others retain correct prior values).
     /// When `None`, all selective deps are checked (full recalc).
+    ///
+    /// Deferral runs to closure. A round re-evaluates the selective deps whose
+    /// ranges changed and cascades through cell-to-cell edges; that cascade
+    /// cannot reach a selective dep whose range holds a cell the round
+    /// repaired (`D5 = INDEX(B2:C2,1,1)`, `D2 = D5*1`, `H9 = INDEX(D2:E2,1,1)`:
+    /// round 1 repairs D5 and D2, round 2 re-reads H9). So each round is
+    /// followed by another over the positions it changed, until one changes
+    /// nothing.
+    ///
+    /// A change in round `r` is caused by a selective dep that changed in
+    /// round `r`, which changed because a cell it reads changed in round
+    /// `r - 1`, and so on back to round 1: `r` selective deps, all distinct
+    /// unless they read each other's results. So when fewer than `r` distinct
+    /// selective deps have changed after a round that still changed values,
+    /// the selective deps form a circular reference. It is reported like
+    /// every other one and the rounds stop.
     #[tracing::instrument(name = "selective_dep_fixup", skip_all)]
     pub(in super::super) fn selective_dep_fixup_pass(
         &mut self,
@@ -22,6 +38,57 @@ impl ComputeCore {
         scope: Option<&FxHashSet<CellId>>,
         changed_positions: Option<&FxHashMap<(SheetId, u32), Vec<u32>>>,
     ) -> (Vec<CellChange>, Vec<ProjectionChange>, Vec<CellErrorInfo>) {
+        let mut changed_cells = Vec::new();
+        let mut projection_changes = Vec::new();
+        let mut errors = Vec::new();
+        let mut changed_selective: FxHashSet<CellId> = FxHashSet::default();
+        let mut round_changed: Option<FxHashMap<(SheetId, u32), Vec<u32>>> = None;
+        for round in 1usize.. {
+            let filter = round_changed.as_ref().or(changed_positions);
+            let r = self.selective_dep_fixup_round(
+                cell_store,
+                epoch_range_store,
+                metrics,
+                scope,
+                filter,
+            );
+            errors.extend(r.errors);
+            if r.changed_cells.is_empty() && r.projection_changes.is_empty() {
+                break;
+            }
+            round_changed = Some(super::cache_invalidation::build_changed_position_index(
+                &r.changed_cells,
+                &r.projection_changes,
+            ));
+            changed_cells.extend(r.changed_cells);
+            projection_changes.extend(r.projection_changes);
+            let round_selective = r.changed_selective;
+            changed_selective.extend(round_selective.iter().copied());
+            if changed_selective.len() < round {
+                for cell_id in &round_selective {
+                    if let Some(sid) = self.find_sheet_for_cell(cell_store, cell_id) {
+                        errors.push(CellErrorInfo {
+                            cell_id: cell_id.to_uuid_string(),
+                            sheet_id: sid.to_uuid_string(),
+                            error: "Circular reference detected".to_string(),
+                        });
+                    }
+                }
+                break;
+            }
+        }
+        (changed_cells, projection_changes, errors)
+    }
+
+    /// One deferral round of [`Self::selective_dep_fixup_pass`].
+    fn selective_dep_fixup_round(
+        &mut self,
+        cell_store: &mut CellStore,
+        epoch_range_store: &mut crate::eval::cache::range_store::RangeStore,
+        metrics: &mut RecalcMetrics,
+        scope: Option<&FxHashSet<CellId>>,
+        changed_positions: Option<&FxHashMap<(SheetId, u32), Vec<u32>>>,
+    ) -> FixupRound {
         // When we have a changed-positions index from the main eval pass, only
         // fixup selective deps whose ranges overlap with cells that actually
         // changed value. This is much tighter than the formula-cell check:
@@ -38,7 +105,7 @@ impl ComputeCore {
                 .selective_dep_cells_with_formula_ranges(&self.ast_cache, &*cell_store)
         };
         if selective_cells.is_empty() {
-            return (Vec::new(), Vec::new(), Vec::new());
+            return FixupRound::default();
         }
 
         // Filter to formula cells in ast_cache, and optionally to scope
@@ -49,7 +116,7 @@ impl ComputeCore {
             .collect();
 
         if fixup_cells.is_empty() {
-            return (Vec::new(), Vec::new(), Vec::new());
+            return FixupRound::default();
         }
 
         let _fixup_span = tracing::info_span!(
@@ -108,12 +175,21 @@ impl ComputeCore {
         // Only propagate if any selective dep actually changed value.
         // In full recalc from XLSX, most cells produce the same value as the
         // cached value, so the fixup rarely changes anything.
+        let changed_ids: Vec<CellId> = changed_cells
+            .iter()
+            .filter_map(|c| CellId::from_uuid_str(&c.cell_id).ok())
+            .collect();
+        // A selective dep changed if its cell or its spill changed.
+        let changed_selective: Vec<CellId> = changed_ids
+            .iter()
+            .copied()
+            .chain(
+                projection_changes
+                    .iter()
+                    .filter_map(|p| CellId::from_uuid_str(&p.source_cell_id).ok()),
+            )
+            .collect();
         if !changed_cells.is_empty() {
-            let changed_ids: Vec<CellId> = changed_cells
-                .iter()
-                .filter_map(|c| CellId::from_uuid_str(&c.cell_id).ok())
-                .collect();
-
             let dirty_positions: Vec<(SheetId, u32, u32)> = changed_cells
                 .iter()
                 .filter_map(|change| {
@@ -250,6 +326,21 @@ impl ComputeCore {
             }
         }
 
-        (changed_cells, projection_changes, errors)
+        FixupRound {
+            changed_cells,
+            projection_changes,
+            errors,
+            changed_selective,
+        }
     }
+}
+
+/// What one deferral round changed.
+#[derive(Default)]
+struct FixupRound {
+    changed_cells: Vec<CellChange>,
+    projection_changes: Vec<ProjectionChange>,
+    errors: Vec<CellErrorInfo>,
+    /// Selective deps whose value or spill this round's re-evaluation changed.
+    changed_selective: Vec<CellId>,
 }

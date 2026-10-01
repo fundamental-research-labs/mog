@@ -7,7 +7,7 @@ from pathlib import Path
 import tarfile
 import zipfile
 
-from package import NAME, ROOT, TARGETS, VERSION
+from package import NAME, ROOT, TARGETS, VERSION, tarball_name
 
 
 def npm_manifest(path, executable, require_executable=True):
@@ -24,8 +24,8 @@ def npm_manifest(path, executable, require_executable=True):
 
 
 def check(directory):
-    expected = {f'mog-sdk-cli-{VERSION}.tgz'}
-    wrapper, _ = npm_manifest(directory / f'mog-sdk-cli-{VERSION}.tgz', 'mog.cjs')
+    expected = {tarball_name(NAME)}
+    wrapper, _ = npm_manifest(directory / tarball_name(NAME), 'mog.cjs')
     assert wrapper['name'] == NAME and wrapper['bin'] == {'mog': 'mog.cjs'}
     assert wrapper['optionalDependencies'] == {
         f"{NAME}-{t['platform']}-{t['arch']}": VERSION for t in TARGETS
@@ -34,7 +34,7 @@ def check(directory):
         suffix = f"{target['platform']}-{target['arch']}"
         windows = target['platform'] == 'win32'
         executable = 'mog.exe' if windows else 'mog'
-        npm = f'mog-sdk-cli-{suffix}-{VERSION}.tgz'
+        npm = tarball_name(f'{NAME}-{suffix}')
         native = f'mog-{VERSION}-{suffix}' + ('.zip' if windows else '.tar.gz')
         expected.update([npm, native])
         manifest, digest = npm_manifest(directory / npm, f'bin/{executable}', require_executable=not windows)

@@ -8,7 +8,7 @@ import shutil
 import subprocess
 
 from check import check
-from package import NAME, ROOT, TARGETS, VERSION
+from package import NAME, ROOT, TARGETS, VERSION, tarball_name
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--dry-run', action='store_true')
@@ -17,7 +17,7 @@ artifacts = ROOT / 'artifacts/release'
 check(artifacts)
 packages = [f"{NAME}-{t['platform']}-{t['arch']}" for t in TARGETS] + [NAME]
 for name in packages:
-    tarball = artifacts / f"{name.removeprefix('@').replace('/', '-')}-{VERSION}.tgz"
+    tarball = artifacts / tarball_name(name)
     # Permit retrying a partially completed publication, but never replace an
     # existing version or silently accept different bytes under the same name.
     with tarball.open('rb') as packed:

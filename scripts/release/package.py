@@ -14,7 +14,11 @@ ROOT = Path(__file__).resolve().parents[2]
 TARGETS = json.loads((ROOT / 'scripts/release/targets.json').read_text())
 PACKAGE = tomllib.loads((ROOT / 'compute/officejs/Cargo.toml').read_text())['package']
 VERSION = PACKAGE['version']
-NAME = '@mog-sdk/cli'
+NAME = '@fundamental-research-labs/mog'
+
+
+def tarball_name(package_name):
+    return f"{package_name.removeprefix('@').replace('/', '-')}-{VERSION}.tgz"
 
 
 def metadata(name):

@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import tempfile
 
-from package import NAME, ROOT, TARGETS, VERSION
+from package import NAME, ROOT, TARGETS, VERSION, tarball_name
 
 
 def main():
@@ -24,10 +24,10 @@ def main():
         (directory / 'package.json').write_text('{"private":true}')
         subprocess.run([
             shutil.which('npm'), 'install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund',
-            str(artifacts / f'mog-sdk-cli-{suffix}-{VERSION}.tgz'),
-            str(artifacts / f'mog-sdk-cli-{VERSION}.tgz'),
+            str(artifacts / tarball_name(f'{NAME}-{suffix}')),
+            str(artifacts / tarball_name(NAME)),
         ], cwd=directory, check=True)
-        launcher = directory / 'node_modules/@mog-sdk/cli/mog.cjs'
+        launcher = directory / 'node_modules' / NAME / 'mog.cjs'
         manifest = json.loads(launcher.with_name('package.json').read_text())
         assert 'dependencies' not in manifest and 'scripts' not in manifest
         assert manifest['name'] == NAME and manifest['version'] == VERSION
@@ -75,7 +75,7 @@ def main():
         finally:
             run('--close-all', '--discard')
         # Missing optional binaries fail clearly without downloading code.
-        binary_package = directory / f'node_modules/{NAME}-{suffix}'
+        binary_package = directory / 'node_modules' / f'{NAME}-{suffix}'
         binary_package.rename(binary_package.with_name('hidden-native-package'))
         assert 'optional dependencies enabled' in run('--version', success=False).stderr
     print(f'Packed npm CLI passed: {suffix} {VERSION}')

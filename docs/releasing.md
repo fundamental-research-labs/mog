@@ -1,7 +1,7 @@
 # Releasing the native CLI
 
 The release unit is `mog` in `compute/officejs`. Internal Rust crates remain
-unpublished. The npm package is `@mog-sdk/cli`; it contains only a launcher and
+unpublished. The npm package is `@fundamental-research-labs/mog`; it contains only a launcher and
 exact-version optional dependencies on native binary packages.
 
 ## Preparation
@@ -29,18 +29,18 @@ Linux baselines and macOS deployment targets are documented in
 
 The platform packages are new:
 
-- `@mog-sdk/cli-linux-x64`
-- `@mog-sdk/cli-linux-arm64`
-- `@mog-sdk/cli-darwin-x64`
-- `@mog-sdk/cli-darwin-arm64`
-- `@mog-sdk/cli-win32-x64`
+- `@fundamental-research-labs/mog-linux-x64`
+- `@fundamental-research-labs/mog-linux-arm64`
+- `@fundamental-research-labs/mog-darwin-x64`
+- `@fundamental-research-labs/mog-darwin-arm64`
+- `@fundamental-research-labs/mog-win32-x64`
 
-The publisher must have access to `@mog-sdk/cli` and permission to create public
-packages in the `@mog-sdk` scope. For the first publication, set a suitable
-**granular npm token** as `NPM_TOKEN` in repository secrets or the
-`npm-production` environment. An existing repository token can be used if it
-has the required package/scope access. Its settings must allow the intended CI publication, including any
-applicable 2FA policy. No credentials belong in Git.
+The publisher must be able to create public packages in the
+`@fundamental-research-labs` scope, including `@fundamental-research-labs/mog`.
+For the first publication, set a granular npm token as `NPM_TOKEN` in repository
+secrets or the `npm-production` environment. Grant that token read and write
+access to the `@fundamental-research-labs` scope, with bypass 2FA so Actions can
+publish without a prompt. No credentials belong in Git.
 
 Once the packages exist, configure npm trusted publishing for all six packages:
 GitHub owner `fundamental-research-labs`, repository `mog`, workflow
@@ -50,21 +50,27 @@ provenance. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishe
 
 ## Publish
 
-After review and merge, tag the exact tested commit:
+After review and merge, tag the exact tested commit. The tag must match the
+version in `compute/officejs/Cargo.toml`:
 
 ```sh
-git tag v1.0.0 <reviewed-commit>
-git push origin v1.0.0
+git tag <version-tag> <reviewed-commit>
+git push origin <version-tag>
 ```
 
 The **Release** workflow checks the tag against Cargo, rebuilds and verifies
 artifacts, and creates a **draft** GitHub release containing native archives,
 npm tarballs, and `SHA256SUMS`. Review the draft and checksums, then publish the
-GitHub release. Run **Publish CLI to npm** from `main` with tag `v1.0.0`:
+GitHub release. Run **Publish CLI to npm** from `main` with that tag:
 
 ```sh
-gh workflow run publish-cli.yml --ref main -f tag=v1.0.0
+gh workflow run publish-cli.yml --ref main -f tag=<version-tag>
 ```
+
+GitHub release `v1.0.0` is already published. Its npm tarballs are named
+`@mog-sdk/cli` and were not uploaded to the registry. Leave that tag and those
+assets in place. Publish `@fundamental-research-labs/mog` from the next release
+tag, after `compute/officejs/Cargo.toml` carries that version.
 
 This separate publication step uses the existing `npm-production` protection
 rules, which allow `main` and release branches rather than tag refs. It requires
@@ -81,8 +87,8 @@ release assets after any package has been published.
 After publication:
 
 ```sh
-npm view @mog-sdk/cli@1.0.0 version optionalDependencies
-npx --yes @mog-sdk/cli@1.0.0 --version
+npm view @fundamental-research-labs/mog@<version> version optionalDependencies
+npx --yes @fundamental-research-labs/mog@<version> --version
 ```
 
 Check downloads and installed binaries on the supported platforms. Then replace

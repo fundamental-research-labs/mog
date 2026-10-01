@@ -209,6 +209,7 @@ impl DependencyGraph {
 
         levels
     }
+
     /// Evaluation order for the cells the selective fixup re-evaluates.
     ///
     /// The order of a recalc pass, and a range read selectively (INDEX,

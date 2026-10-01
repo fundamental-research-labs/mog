@@ -576,19 +576,17 @@ impl ComputeCore {
                 }
                 idx
             };
-            let (fixup_changes, fixup_proj, fixup_errors, fixup_deltas) = self
-                .selective_dep_fixup_pass(
-                    cell_store,
-                    &mut epoch_range_store,
-                    &mut cycle_metrics,
-                    None,
-                    Some(&changed_index),
-                    deadline,
-                )?;
+            let (fixup_changes, fixup_proj, fixup_errors, deltas) = self.selective_dep_fixup_pass(
+                cell_store,
+                &mut epoch_range_store,
+                &mut cycle_metrics,
+                None,
+                Some(&changed_index),
+            );
             changed_cells.extend(fixup_changes);
             all_projection_changes.extend(fixup_proj);
             errors.extend(fixup_errors);
-            all_projection_deltas.extend(fixup_deltas);
+            all_projection_deltas.extend(deltas);
         }
 
         // Projection stabilization
@@ -637,10 +635,7 @@ impl ComputeCore {
         })
     }
 
-    pub(super) fn seed_cycle_cells_for_iteration(
-        cell_store: &mut CellStore,
-        cycle_cells: &[CellId],
-    ) {
+    fn seed_cycle_cells_for_iteration(cell_store: &mut CellStore, cycle_cells: &[CellId]) {
         for &cell_id in cycle_cells {
             let current = cell_store
                 .get_cell_value(&cell_id)
@@ -701,7 +696,7 @@ impl ComputeCore {
     ///
     /// Cells that remain after Kahn's exhausts zero-in-degree nodes (the true
     /// cycle core) are appended in sheet-tab order as a fallback.
-    pub(super) fn local_topo_sort_cycle_cells(
+    fn local_topo_sort_cycle_cells(
         &self,
         cell_store: &CellStore,
         cycle_cell_set: &FxHashSet<CellId>,
@@ -827,7 +822,7 @@ impl ComputeCore {
     /// evaluated up to max_iterations times, checking convergence (max_delta
     /// < max_change) after each pass. Includes plateau detection to exit
     /// early when values stop changing.
-    pub(super) fn evaluate_cycles_iterative(
+    fn evaluate_cycles_iterative(
         &mut self,
         cell_store: &mut CellStore,
         cycle_cells: &[CellId],

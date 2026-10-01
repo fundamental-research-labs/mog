@@ -123,19 +123,17 @@ impl ComputeCore {
                 &merged_changed_cells,
                 &merged_projection_changes,
             );
-            let (fixup_changes, fixup_proj, fixup_errors, fixup_deltas) = self
-                .selective_dep_fixup_pass(
-                    cell_store,
-                    &mut epoch_range_store,
-                    &mut metrics,
-                    Some(&scope),
-                    Some(&changed_index),
-                    deadline,
-                )?;
+            let (fixup_changes, fixup_proj, fixup_errors, deltas) = self.selective_dep_fixup_pass(
+                cell_store,
+                &mut epoch_range_store,
+                &mut metrics,
+                Some(&scope),
+                Some(&changed_index),
+            );
             merged_changed_cells.extend(fixup_changes);
             merged_projection_changes.extend(fixup_proj);
             merged_errors.extend(fixup_errors);
-            projection_deltas.extend(fixup_deltas);
+            projection_deltas.extend(deltas);
         }
 
         // Pass 2: Projection stabilization — only runs when projections changed shape/existence

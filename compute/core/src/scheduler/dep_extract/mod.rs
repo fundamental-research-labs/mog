@@ -19,14 +19,9 @@
 //! Functions that read a **statically-known subset** determined by other args:
 //! INDEX, CHOOSE, XLOOKUP, VLOOKUP, HLOOKUP, MATCH, LOOKUP, SWITCH, IFS.
 //! - Dep extraction: `DepTarget::Range(range, RangeAccess::Selective)`
-//! - Cycle detection: not a static edge, so a lookup whose range holds its own
-//!   dependents is never a false cycle. A real circular reference through
-//!   selective deps is found by the fixup pass.
-//! - Barrier graph: no containment edges (evaluation order is not guaranteed
-//!   in the main pass). Correctness comes from runtime deferral: after the main
-//!   pass the selective fixup pass (`recalc/selective_fixup.rs`) re-evaluates
-//!   every selective dep whose range changed, and then what depends on those
-//!   that changed, in an order where a selective range does order its reader.
+//! - Cycle detection: self-containment deferred — back-edge filtering in
+//!   `analysis.rs::is_selective_back_edge` excludes false cycles
+//! - Barrier graph: containment edges with back-edge exclusion
 //!
 //! ### 3. Volatile-dynamic (no static deps)
 //! Functions whose reference target is **runtime-determined** from evaluated args:

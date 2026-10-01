@@ -13,30 +13,24 @@ impl ComputeCore {
     /// re-evaluates only those selective dep cells whose range precedents
     /// include cells that CHANGED value during the main pass, then propagates.
     ///
-    /// When `scope` is `Some`, only selective deps in the scope set are
-    /// checked (incremental recalc — others retain correct prior values).
+    /// When `scope` is `Some`, it is the set of cells this recalc evaluates,
+    /// and the pass stays inside it (incremental recalc — the cells outside
+    /// retain correct prior values; in manual calculation mode, where the set
+    /// is the edited formulas alone, what depends on them waits for a calculate).
     /// When `None`, all selective deps are checked (full recalc).
     ///
-    /// Propagation re-evaluates what depends on the selective deps that
-    /// changed, once, in dependency order ([`Self::fixup_propagate`]).
+    /// What the changed selective deps feed is re-evaluated in two parts: the
+    /// cells that can be put in dependency order, in that order
+    /// ([`Self::fixup_ordered`]), and the others by the cascade below.
     #[tracing::instrument(name = "selective_dep_fixup", skip_all)]
     pub(in super::super) fn selective_dep_fixup_pass(
         &mut self,
         cell_store: &mut CellStore,
-        epoch_range_store: &mut RangeStore,
+        epoch_range_store: &mut crate::eval::cache::range_store::RangeStore,
         metrics: &mut RecalcMetrics,
         scope: Option<&FxHashSet<CellId>>,
         changed_positions: Option<&FxHashMap<(SheetId, u32), Vec<u32>>>,
-        deadline: &Deadline,
-    ) -> Result<PreLeveledEvalResult, ComputeError> {
-        let mut fixup = Fixup {
-            epoch_range_store,
-            metrics,
-            deadline,
-            result: PreLeveledEvalResult::default(),
-            changed: Changed::default(),
-        };
-
+    ) -> PreLeveledEvalResult {
         // When we have a changed-positions index from the main eval pass, only
         // fixup selective deps whose ranges overlap with cells that actually
         // changed value. This is much tighter than the formula-cell check:
@@ -53,7 +47,7 @@ impl ComputeCore {
                 .selective_dep_cells_with_formula_ranges(&self.ast_cache, &*cell_store)
         };
         if selective_cells.is_empty() {
-            return Ok(fixup.result);
+            return PreLeveledEvalResult::default();
         }
 
         // Filter to formula cells in ast_cache, and optionally to scope
@@ -64,7 +58,7 @@ impl ComputeCore {
             .collect();
 
         if fixup_cells.is_empty() {
-            return Ok(fixup.result);
+            return PreLeveledEvalResult::default();
         }
 
         let _fixup_span = tracing::info_span!(
@@ -82,357 +76,348 @@ impl ComputeCore {
         // caches, as the cycle handler does before re-evaluating dependents.
         clear_thread_local_caches();
 
+        // Pre-materialize ranges for these cells
+        {
+            let plan: crate::eval::cache::range_store::DataPlan = fixup_cells
+                .iter()
+                .filter_map(|cid| self.cell_range_keys.get(cid))
+                .flat_map(|keys| keys.iter().copied())
+                .collect();
+            epoch_range_store.pre_materialize_additive(&plan, cell_store);
+        }
+
         // Re-evaluate selective deps using parallel evaluation for large sets
-        fixup.changed = self.fixup_evaluate(cell_store, &fixup_cells, false, &mut fixup);
+        let mut changed_cells = Vec::new();
+        let mut projection_changes = Vec::new();
+        let mut errors = Vec::new();
+        let mut projection_deltas = Vec::new();
+
+        let use_parallel = fixup_cells.len() >= super::super::level_eval::PARALLEL_THRESHOLD;
+
+        if use_parallel {
+            {
+                self.topo_evaluate_level_parallel(
+                    cell_store,
+                    &fixup_cells,
+                    &mut changed_cells,
+                    &mut projection_changes,
+                    &mut errors,
+                    epoch_range_store,
+                    &mut projection_deltas,
+                    metrics,
+                    &None,
+                );
+            }
+        } else {
+            self.topo_evaluate_level_sequential(
+                cell_store,
+                &fixup_cells,
+                &mut changed_cells,
+                &mut projection_changes,
+                &mut errors,
+                epoch_range_store,
+                &mut projection_deltas,
+                metrics,
+            );
+        }
 
         // Only propagate if any selective dep actually changed value.
         // In full recalc from XLSX, most cells produce the same value as the
         // cached value, so the fixup rarely changes anything.
-        if !fixup.changed.is_empty() {
-            self.fixup_propagate(cell_store, &mut fixup)?;
+        if !changed_cells.is_empty() {
+            let changed_ids: Vec<CellId> = changed_cells
+                .iter()
+                .filter_map(|c| CellId::from_uuid_str(&c.cell_id).ok())
+                .collect();
+
+            let dirty_positions: Vec<(SheetId, u32, u32)> = changed_cells
+                .iter()
+                .filter_map(|change| {
+                    let sheet_id = SheetId::from_uuid_str(&change.sheet_id).ok()?;
+                    let pos = change.position.as_ref()?;
+                    Some((sheet_id, pos.row, pos.col))
+                })
+                .collect();
+            if !dirty_positions.is_empty() {
+                epoch_range_store.invalidate_dirty(&dirty_positions);
+            }
+
+            // The cells that have a dependency order are re-evaluated in it,
+            // and end final. `unordered` are the others, by position: their
+            // inputs are not final, and they keep the cascade below.
+            // `cascaded` are the cells the cascade would have marked as
+            // changed by now had it evaluated the ordered cells itself.
+            let (unordered, cascaded) = self.fixup_ordered(
+                cell_store,
+                epoch_range_store,
+                metrics,
+                scope,
+                &selective_cells,
+                &mut changed_cells,
+                &mut projection_changes,
+                &mut errors,
+                &mut projection_deltas,
+            );
+
+            // Use lightweight cell-to-cell BFS to find direct dependents,
+            // then topo-sort just those. Avoids the expensive collect_dirty_set +
+            // barrier_topo calls that affected_cells performs on the full graph.
+            let downstream: Vec<CellId> = {
+                let mut visited = FxHashSet::default();
+                let mut queue = std::collections::VecDeque::new();
+                for &cid in &changed_ids {
+                    if visited.insert(cid) {
+                        queue.push_back(cid);
+                    }
+                }
+                while let Some(cell) = queue.pop_front() {
+                    for dep in self.graph.get_dependents(&cell) {
+                        if visited.insert(*dep) {
+                            queue.push_back(*dep);
+                        }
+                    }
+                }
+                unordered
+                    .into_iter()
+                    .filter(|c| {
+                        visited.contains(c)
+                            && self.ast_cache.contains_key(c)
+                            && !selective_cells.contains(c)
+                            && !changed_ids.contains(c)
+                            && cell_store
+                                .sheet_for_cell(c)
+                                .is_none_or(|sid| cell_store.is_calculation_enabled(&sid))
+                    })
+                    .collect()
+            };
+
+            if !downstream.is_empty() {
+                let downstream_levels = self.graph.subset_levels_cell_only(&downstream);
+
+                // Track which cells have actually changed value during the
+                // cascade. Only cells that depend on a changed cell need
+                // re-evaluation — others will produce the same value as the
+                // main pass. This "dirty propagation" typically skips ~40-50%
+                // of cascade cells.
+                let mut cascade_dirty: FxHashSet<CellId> = cascaded;
+
+                for level in &downstream_levels {
+                    if level.is_empty() {
+                        continue;
+                    }
+
+                    // Filter level to only cells with a dirty precedent
+                    let dirty_level: Vec<CellId> = level
+                        .iter()
+                        .filter(|cid| {
+                            self.graph
+                                .get_precedent_cells(cid)
+                                .any(|dep| cascade_dirty.contains(dep))
+                        })
+                        .copied()
+                        .collect();
+
+                    if dirty_level.is_empty() {
+                        continue;
+                    }
+
+                    {
+                        let plan: crate::eval::cache::range_store::DataPlan = dirty_level
+                            .iter()
+                            .filter_map(|cid| self.cell_range_keys.get(cid))
+                            .flat_map(|keys| keys.iter().copied())
+                            .collect();
+                        epoch_range_store.pre_materialize_additive(&plan, cell_store);
+                    }
+
+                    let changes_before = changed_cells.len();
+
+                    let use_parallel =
+                        dirty_level.len() >= super::super::level_eval::PARALLEL_THRESHOLD;
+
+                    if use_parallel {
+                        {
+                            self.topo_evaluate_level_parallel(
+                                cell_store,
+                                &dirty_level,
+                                &mut changed_cells,
+                                &mut projection_changes,
+                                &mut errors,
+                                epoch_range_store,
+                                &mut projection_deltas,
+                                metrics,
+                                &None,
+                            );
+                        }
+                    } else {
+                        self.topo_evaluate_level_sequential(
+                            cell_store,
+                            &dirty_level,
+                            &mut changed_cells,
+                            &mut projection_changes,
+                            &mut errors,
+                            epoch_range_store,
+                            &mut projection_deltas,
+                            metrics,
+                        );
+                    }
+
+                    // Add newly changed cells to the dirty set for next level
+                    for change in &changed_cells[changes_before..] {
+                        if let Ok(cid) = CellId::from_uuid_str(&change.cell_id) {
+                            cascade_dirty.insert(cid);
+                        }
+                    }
+
+                    let dirty_positions: Vec<(SheetId, u32, u32)> = dirty_level
+                        .iter()
+                        .filter_map(|cid| {
+                            let sid = cell_store.sheet_for_cell(cid)?;
+                            let pos = cell_store.resolve_position(cid)?;
+                            Some((sid, pos.row(), pos.col()))
+                        })
+                        .collect();
+                    if !dirty_positions.is_empty() {
+                        epoch_range_store.invalidate_dirty(&dirty_positions);
+                    }
+                }
+            }
         }
-        Ok(fixup.result)
+
+        (changed_cells, projection_changes, errors, projection_deltas)
     }
 
-    /// Re-evaluate what depends on the selective deps whose re-read changed them.
+    /// Re-evaluate, in dependency order, the cells that the changed selective
+    /// deps feed and that have such an order. Returns the cells that have
+    /// none, by position, and the cells the cascade counts as changed: the
+    /// changed selective deps, and the ordered cells that changed and that it
+    /// would have evaluated itself (reached from those through cell
+    /// references, and not among the `reread` selective deps).
     ///
-    /// Every cell that can depend on one of them is put in dependency order,
-    /// and in that order a selective range orders its reader after the cells
-    /// it holds, the way a range read in full does in the main pass
+    /// Every cell that can depend on a changed selective dep is sorted once,
+    /// and in that sort a selective range orders its reader after the cells it
+    /// holds, the way a range read in full does in the main pass
     /// (`D5 = INDEX(B2:C2,1,1)`, `D2 = D5*1`, `H9 = INDEX(D2:E2,1,1)`: D2,
-    /// then H9). A cell is evaluated when one of its inputs has changed: a
-    /// cell it refers to, or a cell inside a range it reads. So each cell is
-    /// evaluated at most once, after everything it reads.
+    /// then H9). A cell with a level is evaluated when a cell it reads has
+    /// changed: at most once, after everything it reads, so it ends final.
     ///
-    /// The exception is a selective dep whose range holds cells that depend on
-    /// it: no order exists between them. Those cells come back from the sort
-    /// as cycle cores and are resolved by [`Self::fixup_resolve_unordered`].
-    fn fixup_propagate(
+    /// A selective dep whose range holds cells that depend on it gets no
+    /// level, nor does a cell behind it: no such order exists, and which of
+    /// those cells the selective dep does read only its evaluation tells.
+    #[allow(clippy::too_many_arguments)]
+    fn fixup_ordered(
         &mut self,
         cell_store: &mut CellStore,
-        fixup: &mut Fixup,
-    ) -> Result<(), ComputeError> {
-        let reread: Vec<CellId> = fixup.changed.cells.iter().copied().collect();
+        epoch_range_store: &mut RangeStore,
+        metrics: &mut RecalcMetrics,
+        scope: Option<&FxHashSet<CellId>>,
+        reread: &FxHashSet<CellId>,
+        changed_cells: &mut Vec<CellChange>,
+        projection_changes: &mut Vec<ProjectionChange>,
+        errors: &mut Vec<CellErrorInfo>,
+        projection_deltas: &mut Vec<ProjectionDelta>,
+    ) -> (Vec<CellId>, FxHashSet<CellId>) {
+        let mut changed = Changed::of(&*cell_store, changed_cells, projection_changes);
+        let reread_changed: Vec<CellId> = changed.cells.iter().copied().collect();
+        let mut cascaded: FxHashSet<CellId> = changed_cells
+            .iter()
+            .filter_map(|c| CellId::from_uuid_str(&c.cell_id).ok())
+            .collect();
         let affected: FxHashSet<CellId> = self
             .graph
-            .dependents_closure(&reread, &*cell_store)
+            .dependents_closure(&reread_changed, &*cell_store)
             .into_iter()
             .filter(|c| {
                 self.ast_cache.contains_key(c)
+                    && scope.is_none_or(|s| s.contains(c))
                     && cell_store
                         .sheet_for_cell(c)
                         .is_none_or(|sid| cell_store.is_calculation_enabled(&sid))
             })
             .collect();
-        let (levels, cycle_cores, mut downstream_levels) = self
+        let (levels, unordered) = self
             .graph
             .fixup_levels(&affected, &*cell_store)
             .into_value();
 
+        // The caches and the cached ranges hold what the re-read saw.
         clear_thread_local_caches();
-        self.fixup_evaluate_levels(cell_store, &levels, fixup);
-        if !cycle_cores.is_empty() {
-            let downstream: Vec<CellId> = downstream_levels.iter().flatten().copied().collect();
-            let unordered =
-                self.fixup_resolve_unordered(cell_store, &cycle_cores, &downstream, fixup)?;
-            for level in &mut downstream_levels {
-                level.retain(|c| !unordered.contains(c));
-            }
-            clear_thread_local_caches();
-            self.fixup_evaluate_levels(cell_store, &downstream_levels, fixup);
-        }
-        Ok(())
-    }
+        epoch_range_store.invalidate_dirty(&changed.positions());
 
-    /// Evaluate, level by level, the cells that read a cell that changed.
-    fn fixup_evaluate_levels(
-        &mut self,
-        cell_store: &mut CellStore,
-        levels: &[Vec<CellId>],
-        fixup: &mut Fixup,
-    ) {
-        for level in levels {
-            if past_deadline(fixup.deadline) {
-                return;
-            }
+        for level in &levels {
             let stale: Vec<CellId> = level
                 .iter()
-                .filter(|c| {
-                    self.ordered_input_in(c, &fixup.changed)
-                        || self.selective_range_holds(c, &fixup.changed)
-                })
+                .filter(|c| self.reads_changed(c, &changed))
                 .copied()
                 .collect();
-            let changed = self.fixup_evaluate(cell_store, &stale, false, fixup);
-            fixup.changed.merge(changed);
-        }
-    }
-
-    /// Resolve the cells that a selective range ties into a cycle: the cores,
-    /// and the cells that carry one core into another. Returns those cells.
-    ///
-    /// With iterative calculation on they are a cycle like any other and go
-    /// to the iterative solver.
-    ///
-    /// With it off, a selective dep whose range holds cells that depend on it
-    /// is not circular unless it reads one of them. The cells are evaluated
-    /// in the order of the main pass, those that read a changed cell only,
-    /// and that is repeated while a selective dep finds a changed cell in its
-    /// range (cells on a cycle of direct references stay with the cycle
-    /// handler). A repeat after the first starts from selective deps whose
-    /// range changed in the repeat before, so the values it changes come from
-    /// a selective dep that changed in it, which changed because of one that
-    /// changed in the repeat before, and so on: as many selective deps as
-    /// repeats, all distinct unless they read each other's results. When
-    /// fewer have changed, the selective deps form a circular reference. It
-    /// is reported like every other one and the repeats stop.
-    ///
-    /// A volatile cell draws a new value whenever it is evaluated, so from the
-    /// second repeat on a changed cell in its range is no reason to re-read
-    /// it: the change may come from its own last value.
-    fn fixup_resolve_unordered(
-        &mut self,
-        cell_store: &mut CellStore,
-        cycle_cores: &[Vec<CellId>],
-        downstream: &[CellId],
-        fixup: &mut Fixup,
-    ) -> Result<FxHashSet<CellId>, ComputeError> {
-        let core_set: FxHashSet<CellId> = cycle_cores.iter().flatten().copied().collect();
-        let core_cells = self.local_topo_sort_cycle_cells(&*cell_store, &core_set);
-        let cells = self.iteration_cells_for_cycles(&core_cells, &core_set, downstream);
-        let unordered: FxHashSet<CellId> = cells.iter().copied().collect();
-        if !cells.iter().any(|c| {
-            self.ordered_input_in(c, &fixup.changed)
-                || self.selective_range_holds(c, &fixup.changed)
-        }) {
-            return Ok(unordered);
-        }
-
-        if self.iterative_calc {
-            let raw = |cell_store: &CellStore, c: &CellId| {
-                cell_store
-                    .get_cell_value_raw(c)
-                    .cloned()
-                    .unwrap_or(CellValue::Null)
-            };
-            let before: Vec<CellValue> = cells.iter().map(|c| raw(&*cell_store, c)).collect();
-            Self::seed_cycle_cells_for_iteration(cell_store, &core_cells);
-            self.evaluate_cycles_iterative(cell_store, &cells, fixup.deadline)?;
-            let mut changed = Changed::default();
-            for (cell_id, old_value) in cells.iter().zip(before) {
-                if same_value(&old_value, &raw(&*cell_store, cell_id)) {
-                    continue;
-                }
-                changed.insert(&*cell_store, *cell_id);
-                let value = cell_store.get_cell_value(cell_id).cloned();
-                if let Some((_sid, mut change)) =
-                    self.make_cell_change(cell_store, cell_id, &value.unwrap_or(CellValue::Null))
-                {
-                    change.old_value = Some(old_value);
-                    fixup.result.0.push(change);
-                }
+            if stale.is_empty() {
+                continue;
             }
-            fixup
-                .epoch_range_store
-                .invalidate_dirty(&changed.positions());
-            fixup.changed.merge(changed);
-            return Ok(unordered);
-        }
-
-        let (levels, _on_direct_cycles) =
-            self.graph.subset_levels(&cells, &*cell_store).into_value();
-        let mut changed_selective: FxHashSet<CellId> = FxHashSet::default();
-        let mut previous: Option<Changed> = None;
-        for repeat in 1usize.. {
-            if past_deadline(fixup.deadline) {
-                break;
-            }
-            clear_thread_local_caches();
-            let mut now = Changed::default();
-            for level in &levels {
-                let before = previous.as_ref().unwrap_or(&fixup.changed);
-                let mut stale: Vec<CellId> = level
+            let changes_from = changed_cells.len();
+            let projections_from = projection_changes.len();
+            if stale.len() >= super::super::level_eval::PARALLEL_THRESHOLD {
+                let plan: crate::eval::cache::range_store::DataPlan = stale
                     .iter()
-                    .filter(|c| {
-                        self.ordered_input_in(c, &now)
-                            || (repeat == 1 && self.ordered_input_in(c, before))
-                            || ((repeat == 1 || !self.graph.is_volatile(c))
-                                && (self.selective_range_holds(c, &now)
-                                    || self.selective_range_holds(c, before)))
-                    })
-                    .copied()
+                    .filter_map(|cid| self.cell_range_keys.get(cid))
+                    .flat_map(|keys| keys.iter().copied())
                     .collect();
-                // One at a time: a selective dep in this level can read another.
-                // Every other repeat goes backwards, so that a chain of them
-                // settles in one repeat whichever way it runs along the sheet.
-                if repeat % 2 == 0 {
-                    stale.reverse();
+                epoch_range_store.pre_materialize_additive(&plan, cell_store);
+                self.topo_evaluate_level_parallel(
+                    cell_store,
+                    &stale,
+                    changed_cells,
+                    projection_changes,
+                    errors,
+                    epoch_range_store,
+                    projection_deltas,
+                    metrics,
+                    &None,
+                );
+            } else {
+                self.topo_evaluate_level_sequential(
+                    cell_store,
+                    &stale,
+                    changed_cells,
+                    projection_changes,
+                    errors,
+                    epoch_range_store,
+                    projection_deltas,
+                    metrics,
+                );
+            }
+
+            // The next levels read ranges through the store: drop the cached
+            // ranges that hold a cell this level changed.
+            let level_changed = Changed::of(
+                &*cell_store,
+                &changed_cells[changes_from..],
+                &projection_changes[projections_from..],
+            );
+            epoch_range_store.invalidate_dirty(&level_changed.positions());
+            changed.merge(level_changed);
+            for change in &changed_cells[changes_from..] {
+                if let Ok(cid) = CellId::from_uuid_str(&change.cell_id)
+                    && !reread.contains(&cid)
+                    && self
+                        .graph
+                        .get_precedent_cells(&cid)
+                        .any(|precedent| cascaded.contains(precedent))
+                {
+                    cascaded.insert(cid);
                 }
-                now.merge(self.fixup_evaluate(cell_store, &stale, true, fixup));
-            }
-            if now.is_empty() {
-                break;
-            }
-            let selective_now: Vec<CellId> = now
-                .cells
-                .iter()
-                .filter(|c| self.is_selective_dep(c))
-                .copied()
-                .collect();
-            if let Some(older) = previous.replace(now) {
-                fixup.changed.merge(older);
-            }
-            if repeat == 1 {
-                continue;
-            }
-            changed_selective.extend(selective_now.iter().copied());
-            if changed_selective.len() < repeat - 1 {
-                for cell_id in &selective_now {
-                    if let Some(sid) = self.find_sheet_for_cell(cell_store, cell_id) {
-                        fixup.result.2.push(CellErrorInfo {
-                            cell_id: cell_id.to_uuid_string(),
-                            sheet_id: sid.to_uuid_string(),
-                            error: "Circular reference detected".to_string(),
-                        });
-                    }
-                }
-                break;
             }
         }
-        if let Some(last) = previous {
-            fixup.changed.merge(last);
-        }
-        Ok(unordered)
+        (unordered, cascaded)
     }
 
-    /// Evaluate `cells` as one level, one at a time when `in_order`, and
-    /// return the cells whose value or spill is no longer what it was.
-    fn fixup_evaluate(
-        &mut self,
-        cell_store: &mut CellStore,
-        cells: &[CellId],
-        in_order: bool,
-        fixup: &mut Fixup,
-    ) -> Changed {
-        let mut changed = Changed::default();
-        if cells.is_empty() {
-            return changed;
-        }
-
-        // A spill is reported every time its formula is evaluated: keep the
-        // arrays to tell the ones that changed.
-        let spills_before: FxHashMap<CellId, CellValue> = cells
-            .iter()
-            .filter(|c| cell_store.projection_registry.get(c).is_some())
-            .filter_map(|c| Some((*c, cell_store.get_cell_value_raw(c)?.clone())))
-            .collect();
-
-        let (changed_cells, projection_changes, errors, projection_deltas) = &mut fixup.result;
-        let changes_from = changed_cells.len();
-        let projections_from = projection_changes.len();
-        if !in_order && cells.len() >= super::super::level_eval::PARALLEL_THRESHOLD {
-            // Pre-materialize ranges for these cells
-            let plan: crate::eval::cache::range_store::DataPlan = cells
-                .iter()
-                .filter_map(|cid| self.cell_range_keys.get(cid))
-                .flat_map(|keys| keys.iter().copied())
-                .collect();
-            fixup
-                .epoch_range_store
-                .pre_materialize_additive(&plan, cell_store);
-            self.topo_evaluate_level_parallel(
-                cell_store,
-                cells,
-                changed_cells,
-                projection_changes,
-                errors,
-                fixup.epoch_range_store,
-                projection_deltas,
-                fixup.metrics,
-                &None,
-            );
-        } else {
-            self.topo_evaluate_level_sequential(
-                cell_store,
-                cells,
-                changed_cells,
-                projection_changes,
-                errors,
-                fixup.epoch_range_store,
-                projection_deltas,
-                fixup.metrics,
-            );
-        }
-
-        for change in &changed_cells[changes_from..] {
-            let same = change
-                .old_value
-                .as_ref()
-                .is_some_and(|old| same_value(old, &change.value));
-            if let (false, Ok(cell_id)) = (same, CellId::from_uuid_str(&change.cell_id)) {
-                changed.insert(&*cell_store, cell_id);
-            }
-        }
-        for projection in &projection_changes[projections_from..] {
-            let Ok(cell_id) = CellId::from_uuid_str(&projection.source_cell_id) else {
-                continue;
-            };
-            let same = spills_before.get(&cell_id).is_some_and(|old| {
-                cell_store
-                    .get_cell_value_raw(&cell_id)
-                    .is_some_and(|new| same_value(old, new))
-            });
-            if let (false, Ok(sheet)) = (same, SheetId::from_uuid_str(&projection.sheet_id)) {
-                changed.cells.insert(cell_id);
-                for cell in &projection.projection_cells {
-                    changed.insert_position(sheet, cell.row, cell.col);
-                }
-            }
-        }
-
-        // Cells evaluated after these read ranges through the store: drop the
-        // cached ranges that hold a cell that changed.
-        fixup
-            .epoch_range_store
-            .invalidate_dirty(&changed.positions());
-        changed
-    }
-
-    /// Whether `cell` refers to a cell in `changed`, or reads in full a range
-    /// that holds one: the inputs the main pass orders it after.
-    fn ordered_input_in(&self, cell: &CellId, changed: &Changed) -> bool {
+    /// Whether `cell` reads a cell in `changed`: a cell it refers to, or one
+    /// inside a range it reads.
+    fn reads_changed(&self, cell: &CellId, changed: &Changed) -> bool {
         self.graph.get_precedents(cell).iter().any(|dep| match dep {
             DepTarget::Cell(precedent) => changed.cells.contains(precedent),
-            DepTarget::Range(range, RangeAccess::Aggregate) => changed.any_in(range),
-            DepTarget::Range(_, RangeAccess::Selective) => false,
+            DepTarget::Range(range, _) => changed.any_in(range),
         })
     }
-
-    /// Whether a range `cell` reads selectively holds a cell in `changed`.
-    fn selective_range_holds(&self, cell: &CellId, changed: &Changed) -> bool {
-        self.graph.get_precedents(cell).iter().any(|dep| match dep {
-            DepTarget::Range(range, RangeAccess::Selective) => changed.any_in(range),
-            _ => false,
-        })
-    }
-
-    fn is_selective_dep(&self, cell: &CellId) -> bool {
-        self.graph
-            .get_precedents(cell)
-            .iter()
-            .any(|dep| matches!(dep, DepTarget::Range(_, RangeAccess::Selective)))
-    }
-}
-
-/// What one fixup pass works with, and what it has done so far.
-struct Fixup<'a> {
-    epoch_range_store: &'a mut RangeStore,
-    metrics: &'a mut RecalcMetrics,
-    deadline: &'a Deadline,
-    /// Changes, projection changes, errors and projection deltas, for the caller.
-    result: PreLeveledEvalResult,
-    /// The cells whose value is no longer what the main pass left.
-    changed: Changed,
 }
 
 /// Cells whose value changed, by identity and by position (a spill changes
@@ -445,8 +430,29 @@ struct Changed {
 }
 
 impl Changed {
-    fn is_empty(&self) -> bool {
-        self.cells.is_empty()
+    /// What an evaluation reported as changed.
+    fn of(
+        cell_store: &CellStore,
+        changes: &[CellChange],
+        projections: &[ProjectionChange],
+    ) -> Self {
+        let mut changed = Self::default();
+        for change in changes {
+            if let Ok(cell_id) = CellId::from_uuid_str(&change.cell_id) {
+                changed.insert(cell_store, cell_id);
+            }
+        }
+        for projection in projections {
+            if let Ok(cell_id) = CellId::from_uuid_str(&projection.source_cell_id) {
+                changed.cells.insert(cell_id);
+            }
+            if let Ok(sheet) = SheetId::from_uuid_str(&projection.sheet_id) {
+                for cell in &projection.projection_cells {
+                    changed.insert_position(sheet, cell.row, cell.col);
+                }
+            }
+        }
+        changed
     }
 
     fn insert(&mut self, cell_store: &CellStore, cell_id: CellId) {
@@ -491,26 +497,5 @@ impl Changed {
             .iter()
             .flat_map(|(&(sheet, col), rows)| rows.iter().map(move |&row| (sheet, row, col)))
             .collect()
-    }
-}
-
-/// Whether a re-evaluated cell holds the value it held. `values_equal` tells
-/// an error that carries a message from itself; here it is the same value.
-fn same_value(old: &CellValue, new: &CellValue) -> bool {
-    match (old, new) {
-        (CellValue::Error(a, a_message), CellValue::Error(b, b_message)) => {
-            a == b && a_message == b_message
-        }
-        (CellValue::Array(a), CellValue::Array(b)) => {
-            a.rows() == b.rows()
-                && a.cols() == b.cols()
-                && a.rows_iter().zip(b.rows_iter()).all(|(row_a, row_b)| {
-                    row_a
-                        .iter()
-                        .zip(row_b.iter())
-                        .all(|(va, vb)| same_value(va, vb))
-                })
-        }
-        _ => values_equal(old, new),
     }
 }

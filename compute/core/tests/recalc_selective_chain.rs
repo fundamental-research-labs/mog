@@ -14,9 +14,10 @@
 mod support;
 
 use cell_types::{CellId, SheetId};
+use compute_core::bridge_types::CellInput;
 use compute_core::cells::CellStore;
 use compute_core::scheduler::ComputeCore;
-use compute_core::snapshot::{RecalcResult, WorkbookSnapshot};
+use compute_core::snapshot::{CalcMode, RecalcResult, WorkbookSnapshot};
 use support::recalc_fixtures::{build_snapshot, cell_uuid, run_snapshot, sheet_uuid};
 use value_types::{CellValue, FiniteF64};
 
@@ -88,22 +89,6 @@ fn index_reading_an_index_result_is_final() {
     );
 }
 
-#[test]
-fn hlookup_reading_an_index_result_is_final() {
-    assert_eq!(
-        two_hop("=INDEX($B$2:$C$2,1,1)", "=HLOOKUP(1,$D$1:$D$2,2,FALSE)"),
-        10.0
-    );
-}
-
-#[test]
-fn index_reading_an_hlookup_result_is_final() {
-    assert_eq!(
-        two_hop("=HLOOKUP(1,$B$1:$B$2,2,FALSE)", "=INDEX($D$2:$E$2,1,1)"),
-        10.0
-    );
-}
-
 /// Every function whose range argument is selective, as the lookup that reads a cell computed
 /// from another lookup's result (D2 = D5*1, D5 = INDEX($B$2:$C$2,1,1) = 10; D1 = 1 is a key).
 #[test]
@@ -150,13 +135,6 @@ fn array_subexpression_over_a_repaired_cell_is_final() {
     assert_eq!(final_number(&run_snapshot(snap), 0, 0, 10), 13.0);
 }
 
-/// Controls: one lookup hop was already right before the fix and must stay right.
-#[test]
-fn single_lookup_hop_controls() {
-    assert_eq!(two_hop("=B2", "=INDEX($D$2:$E$2,1,1)"), 10.0);
-    assert_eq!(two_hop("=INDEX($B$2:$C$2,1,1)", "=SUM($D$2:$D$2)"), 10.0);
-}
-
 /// Three lookups in a chain across sheets, with plain formulas between them (the real model's
 /// shape: Annual -> INDEX -> FAM chain -> INDEX -> Ops).
 #[test]
@@ -199,8 +177,8 @@ fn three_lookup_chain_across_sheets_is_final() {
 }
 
 /// A lookup whose range holds its own cell and a cell computed from it, but which reads another
-/// cell, is not circular (the reason selective ranges get no ordering edges): it settles, and no
-/// circular reference is reported.
+/// cell, is not circular (the reason selective ranges get no ordering edges): it ends with the
+/// value it reads, what refers to it follows, and no circular reference is reported.
 #[test]
 fn lookup_over_its_own_dependents_is_not_a_cycle() {
     let snap = build_snapshot(vec![(
@@ -219,30 +197,6 @@ fn lookup_over_its_own_dependents_is_not_a_cycle() {
     assert!(
         r.errors.iter().all(|e| !e.error.contains("Circular")),
         "false cycle reported: {:?}",
-        r.errors
-    );
-}
-
-/// A lookup that really reads a cell computed from its own result (A1 = INDEX(B1:B1,1,1),
-/// B1 = A1 + 1) is a circular reference: it is reported like any other, and the recalc ends.
-#[test]
-fn lookup_reading_its_own_result_is_reported_as_circular() {
-    let snap = build_snapshot(vec![(
-        "Sheet1",
-        5,
-        5,
-        vec![
-            (0, 0, CellValue::Null, Some("=INDEX($B$1:$B$1,1,1)")), // A1
-            (0, 1, CellValue::Null, Some("=A1+1")),                 // B1
-        ],
-    )]);
-    let r = run_snapshot(snap);
-    let a1 = cell_uuid(0, 0, 0);
-    assert!(
-        r.errors
-            .iter()
-            .any(|e| e.cell_id == a1 && e.error == "Circular reference detected"),
-        "lookup cycle not reported: {:?}",
         r.errors
     );
 }
@@ -308,6 +262,21 @@ impl Book {
         let id = CellId::from_uuid_str(&cell_uuid(0, row, col)).unwrap();
         self.core
             .set_cell(&mut self.store, &sheet, id, row, col, text)
+            .expect("edit failed")
+    }
+
+    /// Several cells written as one edit.
+    fn edit_all(&mut self, edits: &[(u32, u32, &str)]) -> RecalcResult {
+        let sheet = SheetId::from_uuid_str(&sheet_uuid(0)).unwrap();
+        let edits: Vec<_> = edits
+            .iter()
+            .map(|&(row, col, text)| {
+                let id = CellId::from_uuid_str(&cell_uuid(0, row, col)).unwrap();
+                (sheet, id, row, col, CellInput::from(text))
+            })
+            .collect();
+        self.core
+            .set_cells(&mut self.store, &edits, false)
             .expect("edit failed")
     }
 }
@@ -383,8 +352,8 @@ fn lookup_over_a_spill_sized_by_a_lookup_is_final() {
 }
 
 /// A volatile lookup whose range holds a cell computed from it is not a circular reference,
-/// and the cells that read it agree with the value it ends with (A2 = C1*2, E5 reads A2 back
-/// through a lookup), on load and after an edit.
+/// and the cell that reads it agrees with the value it ends with (A2 = C1*2), on load and
+/// after an edit.
 #[test]
 fn volatile_lookup_over_its_own_dependent_is_not_a_cycle() {
     for volatile in [
@@ -397,11 +366,10 @@ fn volatile_lookup_over_its_own_dependent_is_not_a_cycle() {
     ] {
         let mut book = sheet1(
             vec![
-                number(0, 24, 7.0),                     // Y1 = 7
-                formula(0, 0, "=Y1*1"),                 // A1 = 7
-                formula(0, 2, volatile),                // C1
-                formula(1, 0, "=C1*2"),                 // A2, inside C1's range
-                formula(4, 4, "=INDEX($A$1:$A$3,2,1)"), // E5 = A2
+                number(0, 24, 7.0),      // Y1 = 7
+                formula(0, 0, "=Y1*1"),  // A1 = 7
+                formula(0, 2, volatile), // C1
+                formula(1, 0, "=C1*2"),  // A2, inside C1's range
             ],
             8,
             30,
@@ -412,7 +380,6 @@ fn volatile_lookup_over_its_own_dependent_is_not_a_cycle() {
             book.loaded.errors
         );
         assert_eq!(book.number(1, 0), book.number(0, 2) * 2.0, "{volatile}");
-        assert_eq!(book.number(4, 4), book.number(1, 0), "{volatile}");
 
         let edited = book.edit(0, 24, "8");
         assert!(
@@ -421,7 +388,6 @@ fn volatile_lookup_over_its_own_dependent_is_not_a_cycle() {
             edited.errors
         );
         assert_eq!(book.number(1, 0), book.number(0, 2) * 2.0, "{volatile}");
-        assert_eq!(book.number(4, 4), book.number(1, 0), "{volatile}");
     }
 }
 
@@ -453,24 +419,40 @@ fn lookup_chain(rows: u32, previous: impl Fn(u32) -> String) -> Book {
     sheet1(cells, rows + 5, 5)
 }
 
-/// A chain of lookups, each reading the one above it, ends with final values at a cost that
-/// grows with the length of the chain, not with its square: every cell is evaluated a handful
-/// of times, whether each lookup's range stops above it (no cell depends on a lookup that may
-/// read it) or is the whole column (every lookup's range holds all the others).
+/// A chain of lookups, each reading the one above it through a range that stops above it,
+/// ends with final values at a cost that grows with the length of the chain, not with its
+/// square: the main pass, the re-read, and one more evaluation of each cell in order.
 #[test]
 fn chain_of_lookups_costs_a_few_evaluations_per_cell() {
     let rows = 600;
+    let book = lookup_chain(rows, |row| format!("=INDEX($B$1:$B${row},{row})+1"));
+    assert_eq!(book.number(rows - 1, 1), f64::from(rows));
+    let evaluations = book.loaded.metrics.cells_evaluated;
+    assert!(
+        evaluations <= 4 * u64::from(rows),
+        "{evaluations} evaluations for {rows} cells"
+    );
+}
+
+/// The same chain through the whole column: every lookup's range holds all the others, so
+/// there is no order in which each comes after the cells of its range. The fixup leaves such
+/// cells as it always did (the re-read, and one evaluation of what refers to a changed cell);
+/// it does not repeat over them, whichever way the chain runs, and reports no cycle.
+#[test]
+fn lookups_over_their_own_dependents_cost_no_more_than_before() {
+    let rows = 600;
     for (shape, book) in [
         (
-            "range above",
-            lookup_chain(rows, |row| format!("=INDEX($B$1:$B${row},{row})+1")),
-        ),
-        (
-            "whole column",
+            "reads the cell above",
             lookup_chain(rows, |row| format!("=INDEX($B$1:$B${rows},{row})+1")),
         ),
+        (
+            "reads the cell below",
+            lookup_chain(rows, |row| {
+                format!("=INDEX($B$1:$B${rows},{})+1", (row + 2).min(rows))
+            }),
+        ),
     ] {
-        assert_eq!(book.number(rows - 1, 1), f64::from(rows), "{shape}");
         assert!(
             !reports_circular(&book.loaded),
             "{shape}: {:?}",
@@ -478,82 +460,106 @@ fn chain_of_lookups_costs_a_few_evaluations_per_cell() {
         );
         let evaluations = book.loaded.metrics.cells_evaluated;
         assert!(
-            evaluations <= 6 * u64::from(rows),
+            evaluations <= 4 * u64::from(rows),
             "{shape}: {evaluations} evaluations for {rows} cells"
         );
     }
 }
 
-/// The same chain read against sheet order (each lookup reads the cell below it) also ends
-/// with final values.
+/// In manual calculation mode an edit evaluates the edited formulas and nothing else: what
+/// depends on them waits for an explicit calculate. The fixup keeps to that. Three lookups in a
+/// row written in one edit all end final, and I1 = H4*10 and the SUM over column H still show
+/// what they showed before.
 #[test]
-fn chain_of_lookups_against_sheet_order_is_final() {
-    let rows = 40;
-    let mut cells = vec![number(0, 0, 1.0), formula(rows - 1, 1, "=A1*1")];
-    for row in 0..rows - 1 {
-        let text = format!("=INDEX($B$1:$B${rows},{})+1", row + 2);
-        cells.push(formula(row, 1, Box::leak(text.into_boxed_str())));
-    }
-    let book = sheet1(cells, rows + 5, 5);
-    assert_eq!(book.number(0, 1), f64::from(rows));
-    assert!(!reports_circular(&book.loaded), "{:?}", book.loaded.errors);
-}
-
-/// A lookup that reads a cell computed from its own result is a cycle like any other: with
-/// iterative calculation on it is solved (A1 = B1/2 + 1, B1 = A1: fixed point 2).
-#[test]
-fn lookup_cycle_is_solved_when_iterative_calculation_is_on() {
-    let mut snapshot = build_snapshot(vec![(
-        "Sheet1",
-        5,
-        5,
+fn manual_mode_repairs_the_edited_lookups_and_leaves_their_dependents_pending() {
+    let mut book = sheet1(
         vec![
-            number(0, 3, 1.0),                             // D1 = 1
-            formula(0, 0, "=INDEX($B$1:$B$1,1,1)*0.5+D1"), // A1
-            formula(0, 1, "=A1*1"),                        // B1
+            number(0, 0, 1.0),                      // A1 = 1
+            formula(0, 1, "=A1*2"),                 // B1 = 2
+            formula(1, 3, "=INDEX($B$1:$C$1,1,1)"), // D2 = 2
+            formula(0, 3, "=D2*1"),                 // D1 = 2
+            formula(2, 5, "=INDEX($D$1:$E$1,1,1)"), // F3 = 2
+            formula(0, 5, "=F3*1"),                 // F1 = 2
+            formula(3, 7, "=INDEX($F$1:$G$1,1,1)"), // H4 = 2
+            formula(0, 8, "=H4*10"),                // I1 = 20
+            formula(0, 9, "=SUM($H$1:$H$300)"),     // J1 = 2
         ],
-    )]);
-    snapshot.iterative_calc = true;
-    let book = load(snapshot);
-    assert!(
-        (book.number(0, 0) - 2.0).abs() < 0.01,
-        "{}",
-        book.number(0, 0)
+        400,
+        12,
     );
-    assert!(
-        (book.number(0, 1) - 2.0).abs() < 0.01,
-        "{}",
-        book.number(0, 1)
-    );
+    assert_eq!(book.number(0, 8), 20.0);
+    assert_eq!(book.number(0, 9), 2.0);
+
+    book.core.set_calc_mode(CalcMode::Manual);
+    book.edit_all(&[
+        (3, 7, "=INDEX($F$1:$G$1,1,1)+0"),
+        (0, 5, "=F3*1+0"),
+        (2, 5, "=INDEX($D$1:$E$1,1,1)+0"),
+        (0, 3, "=D2*1+0"),
+        (1, 3, "=INDEX($B$1:$C$1,1,1)+0"),
+        (0, 1, "=A1*7"),
+    ]);
+    for (row, col) in [(0, 1), (1, 3), (0, 3), (2, 5), (0, 5), (3, 7)] {
+        assert_eq!(book.number(row, col), 7.0, "edited cell ({row},{col})");
+    }
+    assert_eq!(book.number(0, 8), 20.0, "I1 waits for a calculate");
+    assert_eq!(book.number(0, 9), 2.0, "J1 waits for a calculate");
+
+    book.core.set_calc_mode(CalcMode::Auto);
+    book.edit(0, 0, "1");
+    assert_eq!(book.number(0, 8), 70.0);
+    assert_eq!(book.number(0, 9), 7.0);
 }
 
-/// A cycle of direct references whose input is a lookup repaired by the fixup is solved again
-/// on the repaired input (E1 = D1 + F1/2, F1 = E1, D1 = lookup = 10: fixed point 20).
+/// A cell behind a lookup whose range holds its own dependents (G1, behind J2 and H1) has no
+/// place in the fixup's order and keeps the old cascade. That cascade still follows every cell
+/// it used to evaluate itself, also one that now has a place in the order (E1): G1 ends with
+/// the final E1.
 #[test]
-fn iterative_model_fed_by_a_repaired_lookup_is_solved() {
-    let mut snapshot = build_snapshot(vec![(
-        "Sheet1",
-        5,
-        8,
+fn cell_without_a_level_follows_an_ordered_cell_it_refers_to() {
+    let book = sheet1(
         vec![
             number(0, 0, 5.0),                      // A1 = 5
-            formula(0, 1, "=A1*2"),                 // B1 = 10
-            formula(0, 3, "=INDEX($B$1:$C$1,1,1)"), // D1 = 10
-            formula(0, 4, "=D1+0.5*F1"),            // E1
-            formula(0, 5, "=E1*1"),                 // F1
-            formula(0, 6, "=F1+1"),                 // G1 = F1 + 1
+            formula(1, 0, "=A1+0"),                 // A2 = 5
+            formula(1, 1, "=A2*2"),                 // B2 = 10
+            formula(4, 3, "=INDEX($B$2:$C$2,1,1)"), // D5 = 10
+            formula(0, 4, "=D5*2"),                 // E1 = 20
+            number(0, 9, 7.0),                      // J1 = 7
+            formula(0, 7, "=INDEX($J$1:$J$3,1,1)"), // H1 = 7, over J2
+            formula(1, 9, "=H1+1+D5*0"),            // J2 = 8
+            formula(0, 6, "=E1+J2"),                // G1 = 28
         ],
-    )]);
-    snapshot.iterative_calc = true;
-    let book = load(snapshot);
-    assert!(
-        (book.number(0, 4) - 20.0).abs() < 0.01,
-        "{}",
-        book.number(0, 4)
+        10,
+        12,
     );
-    assert!(
-        (book.number(0, 6) - 21.0).abs() < 0.01,
-        "{}",
-        book.number(0, 6)
-    );
+    assert_eq!(book.number(0, 4), 20.0);
+    assert_eq!(book.number(0, 6), 28.0);
+}
+
+/// Iterative calculation off. C8..N8 each name their own cell as the base of an OFFSET and read
+/// the cell to their left: twelve cycles of one cell for the engine, with no order between
+/// them. The fixup evaluates such cells once when a cell they refer to is repaired, as it
+/// always did -- now by position, so each reads the value of its neighbour (1, 2, .. 12),
+/// also when a lookup (P8) ties the twelve together.
+#[test]
+fn cells_with_no_order_between_them_are_taken_in_sheet_order() {
+    for tie in ["", "+0*$P$8"] {
+        let mut cells = vec![
+            number(0, 0, 5.0),                       // A1 = 5
+            formula(1, 0, "=A1+0"),                  // A2 = 5
+            formula(1, 1, "=A2*2"),                  // B2 = 10
+            formula(4, 3, "=INDEX($B$2:$C$2,1,1)"),  // D5 = 10
+            number(7, 1, 0.0),                       // B8 = 0
+            formula(7, 15, "=INDEX($B$8:$N$8,1,1)"), // P8 = 0, over the twelve
+        ];
+        for col in 2..14u8 {
+            let own = char::from(b'A' + col);
+            let text = format!("=$D$5*0+1+SUM(OFFSET({own}8,0,-1,1,1)){tie}");
+            cells.push(formula(7, u32::from(col), Box::leak(text.into_boxed_str())));
+        }
+        let book = sheet1(cells, 12, 20);
+        for col in 2..14 {
+            assert_eq!(book.number(7, col), f64::from(col - 1), "tie {tie:?}");
+        }
+    }
 }

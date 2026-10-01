@@ -1,13 +1,14 @@
 //! Barrier-graph construction and topological sort for range-aware evaluation ordering.
 //!
 //! Hybrid Kahn's + runtime deferral: selective range deps (INDEX, VLOOKUP, etc.)
-//! get NO barriers in the recalc order. The recalc driver runs a fixup pass after
-//! the main evaluation to re-evaluate selective deps that may have read stale values.
+//! get NO barriers here. The recalc driver runs a fixup pass after the main
+//! evaluation to re-evaluate selective deps that may have read stale values.
 //! This eliminates the O(S × C × BFS) colored BFS that was the performance and
 //! memory bottleneck for large workbooks.
 //!
-//! The fixup orders what it re-evaluates with [`RangeOrder::All`]: there a selective
-//! range is a barrier too, and the cells it ties into a cycle come back as a cycle core.
+//! The fixup pass orders what it re-evaluates with [`RangeOrder::All`]: there a
+//! selective range is a barrier too, and a selective dep whose range holds cells
+//! that depend on it gets no level, nor does a cell behind it.
 
 use cell_types::CellId;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
@@ -47,20 +48,29 @@ fn to_compact_index(value: usize) -> u32 {
 /// Which range dependencies order a reader after the cells the range holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum RangeOrder {
-    /// Ranges read in full. The order of a recalc pass.
+    /// Ranges read in full: the order of a recalc pass.
     Aggregate,
-    /// Ranges read selectively as well. The order of the selective fixup.
+    /// Ranges read selectively as well: the order of the selective fixup.
     All,
 }
 
 impl DependencyGraph {
+    /// The order of a recalc pass: [`Self::barrier_topo_in`] with [`RangeOrder::Aggregate`].
+    pub(super) fn barrier_topo(
+        &self,
+        subset: &FxHashSet<CellId>,
+        positions: &impl PositionResolver,
+    ) -> TopoResult {
+        self.barrier_topo_in(RangeOrder::Aggregate, subset, positions)
+    }
+
     /// Shared barrier-graph topo sort. Returns `TopoResult` with cycle classification.
     ///
     /// Uses a compact u32-indexed graph representation for better cache locality
     /// and lower memory usage compared to `HashMap<CellId, Vec<CellId>>`.
     #[allow(clippy::too_many_lines)] // Single-pass topo/cycle handling keeps compact-graph invariants local.
     #[tracing::instrument(name = "barrier_topo", skip_all, fields(subset_size = subset.len()))]
-    pub(super) fn barrier_topo(
+    pub(super) fn barrier_topo_in(
         &self,
         order: RangeOrder,
         subset: &FxHashSet<CellId>,
@@ -133,6 +143,20 @@ impl DependencyGraph {
             return TopoResult {
                 levels,
                 cycle_cores: vec![],
+                downstream_levels: vec![],
+            };
+        }
+
+        // The selective fixup only tells the cells with a level from the rest,
+        // which it gets back as one group: it has no use for the cores.
+        if order == RangeOrder::All {
+            let without_level: Vec<CellId> = (0..real_count)
+                .filter(|&i| in_degree[i as usize] > 0)
+                .map(|i| cells[i as usize])
+                .collect();
+            return TopoResult {
+                levels,
+                cycle_cores: vec![without_level],
                 downstream_levels: vec![],
             };
         }
@@ -320,8 +344,8 @@ impl DependencyGraph {
                 }
 
                 // A selective reader inside its own range goes behind the barrier
-                // too: the cycle this closes through the barrier marks it as
-                // unordered, at one edge per cell instead of one per pair.
+                // too: the cycle this closes through the barrier leaves it
+                // without a level, at one edge per cell instead of one per pair.
                 if !normal_aggs.is_empty() || !selective_deps.is_empty() {
                     let barrier = next_virtual;
                     next_virtual += 1;

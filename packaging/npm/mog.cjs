@@ -2,8 +2,8 @@
 'use strict';
 
 const { spawn } = require('node:child_process');
-const { optionalDependencies } = require('./package.json');
-const name = `@mog-sdk/cli-${process.platform}-${process.arch}`;
+const { name: launcher, optionalDependencies } = require('./package.json');
+const name = `${launcher}-${process.platform}-${process.arch}`;
 const executable = process.platform === 'win32' ? 'mog.exe' : 'mog';
 
 let binary;
@@ -15,7 +15,7 @@ try {
   binary = require.resolve(`${name}/bin/${executable}`);
 } catch (error) {
   console.error(`Mog: cannot find a native binary for ${process.platform}/${process.arch}.\n` +
-    `Install @mog-sdk/cli with optional dependencies enabled, or build Mog from source.\n${error.message}`);
+    `Install ${launcher} with optional dependencies enabled, or build Mog from source.\n${error.message}`);
   process.exit(1);
 }
 

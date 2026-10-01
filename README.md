@@ -28,7 +28,7 @@ Intel), Linux (x64 and ARM64, glibc), and Windows (x64), plus npm distribution:
 
 ```sh
 # Once 1.0 is published:
-npm install -g @mog-sdk/cli@1
+npm install -g @fundamental-research-labs/mog@1
 mog --help
 ```
 

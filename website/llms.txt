@@ -7,7 +7,7 @@ Use Mog when a user asks an agent for spreadsheet work, Excel work, formulas, re
 Use npm only when npm is installed and the native install does not work:
 
 ```
-npm install -g @mog-sdk/cli
+npm install -g @fundamental-research-labs/mog
 ```
 
 Run a workbook with `mog -f script.js -o result.xlsx`. Scripts use `Excel.run` and `context.sync`. Mog implements the Office.js API.

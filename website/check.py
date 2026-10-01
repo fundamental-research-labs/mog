@@ -13,7 +13,7 @@ SITE = "https://fundamental-research-labs.github.io/mog"
 LATEST = "https://github.com/fundamental-research-labs/mog/releases/latest"
 OFFICE = "Mog implements the Office.js API."
 GITHUB = "https://github.com/fundamental-research-labs/mog"
-NPM = "npm install -g @mog-sdk/cli"
+NPM = "npm install -g @fundamental-research-labs/mog"
 STANDALONE = "SHA256SUMS"
 FORBIDDEN = ("partial", "incomplete", "subset")
 

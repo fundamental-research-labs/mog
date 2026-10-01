@@ -3,7 +3,7 @@
 A native spreadsheet CLI, scripted with the Office.js Excel API.
 
 ```sh
-npm install -g @mog-sdk/cli@1
+npm install -g @fundamental-research-labs/mog@1
 mog --help
 mog -i input.xlsx -f script.js -o output.xlsx
 ```

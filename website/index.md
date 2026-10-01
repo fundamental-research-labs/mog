@@ -36,5 +36,5 @@ https://github.com/fundamental-research-labs/mog/releases/latest
 Use npm only when npm is installed and the native install does not work:
 
 ```sh
-npm install -g @mog-sdk/cli
+npm install -g @fundamental-research-labs/mog
 ```

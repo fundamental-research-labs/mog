@@ -39,7 +39,7 @@ unsigned and not notarized. Windows binaries are unsigned.
 With Node.js 22 or later:
 
 ```sh
-npm install -g @mog-sdk/cli@1
+npm install -g @fundamental-research-labs/mog@1
 mog --version
 mog --help
 ```
@@ -47,7 +47,7 @@ mog --help
 Or run without a global install:
 
 ```sh
-npx @mog-sdk/cli@1 -f formula.js -o result.xlsx
+npx @fundamental-research-labs/mog@1 -f formula.js -o result.xlsx
 ```
 
 npm selects an optional package containing the binary for your OS and CPU.

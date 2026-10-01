@@ -7,7 +7,7 @@ a browser, or a server.
 - File-based and inline scripts, explicit recalculation, and persistent sessions.
 - Native downloads for macOS (Apple Silicon/Intel), Linux (ARM64/x64, glibc),
   and Windows x64, with SHA-256 checksums.
-- `@mog-sdk/cli` as a thin npm launcher for the same native executable.
+- `@fundamental-research-labs/mog` as a thin npm launcher for the same native executable.
 
 Office.js coverage is incomplete; 1.0 does not imply full Excel compatibility.
 

@@ -2,7 +2,10 @@
 
 The release unit is `mog` in `compute/officejs`. Internal Rust crates remain
 unpublished. The npm package is `@fundamental-research-labs/mog`; it contains only a launcher and
-exact-version optional dependencies on native binary packages.
+exact-version optional dependencies on native binary packages. There is no SDK
+package. GitHub release assets for these packages are `mog-<version>.tgz` and
+`mog-<platform>-<arch>-<version>.tgz`. Native archives stay
+`mog-<version>-<platform>-<arch>.tar.gz`, or `.zip` on Windows.
 
 ## Preparation
 

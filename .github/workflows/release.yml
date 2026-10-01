@@ -95,7 +95,7 @@ jobs:
           name: mog-${{ matrix.target }}
           path: |
             artifacts/release/*
-            !artifacts/release/mog-sdk-cli-${{ needs.prepare.outputs.version }}.tgz
+            !artifacts/release/mog-${{ needs.prepare.outputs.version }}.tgz
           if-no-files-found: error
 
   assemble:

@@ -18,7 +18,8 @@ NAME = '@fundamental-research-labs/mog'
 
 
 def tarball_name(package_name):
-    return f"{package_name.removeprefix('@').replace('/', '-')}-{VERSION}.tgz"
+    """GitHub release filename. The npm package name stays inside the tarball."""
+    return f"mog{package_name.removeprefix(NAME)}-{VERSION}.tgz"
 
 
 def metadata(name):
@@ -43,6 +44,8 @@ def pack(directory, manifest, output):
     shutil.copyfile(ROOT / 'packaging/npm/README.md', directory / 'README.md')
     subprocess.run([shutil.which('npm'), 'pack', '--ignore-scripts',
                     '--pack-destination', str(output)], cwd=directory, check=True)
+    produced = output / f"{manifest['name'].removeprefix('@').replace('/', '-')}-{VERSION}.tgz"
+    produced.rename(output / tarball_name(manifest['name']))
 
 
 def main():

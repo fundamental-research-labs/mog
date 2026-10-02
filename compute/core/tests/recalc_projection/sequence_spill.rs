@@ -414,3 +414,31 @@ fn test_mixed_data_and_spill_sum() {
     // B1 = 10+20+30+40+50+1+2+3+4+5 = 165
     assert_store_number(&cell_store, &b1, 165.0, "B1 mixed data + spill");
 }
+
+#[test]
+fn test_sequence_omitted_arguments_take_their_defaults() {
+    for (formula, expected) in [
+        ("=SUM(SEQUENCE(3,,0,1))", 3.0),
+        ("=SUM(SEQUENCE(3,,5))", 18.0),
+        ("=ROWS(SEQUENCE(3,))", 3.0),
+        ("=COLUMNS(SEQUENCE(,3))", 3.0),
+        ("=SUM(SEQUENCE(2,2,,10))", 64.0),
+    ] {
+        let a1_str = cell_uuid(0, 0, 0);
+        let snapshot = build_snapshot(vec![(
+            "Sheet1",
+            100,
+            26,
+            vec![(0, 0, CellValue::Null, None)],
+        )]);
+        let mut cell_store = CellStore::new();
+        let mut core = ComputeCore::new();
+        core.init_from_snapshot(&mut cell_store, snapshot)
+            .expect("init failed");
+        let sheet_id = SheetId::from_uuid_str(&sheet_uuid(0)).expect("parse sheet uuid");
+        let a1_id = CellId::from_uuid_str(&a1_str).expect("parse cell uuid");
+        core.set_cell(&mut cell_store, &sheet_id, a1_id, 0, 0, formula)
+            .expect("set A1");
+        assert_store_number(&cell_store, &a1_id, expected, formula);
+    }
+}

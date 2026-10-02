@@ -17,6 +17,10 @@ impl PureFunction for FnSequence {
     fn returns_array(&self) -> bool {
         true
     }
+    fn default_for_arg(&self, _index: usize) -> Option<CellValue> {
+        // rows, columns, start and step each default to 1 when omitted: SEQUENCE(3,,0)
+        Some(CellValue::number(1.0))
+    }
     fn call(&self, args: &[CellValue]) -> CellValue {
         let rows = match args[0].coerce_to_number() {
             Ok(n) => n as i64,

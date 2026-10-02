@@ -25,7 +25,7 @@ pub enum CalcMode {
 /// Calculation settings for the workbook.
 ///
 /// Controls iterative calculation for circular references.
-/// Matches the TypeScript `CalculationSettings` interface from `@mog-sdk/spreadsheet-contracts/core`.
+/// Matches the TypeScript `CalculationSettings` interface.
 ///
 /// When iterative calculation is enabled, formulas with circular references
 /// calculate iteratively until convergence or max iterations. When disabled (default),
@@ -134,8 +134,7 @@ impl Default for CalculationSettings {
 /// Workbook protection options - matches Excel behavior.
 ///
 /// Workbook protection prevents structural changes to sheets.
-/// Matches the TypeScript `WorkbookProtectionOptions` interface
-/// from `@mog-sdk/spreadsheet-contracts/protection`.
+/// Matches the TypeScript `WorkbookProtectionOptions` interface.
 ///
 /// When a workbook is protected:
 /// - Users cannot add, delete, rename, hide, unhide, or move sheets
@@ -366,7 +365,7 @@ fn default_culture() -> String {
 /// Workbook-level settings (stored in native workbook metadata).
 ///
 /// These apply globally to the entire workbook, not per-sheet.
-/// Matches the TypeScript `WorkbookSettings` interface from `@mog-sdk/spreadsheet-contracts/core`.
+/// Matches the TypeScript `WorkbookSettings` interface.
 ///
 /// All fields use `camelCase` serialization for compatibility with the TypeScript layer.
 #[allow(clippy::struct_excessive_bools)]

@@ -14,7 +14,7 @@ use value_types::{CellValue, FiniteF64};
 /// under row/column insertions and deletions.
 ///
 /// Field names use camelCase serde renaming for IPC compatibility with the
-/// TypeScript contracts (`@mog-sdk/spreadsheet-contracts/store`).
+/// TypeScript contracts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Scenario {

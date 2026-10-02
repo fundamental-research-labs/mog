@@ -242,6 +242,7 @@ impl ComputeCore {
             let formula_strings = &self.formula_strings;
             let cell_formula_text = &self.cell_formula_text;
             let workbook_cache = &self.workbook_cache;
+            let ordered_sheets = &self.ordered_sheets_cache;
             let sumifs_epoch = self.current_sumifs_cache_epoch();
 
             level
@@ -262,6 +263,7 @@ impl ComputeCore {
                         MirrorContext::with_range_store(mirror, cell_id, sheet_id, range_store)
                             .with_sumifs_cache_epoch(sumifs_epoch);
                     ctx.ast_cache = Some(ast_cache);
+                    ctx.access.ordered_sheets = ordered_sheets.clone();
                     ctx.access.formula_text_provider =
                         FormulaTextProvider::new(cell_formula_text, formula_strings);
                     {

@@ -871,6 +871,7 @@ impl ComputeCore {
 
                 let mut ctx = MirrorContext::new(mirror, cell_id, sheet_id)
                     .with_sumifs_cache_epoch(self.current_sumifs_cache_epoch());
+                ctx.access.ordered_sheets = self.ordered_sheets_cache.clone();
                 ctx.access.formula_text_provider = self.formula_text_provider();
                 #[cfg(feature = "native")]
                 {

@@ -70,10 +70,8 @@ GitHub release. Run **Publish CLI to npm** from `main` with that tag:
 gh workflow run publish-cli.yml --ref main -f tag=<version-tag>
 ```
 
-GitHub release `v1.0.0` is already published. Its npm tarballs are named
-`@mog-sdk/cli` and were not uploaded to the registry. Leave that tag and those
-assets in place. Publish `@fundamental-research-labs/mog` from the next release
-tag, after `compute/officejs/Cargo.toml` carries that version.
+`v1.0.0` is already published on GitHub and on npm as
+`@fundamental-research-labs/mog`.
 
 This separate publication step uses the existing `npm-production` protection
 rules, which allow `main` and release branches rather than tag refs. It requires

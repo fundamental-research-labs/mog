@@ -124,4 +124,90 @@ impl ComputeCore {
 
         blockers
     }
+
+    /// Evaluate the cells from `collect_agg_data_column_blockers` before the agg prepass.
+    ///
+    /// Shared by `topo_evaluate_pass` and `topo_evaluate_pass_with_levels`. The cells are
+    /// evaluated level by level in dependency order, with the cached ranges they change
+    /// invalidated after each level, so a cell reads the values of the cells it depends on.
+    /// Cells of a dependency cycle among them are not evaluated here.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn pre_evaluate_agg_blockers(
+        &mut self,
+        cell_store: &mut CellStore,
+        blocker_cells: &[CellId],
+        changed_cells: &mut Vec<CellChange>,
+        projection_changes: &mut Vec<ProjectionChange>,
+        errors: &mut Vec<CellErrorInfo>,
+        epoch_range_store: &mut crate::eval::cache::range_store::RangeStore,
+        projection_deltas: &mut Vec<ProjectionDelta>,
+        metrics: &mut RecalcMetrics,
+    ) {
+        // Order blockers by dependency level so dynamic array
+        // sources (e.g., UNIQUE) evaluate and spill before cells
+        // that read from their spill columns (e.g., XLOOKUP).
+        let (blocker_levels, _blocker_cycles) = self
+            .graph
+            .subset_levels(blocker_cells, &*cell_store)
+            .into_value();
+
+        for level in &blocker_levels {
+            // Pre-materialize ranges for this level's cells
+            {
+                let plan: crate::eval::cache::range_store::DataPlan = level
+                    .iter()
+                    .filter_map(|cid| self.cell_range_keys.get(cid))
+                    .flat_map(|keys| keys.iter().copied())
+                    .collect();
+                epoch_range_store.pre_materialize_additive(&plan, cell_store);
+            }
+
+            let deltas_before = projection_deltas.len();
+
+            self.topo_evaluate_level_sequential(
+                cell_store,
+                level,
+                changed_cells,
+                projection_changes,
+                errors,
+                epoch_range_store,
+                projection_deltas,
+                metrics,
+            );
+
+            // Invalidate cached ranges for evaluated cells
+            let dirty_positions: Vec<(SheetId, u32, u32)> = level
+                .iter()
+                .filter_map(|cid| {
+                    let sid = cell_store.sheet_for_cell(cid)?;
+                    let pos = cell_store.resolve_position(cid)?;
+                    Some((sid, pos.row(), pos.col()))
+                })
+                .collect();
+
+            // Also invalidate spill target regions so the next
+            // level reads fresh data from the cell store, not stale
+            // range store cache. Use range-based invalidation to
+            // avoid materializing every cell position.
+            let mut dirty_ranges: Vec<(SheetId, u32, u32, u32, u32)> = Vec::new();
+            for delta in &projection_deltas[deltas_before..] {
+                if let Some(proj) = &delta.new {
+                    dirty_ranges.push((
+                        proj.sheet,
+                        proj.origin_row,
+                        proj.origin_col,
+                        proj.origin_row + proj.rows.saturating_sub(1),
+                        proj.origin_col + proj.cols.saturating_sub(1),
+                    ));
+                }
+            }
+
+            if !dirty_positions.is_empty() {
+                epoch_range_store.invalidate_dirty(&dirty_positions);
+            }
+            if !dirty_ranges.is_empty() {
+                epoch_range_store.invalidate_dirty_ranges(&dirty_ranges);
+            }
+        }
+    }
 }

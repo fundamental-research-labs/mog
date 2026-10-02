@@ -121,6 +121,94 @@ fn test_agg_prepass_same_sheet_averageifs() {
     }
 }
 
+/// Two groups of eight SUMIFS beside their criteria. The first needs constants only; the
+/// second has a criteria range (column M) three formula steps deep: K = J*2, L = K+1,
+/// M = IF(L>=100,"High","Low").
+fn agg_shallow_and_deep_groups_snapshot() -> WorkbookSnapshot {
+    let categories = ["Alpha", "Beta", "Gamma", "Delta"];
+    let mut cells = Vec::new();
+    let mut id_counter = 0x1000u128;
+
+    for row in 0..20u32 {
+        let cat = categories[(row % 4) as usize];
+
+        cells.push(text_cell(&mut id_counter, row, 0, cat));
+        cells.push(number_cell(
+            &mut id_counter,
+            row,
+            2,
+            (row + 1) as f64 * 10.0,
+        ));
+        cells.push(number_cell(&mut id_counter, row, 9, (row + 1) as f64 * 5.0));
+        cells.push(formula_cell(
+            &mut id_counter,
+            row,
+            10,
+            format!("=J{}*2", row + 1),
+        ));
+        cells.push(formula_cell(
+            &mut id_counter,
+            row,
+            11,
+            format!("=K{}+1", row + 1),
+        ));
+        cells.push(formula_cell(
+            &mut id_counter,
+            row,
+            12,
+            format!("=IF(L{}>=100,\"High\",\"Low\")", row + 1),
+        ));
+    }
+
+    for row in 0..8u32 {
+        let cat = categories[(row % 4) as usize];
+
+        cells.push(text_cell(&mut id_counter, row, 3, cat));
+        cells.push(formula_cell(
+            &mut id_counter,
+            row,
+            4,
+            format!("=SUMIFS(C$1:C$20,A$1:A$20,D{})", row + 1),
+        ));
+        cells.push(formula_cell(
+            &mut id_counter,
+            row,
+            5,
+            format!("=SUMIFS(C$1:C$20,A$1:A$20,D{},M$1:M$20,\"High\")", row + 1),
+        ));
+    }
+
+    single_sheet_snapshot("Sheet1", 20, 13, cells)
+}
+
+#[test]
+fn test_agg_prepass_data_column_formulas_are_evaluated_after_their_inputs() {
+    let (core, cell_store) = init_core(agg_shallow_and_deep_groups_snapshot());
+    let sheet_id = sid(1);
+
+    for row in 0..20u32 {
+        let expected = if row >= 9 { "High" } else { "Low" };
+        assert_eq!(
+            value_at(&core, &cell_store, &sheet_id, row, 12),
+            CellValue::Text(expected.into()),
+            "M row {row}"
+        );
+    }
+
+    let high_sums = [300.0, 420.0, 450.0, 480.0, 300.0, 420.0, 450.0, 480.0];
+    for row in 0..8u32 {
+        assert_number_at(
+            &core,
+            &cell_store,
+            &sheet_id,
+            row,
+            5,
+            high_sums[row as usize],
+            "SUMIFS over M",
+        );
+    }
+}
+
 #[test]
 fn test_agg_prepass_return_boundary_flushes_subnormal() {
     // Eight matching rows sum to MIN_POSITIVE / 2.0, so the prepass return

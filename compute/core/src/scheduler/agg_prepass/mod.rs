@@ -51,7 +51,7 @@ pub enum AggFn {
 /// How a single criteria argument is sourced.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CriteriaSource {
-    /// Row-relative cell reference (changes per output row).
+    /// Row-relative cell reference in the formula's own row (changes per output row).
     Dynamic { sheet: SheetId, col: u32 },
     /// Literal value that can be looked up via exact hash match.
     StaticExact { key: NormalizedKey },

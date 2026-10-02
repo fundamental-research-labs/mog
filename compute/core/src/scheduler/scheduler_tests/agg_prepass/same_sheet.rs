@@ -121,6 +121,74 @@ fn test_agg_prepass_same_sheet_averageifs() {
     }
 }
 
+/// The same data, with the ten criteria in D1:D10 and the formulas that read them twenty rows
+/// lower (E21:F30).
+fn agg_criteria_in_other_rows_snapshot() -> WorkbookSnapshot {
+    let categories = ["Alpha", "Beta", "Gamma", "Delta"];
+    let mut cells = Vec::new();
+    let mut id_counter = 0x1000u128;
+
+    for row in 0..20u32 {
+        let cat = categories[(row % 4) as usize];
+
+        cells.push(text_cell(&mut id_counter, row, 0, cat));
+        cells.push(number_cell(
+            &mut id_counter,
+            row,
+            2,
+            (row + 1) as f64 * 10.0,
+        ));
+    }
+
+    for row in 0..10u32 {
+        let cat = categories[(row % 4) as usize];
+
+        cells.push(text_cell(&mut id_counter, row, 3, cat));
+        cells.push(formula_cell(
+            &mut id_counter,
+            row + 20,
+            4,
+            format!("=COUNTIFS(A$1:A$20,D{})", row + 1),
+        ));
+        cells.push(formula_cell(
+            &mut id_counter,
+            row + 20,
+            5,
+            format!("=SUMIFS(C$1:C$20,A$1:A$20,D{})", row + 1),
+        ));
+    }
+
+    single_sheet_snapshot("Sheet1", 30, 7, cells)
+}
+
+#[test]
+fn test_agg_prepass_criteria_in_another_row_than_the_formula() {
+    let (core, cell_store) = init_core(agg_criteria_in_other_rows_snapshot());
+    let expected = expected_agg_values();
+    let sheet_id = sid(1);
+
+    for row in 0..10u32 {
+        assert_number_at(
+            &core,
+            &cell_store,
+            &sheet_id,
+            row + 20,
+            4,
+            expected[row as usize].0,
+            "COUNTIFS",
+        );
+        assert_number_at(
+            &core,
+            &cell_store,
+            &sheet_id,
+            row + 20,
+            5,
+            expected[row as usize].1,
+            "SUMIFS",
+        );
+    }
+}
+
 #[test]
 fn test_agg_prepass_return_boundary_flushes_subnormal() {
     // Eight matching rows sum to MIN_POSITIVE / 2.0, so the prepass return

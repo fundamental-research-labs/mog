@@ -608,6 +608,77 @@ fn test_3d_reference_evaluates_and_recalculates_each_sheet_in_span() {
 }
 
 #[test]
+fn test_3d_reference_spans_each_sheet_when_its_level_is_evaluated_in_parallel() {
+    // Enough formulas in one level for the scheduler to evaluate it in parallel.
+    const FORMULAS: u32 = 600;
+
+    fn numbers<'a>(value: f64) -> Vec<(u32, u32, CellValue, Option<&'a str>)> {
+        (0..FORMULAS)
+            .map(|row| (row, 0, CellValue::number(value), None))
+            .collect()
+    }
+
+    let formulas: Vec<String> = (1..=FORMULAS)
+        .map(|row| format!("SUM(Sheet1:Sheet3!A{row})"))
+        .collect();
+    let mut sheet1 = numbers(1.0);
+    sheet1.extend(
+        formulas
+            .iter()
+            .enumerate()
+            .map(|(row, formula)| (row as u32, 1, CellValue::Null, Some(formula.as_str()))),
+    );
+    let snapshot = build_snapshot(vec![
+        ("Sheet1", FORMULAS, 10, sheet1),
+        ("Sheet2", FORMULAS, 10, numbers(10.0)),
+        ("Sheet3", FORMULAS, 10, numbers(100.0)),
+    ]);
+    let mut cell_store = CellStore::new();
+    let mut core = ComputeCore::new();
+    let init = core
+        .init_from_snapshot(&mut cell_store, snapshot)
+        .expect("init failed");
+    for row in [0, FORMULAS / 2, FORMULAS - 1] {
+        assert_num(&init, 0, row, 1, 111.0);
+    }
+}
+
+#[test]
+fn test_3d_reference_spans_each_sheet_inside_an_iterative_cycle() {
+    let mut snapshot = build_snapshot(vec![
+        (
+            "Sheet1",
+            10,
+            10,
+            vec![
+                (0, 0, CellValue::number(1.0), None),
+                (0, 1, CellValue::Null, Some("SUM(Sheet1:Sheet3!A1)+C1")),
+                (0, 2, CellValue::Null, Some("B1*0")),
+            ],
+        ),
+        (
+            "Sheet2",
+            10,
+            10,
+            vec![(0, 0, CellValue::number(10.0), None)],
+        ),
+        (
+            "Sheet3",
+            10,
+            10,
+            vec![(0, 0, CellValue::number(100.0), None)],
+        ),
+    ]);
+    snapshot.iterative_calc = true;
+    let mut cell_store = CellStore::new();
+    let mut core = ComputeCore::new();
+    let init = core
+        .init_from_snapshot(&mut cell_store, snapshot)
+        .expect("init failed");
+    assert_num(&init, 0, 0, 1, 111.0);
+}
+
+#[test]
 fn test_cross_sheet_recalc_chain() {
     let snapshot = build_snapshot(vec![
         (

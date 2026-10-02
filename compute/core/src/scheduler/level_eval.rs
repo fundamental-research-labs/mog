@@ -229,6 +229,7 @@ impl ComputeCore {
             let formula_strings = &self.formula_strings;
             let cell_formula_text = &self.cell_formula_text;
             let workbook_cache = &self.workbook_cache;
+            let ordered_sheets = &self.ordered_sheets_cache;
             let sumifs_epoch = self.current_sumifs_cache_epoch();
             let recalc_clock = self.recalc_clock();
 
@@ -251,6 +252,7 @@ impl ComputeCore {
                             .with_sumifs_cache_epoch(sumifs_epoch)
                             .with_recalc_clock(recalc_clock);
                     ctx.ast_cache = Some(ast_cache);
+                    ctx.access.ordered_sheets = ordered_sheets.clone();
                     ctx.access.formula_text_provider =
                         FormulaTextProvider::new(cell_formula_text, formula_strings);
                     {

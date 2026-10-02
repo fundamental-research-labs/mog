@@ -67,8 +67,26 @@ fn extract_range_ref(rr: &RangeRef, resolver: &impl PositionResolver) -> Option<
 // Criteria classification
 // ---------------------------------------------------------------------------
 
+/// Resolve a row-relative criteria cell to `(sheet, col)` when it sits in the formula's own row.
+///
+/// A group is executed by reading each formula's criterion at that formula's row, so a
+/// criterion in another row (`=SUMIFS(.., A33)` written in row 48) is not a dynamic criterion
+/// of the prepass; the formula is left to normal evaluation.
+fn dynamic_criteria_cell(
+    reference: &CellRef,
+    cell_row: u32,
+    resolver: &impl PositionResolver,
+) -> Option<(SheetId, u32)> {
+    let (sheet, row, col) = resolve_cell_ref(reference, resolver)?;
+    (row == cell_row).then_some((sheet, col))
+}
+
 /// Classify a criteria AST argument into a CriteriaSource.
-fn classify_criteria(node: &ASTNode, resolver: &impl PositionResolver) -> Option<CriteriaSource> {
+fn classify_criteria(
+    node: &ASTNode,
+    cell_row: u32,
+    resolver: &impl PositionResolver,
+) -> Option<CriteriaSource> {
     match node {
         // Dynamic: row-relative cell reference (Positional or Resolved)
         ASTNode::CellReference(CellRefNode {
@@ -76,7 +94,7 @@ fn classify_criteria(node: &ASTNode, resolver: &impl PositionResolver) -> Option
             reference,
             ..
         }) => {
-            let (sheet, _, col) = resolve_cell_ref(reference, resolver)?;
+            let (sheet, col) = dynamic_criteria_cell(reference, cell_row, resolver)?;
             Some(CriteriaSource::Dynamic { sheet, col })
         }
 
@@ -101,7 +119,7 @@ fn classify_criteria(node: &ASTNode, resolver: &impl PositionResolver) -> Option
                         ..
                     }),
                 ) => {
-                    let (sheet, _, col) = resolve_cell_ref(reference, resolver)?;
+                    let (sheet, col) = dynamic_criteria_cell(reference, cell_row, resolver)?;
                     Some(CriteriaSource::DynamicWithPrefix {
                         sheet,
                         col,
@@ -115,7 +133,7 @@ fn classify_criteria(node: &ASTNode, resolver: &impl PositionResolver) -> Option
                         ..
                     }) = inner.as_ref()
                     {
-                        let (_, _, col) = resolve_cell_ref(reference, resolver)?;
+                        let (_, col) = dynamic_criteria_cell(reference, cell_row, resolver)?;
                         Some(CriteriaSource::DynamicWithPrefix {
                             sheet: *sheet,
                             col,
@@ -150,7 +168,7 @@ fn classify_criteria(node: &ASTNode, resolver: &impl PositionResolver) -> Option
                 ..
             }) = inner.as_ref()
             {
-                let (_, _, col) = resolve_cell_ref(reference, resolver)?;
+                let (_, col) = dynamic_criteria_cell(reference, cell_row, resolver)?;
                 Some(CriteriaSource::Dynamic { sheet: *sheet, col })
             } else if let ASTNode::CellReference(CellRefNode {
                 abs_row: true,
@@ -375,7 +393,7 @@ fn extract_post_op_operand(
 fn extract_agg_pattern_inner(
     ast: &ASTNode,
     _cell_sheet: SheetId,
-    _cell_row: u32,
+    cell_row: u32,
     _cell_col: u32,
     resolver: &impl PositionResolver,
 ) -> Option<AggPattern> {
@@ -407,7 +425,7 @@ fn extract_agg_pattern_inner(
                 return None;
             }
             let range_info = extract_range(&args[0], resolver)?;
-            let criteria = classify_criteria(&args[1], resolver)?;
+            let criteria = classify_criteria(&args[1], cell_row, resolver)?;
             let pair = AggCriteriaPair {
                 data_sheet: range_info.0,
                 data_col: range_info.1,
@@ -426,7 +444,7 @@ fn extract_agg_pattern_inner(
                 return None;
             }
             let range_info = extract_range(&args[0], resolver)?;
-            let criteria = classify_criteria(&args[1], resolver)?;
+            let criteria = classify_criteria(&args[1], cell_row, resolver)?;
 
             let value_range = if args.len() == 3 {
                 let vr = extract_range(&args[2], resolver)?;
@@ -465,7 +483,7 @@ fn extract_agg_pattern_inner(
             let mut i = 0;
             while i + 1 < args.len() {
                 let range_info = extract_range(&args[i], resolver)?;
-                let criteria = classify_criteria(&args[i + 1], resolver)?;
+                let criteria = classify_criteria(&args[i + 1], cell_row, resolver)?;
                 pairs.push(AggCriteriaPair {
                     data_sheet: range_info.0,
                     data_col: range_info.1,
@@ -492,7 +510,7 @@ fn extract_agg_pattern_inner(
             let mut i = 1;
             while i + 1 < args.len() {
                 let range_info = extract_range(&args[i], resolver)?;
-                let criteria = classify_criteria(&args[i + 1], resolver)?;
+                let criteria = classify_criteria(&args[i + 1], cell_row, resolver)?;
                 pairs.push(AggCriteriaPair {
                     data_sheet: range_info.0,
                     data_col: range_info.1,

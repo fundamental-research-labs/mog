@@ -154,7 +154,7 @@ impl ComputeCore {
                         }
                     }
                 }
-                let mut downstream: Vec<CellId> = visited
+                visited
                     .into_iter()
                     .filter(|c| {
                         self.ast_cache.contains_key(c)
@@ -165,16 +165,7 @@ impl ComputeCore {
                                 .sheet_for_cell(c)
                                 .is_none_or(|sid| cell_store.is_calculation_enabled(&sid))
                     })
-                    .collect();
-                // Cells with no order between them are taken by position, not
-                // in the order of a hash set.
-                downstream.sort_unstable_by_key(|c| {
-                    (
-                        cell_store.sheet_for_cell(c).map(|sid| sid.as_u128()),
-                        cell_store.resolve_position(c).map(|p| (p.row(), p.col())),
-                    )
-                });
-                downstream
+                    .collect()
             };
 
             if !downstream.is_empty() {

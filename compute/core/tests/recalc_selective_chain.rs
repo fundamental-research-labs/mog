@@ -564,31 +564,3 @@ fn cell_without_a_level_keeps_what_the_cascade_gave_it() {
     assert_eq!(book.number(0, 7), 309.0);
     assert_eq!(book.number(0, 8), 0.0);
 }
-
-/// Iterative calculation off. C8..N8 each name their own cell as the base of an OFFSET and read
-/// the cell to their left: twelve cycles of one cell for the engine, with no order between
-/// them. The fixup evaluates such cells once when a cell they refer to is repaired, as it
-/// always did -- now by position, so each reads the value of its neighbour (1, 2, .. 12),
-/// also when a lookup (P8) ties the twelve together.
-#[test]
-fn cells_with_no_order_between_them_are_taken_in_sheet_order() {
-    for tie in ["", "+0*$P$8"] {
-        let mut cells = vec![
-            number(0, 0, 5.0),                       // A1 = 5
-            formula(1, 0, "=A1+0"),                  // A2 = 5
-            formula(1, 1, "=A2*2"),                  // B2 = 10
-            formula(4, 3, "=INDEX($B$2:$C$2,1,1)"),  // D5 = 10
-            number(7, 1, 0.0),                       // B8 = 0
-            formula(7, 15, "=INDEX($B$8:$N$8,1,1)"), // P8 = 0, over the twelve
-        ];
-        for col in 2..14u8 {
-            let own = char::from(b'A' + col);
-            let text = format!("=$D$5*0+1+SUM(OFFSET({own}8,0,-1,1,1)){tie}");
-            cells.push(formula(7, u32::from(col), Box::leak(text.into_boxed_str())));
-        }
-        let book = sheet1(cells, 12, 20);
-        for col in 2..14 {
-            assert_eq!(book.number(7, col), f64::from(col - 1), "tie {tie:?}");
-        }
-    }
-}

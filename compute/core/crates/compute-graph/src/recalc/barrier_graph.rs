@@ -5,6 +5,10 @@
 //! evaluation to re-evaluate selective deps that may have read stale values.
 //! This eliminates the O(S × C × BFS) colored BFS that was the performance and
 //! memory bottleneck for large workbooks.
+//!
+//! The fixup pass orders what it re-evaluates with [`RangeOrder::All`]: there a
+//! selective range is a barrier too, and a selective dep whose range holds cells
+//! that depend on it gets no level, nor does a cell behind it.
 
 use cell_types::CellId;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
@@ -41,15 +45,34 @@ fn to_compact_index(value: usize) -> u32 {
     u32::try_from(value).expect("compact graph node count exceeds u32::MAX")
 }
 
+/// Which range dependencies order a reader after the cells the range holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum RangeOrder {
+    /// Ranges read in full: the order of a recalc pass.
+    Aggregate,
+    /// Ranges read selectively as well: the order of the selective fixup.
+    All,
+}
+
 impl DependencyGraph {
+    /// The order of a recalc pass: [`Self::barrier_topo_in`] with [`RangeOrder::Aggregate`].
+    pub(super) fn barrier_topo(
+        &self,
+        subset: &FxHashSet<CellId>,
+        positions: &impl PositionResolver,
+    ) -> TopoResult {
+        self.barrier_topo_in(RangeOrder::Aggregate, subset, positions)
+    }
+
     /// Shared barrier-graph topo sort. Returns `TopoResult` with cycle classification.
     ///
     /// Uses a compact u32-indexed graph representation for better cache locality
     /// and lower memory usage compared to `HashMap<CellId, Vec<CellId>>`.
     #[allow(clippy::too_many_lines)] // Single-pass topo/cycle handling keeps compact-graph invariants local.
     #[tracing::instrument(name = "barrier_topo", skip_all, fields(subset_size = subset.len()))]
-    pub(super) fn barrier_topo(
+    pub(super) fn barrier_topo_in(
         &self,
+        order: RangeOrder,
         subset: &FxHashSet<CellId>,
         positions: &impl PositionResolver,
     ) -> TopoResult {
@@ -75,7 +98,8 @@ impl DependencyGraph {
             map
         };
 
-        let bg = self.build_barrier_graph_compact(subset, positions, &cell_to_idx, real_count);
+        let bg =
+            self.build_barrier_graph_compact(order, subset, positions, &cell_to_idx, real_count);
 
         let total_nodes = bg.node_count as usize;
 
@@ -116,6 +140,16 @@ impl DependencyGraph {
 
         // Fast path: everything was scheduled
         if processed == total_nodes {
+            return TopoResult {
+                levels,
+                cycle_cores: vec![],
+                downstream_levels: vec![],
+            };
+        }
+
+        // The selective fixup takes the levels alone: a cell without one is
+        // not its to evaluate.
+        if order == RangeOrder::All {
             return TopoResult {
                 levels,
                 cycle_cores: vec![],
@@ -194,6 +228,7 @@ impl DependencyGraph {
     #[tracing::instrument(name = "build_barrier_graph", skip_all, fields(subset_size = subset.len()))]
     fn build_barrier_graph_compact(
         &self,
+        order: RangeOrder,
         subset: &FxHashSet<CellId>,
         positions: &impl PositionResolver,
         cell_to_idx: &FxHashMap<CellId, u32>,
@@ -251,7 +286,8 @@ impl DependencyGraph {
             v
         };
 
-        // Range edges via virtual barrier nodes — aggregate deps only
+        // Range edges via virtual barrier nodes — aggregate deps, and selective
+        // deps when they order too
         for (range_rect, dependent_formulas) in &self.range_deps {
             let deps_in_subset: Vec<u32> = dependent_formulas
                 .iter()
@@ -263,6 +299,7 @@ impl DependencyGraph {
             }
 
             let mut aggregate_deps: Vec<u32> = Vec::new();
+            let mut selective_deps: Vec<u32> = Vec::new();
             for &dep_idx in &deps_in_subset {
                 let dep_cell = idx_to_cell[dep_idx as usize];
                 let is_aggregate = self.precedents.get(&dep_cell).is_some_and(|precs| {
@@ -275,10 +312,12 @@ impl DependencyGraph {
                 });
                 if is_aggregate {
                     aggregate_deps.push(dep_idx);
+                } else if order == RangeOrder::All {
+                    selective_deps.push(dep_idx);
                 }
             }
 
-            if aggregate_deps.is_empty() {
+            if aggregate_deps.is_empty() && selective_deps.is_empty() {
                 continue;
             }
 
@@ -300,14 +339,17 @@ impl DependencyGraph {
                     }
                 }
 
-                if !normal_aggs.is_empty() {
+                // A selective reader inside its own range goes behind the barrier
+                // too: the cycle this closes through the barrier leaves it
+                // without a level, at one edge per cell instead of one per pair.
+                if !normal_aggs.is_empty() || !selective_deps.is_empty() {
                     let barrier = next_virtual;
                     next_virtual += 1;
                     ensure_capacity!(barrier);
                     for &cell in &all_contained {
                         add_edge!(cell, barrier);
                     }
-                    for &dep in &normal_aggs {
+                    for &dep in normal_aggs.iter().chain(&selective_deps) {
                         add_edge!(barrier, dep);
                     }
                 }

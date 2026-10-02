@@ -40,7 +40,7 @@ impl ComputeCore {
         let mut epoch_range_store = crate::eval::cache::range_store::RangeStore::new();
 
         // Pass 1: Single-pass topo evaluation with pre-computed levels
-        let (changed_cells, projection_changes, errors, projection_deltas) = self
+        let (changed_cells, projection_changes, errors, mut projection_deltas) = self
             .topo_evaluate_pass_with_levels(
                 mirror,
                 levels,
@@ -70,7 +70,7 @@ impl ComputeCore {
                 &merged_changed_cells,
                 &merged_projection_changes,
             );
-            let (fixup_changes, fixup_proj, fixup_errors) = self.selective_dep_fixup_pass(
+            let (fixup_changes, fixup_proj, fixup_errors, deltas) = self.selective_dep_fixup_pass(
                 mirror,
                 &mut epoch_range_store,
                 &mut metrics,
@@ -80,6 +80,7 @@ impl ComputeCore {
             merged_changed_cells.extend(fixup_changes);
             merged_projection_changes.extend(fixup_proj);
             merged_errors.extend(fixup_errors);
+            projection_deltas.extend(deltas);
         }
 
         // Pass 2: Projection stabilization — required even for full recalc.

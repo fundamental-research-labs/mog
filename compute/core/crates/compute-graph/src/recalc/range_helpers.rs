@@ -92,6 +92,18 @@ impl DependencyGraph {
         self.reachable_forward(std::iter::once(target), positions)
     }
 
+    /// Every cell whose value can depend on one of `cells`: the cells
+    /// themselves and everything reached from them through cell references
+    /// and ranges, read in full or selectively.
+    #[must_use]
+    pub fn dependents_closure(
+        &self,
+        cells: &[CellId],
+        positions: &impl PositionResolver,
+    ) -> FxHashSet<CellId> {
+        self.reachable_forward(cells.iter().copied(), positions)
+    }
+
     /// Forward BFS through dependents + range edges.
     ///
     /// For each popped cell, follows:

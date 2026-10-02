@@ -63,8 +63,8 @@ impl ComputeCore {
         // Pass 1: Single-pass topo evaluation
         // (Phantom propagation loop removed — projection stabilization handles
         // dynamic array correctness via pass 2 below.)
-        let (changed_cells, projection_changes, errors, projection_deltas, topo_cycle_cells) = self
-            .topo_evaluate_pass(
+        let (changed_cells, projection_changes, errors, mut projection_deltas, topo_cycle_cells) =
+            self.topo_evaluate_pass(
                 cell_store,
                 &current_cells,
                 deadline,
@@ -123,7 +123,7 @@ impl ComputeCore {
                 &merged_changed_cells,
                 &merged_projection_changes,
             );
-            let (fixup_changes, fixup_proj, fixup_errors) = self.selective_dep_fixup_pass(
+            let (fixup_changes, fixup_proj, fixup_errors, deltas) = self.selective_dep_fixup_pass(
                 cell_store,
                 &mut epoch_range_store,
                 &mut metrics,
@@ -133,6 +133,7 @@ impl ComputeCore {
             merged_changed_cells.extend(fixup_changes);
             merged_projection_changes.extend(fixup_proj);
             merged_errors.extend(fixup_errors);
+            projection_deltas.extend(deltas);
         }
 
         // Pass 2: Projection stabilization — only runs when projections changed shape/existence

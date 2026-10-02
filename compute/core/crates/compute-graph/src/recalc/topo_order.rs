@@ -6,6 +6,8 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use crate::positions::{AnalysisCompleteness, Analyzed, PositionResolver, TrackedResolver};
 use crate::{DependencyGraph, GraphError};
 
+use super::barrier_graph::RangeOrder;
+
 type LevelGroups = Vec<Vec<CellId>>;
 
 fn to_compact_index(value: usize) -> u32 {
@@ -206,5 +208,27 @@ impl DependencyGraph {
         }
 
         levels
+    }
+
+    /// Evaluation order for the cells the selective fixup re-evaluates.
+    ///
+    /// The order of a recalc pass, and a range read selectively (INDEX,
+    /// VLOOKUP, ...) orders its reader after the cells it holds as well, so
+    /// each cell comes after every cell it can read.
+    ///
+    /// A selective dep whose range holds cells that depend on it closes a
+    /// cycle in this order: it gets no level, nor does a cell behind it.
+    #[tracing::instrument(name = "fixup_levels", skip_all, fields(cell_count = cells.len()))]
+    pub fn fixup_levels(
+        &self,
+        cells: &FxHashSet<CellId>,
+        positions: &impl PositionResolver,
+    ) -> Analyzed<LevelGroups> {
+        let tracker = TrackedResolver::new(positions);
+        let result = self.barrier_topo_in(RangeOrder::All, cells, &tracker);
+        Analyzed {
+            value: result.levels,
+            completeness: tracker.completeness(),
+        }
     }
 }

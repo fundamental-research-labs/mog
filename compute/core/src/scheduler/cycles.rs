@@ -576,7 +576,7 @@ impl ComputeCore {
                 }
                 idx
             };
-            let (fixup_changes, fixup_proj, fixup_errors) = self.selective_dep_fixup_pass(
+            let (fixup_changes, fixup_proj, fixup_errors, deltas) = self.selective_dep_fixup_pass(
                 cell_store,
                 &mut epoch_range_store,
                 &mut cycle_metrics,
@@ -586,6 +586,7 @@ impl ComputeCore {
             changed_cells.extend(fixup_changes);
             all_projection_changes.extend(fixup_proj);
             errors.extend(fixup_errors);
+            all_projection_deltas.extend(deltas);
         }
 
         // Projection stabilization

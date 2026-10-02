@@ -147,16 +147,12 @@ impl DependencyGraph {
             };
         }
 
-        // The selective fixup only tells the cells with a level from the rest,
-        // which it gets back as one group: it has no use for the cores.
+        // The selective fixup takes the levels alone: a cell without one is
+        // not its to evaluate.
         if order == RangeOrder::All {
-            let without_level: Vec<CellId> = (0..real_count)
-                .filter(|&i| in_degree[i as usize] > 0)
-                .map(|i| cells[i as usize])
-                .collect();
             return TopoResult {
                 levels,
-                cycle_cores: vec![without_level],
+                cycle_cores: vec![],
                 downstream_levels: vec![],
             };
         }

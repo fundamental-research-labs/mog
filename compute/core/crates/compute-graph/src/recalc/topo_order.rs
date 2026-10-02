@@ -216,21 +216,18 @@ impl DependencyGraph {
     /// VLOOKUP, ...) orders its reader after the cells it holds as well, so
     /// each cell comes after every cell it can read.
     ///
-    /// Returns `(levels, unordered)`. A selective dep whose range holds cells
-    /// that depend on it closes a cycle in this order: `unordered` are the
-    /// cells in such a cycle or behind one, by position.
+    /// A selective dep whose range holds cells that depend on it closes a
+    /// cycle in this order: it gets no level, nor does a cell behind it.
     #[tracing::instrument(name = "fixup_levels", skip_all, fields(cell_count = cells.len()))]
     pub fn fixup_levels(
         &self,
         cells: &FxHashSet<CellId>,
         positions: &impl PositionResolver,
-    ) -> Analyzed<(LevelGroups, Vec<CellId>)> {
+    ) -> Analyzed<LevelGroups> {
         let tracker = TrackedResolver::new(positions);
         let result = self.barrier_topo_in(RangeOrder::All, cells, &tracker);
-        let mut unordered: Vec<CellId> = result.cycle_cores.into_iter().flatten().collect();
-        unordered.sort_unstable_by_key(|cell| self.resolve_sort_key(cell, &tracker));
         Analyzed {
-            value: (result.levels, unordered),
+            value: result.levels,
             completeness: tracker.completeness(),
         }
     }

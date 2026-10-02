@@ -536,6 +536,35 @@ fn cell_without_a_level_follows_an_ordered_cell_it_refers_to() {
     assert_eq!(book.number(0, 6), 28.0);
 }
 
+/// A cell without a place in the fixup's order (I1: J1 looks up a range that holds it) is left
+/// to the old cascade alone. H1 has a place and is repaired after the cascade: it adds a SUM
+/// over a large range holding a repaired cell, which the cascade does not follow. I1 = H1 - J1
+/// is not evaluated again from the repaired H1 while J1 has not followed, and keeps 0, the
+/// value it ends with.
+#[test]
+fn cell_without_a_level_keeps_what_the_cascade_gave_it() {
+    let mut cells = vec![
+        number(0, 0, 5.0),                      // A1 = 5
+        formula(1, 0, "=A1+0"),                 // A2 = 5
+        formula(1, 1, "=A2*2"),                 // B2 = 10
+        formula(4, 3, "=INDEX($B$2:$C$2,1,1)"), // D5 = 10
+        formula(0, 5, "=SUM($G$1:$G$300)"),     // F1 = 299 + 10
+        formula(0, 7, "=D5*0+F1"),              // H1 = 309
+        formula(0, 9, "=INDEX($H$1:$I$1,1,1)"), // J1, over I1
+        formula(0, 8, "=H1-J1"),                // I1 = 0
+    ];
+    for row in 0..300 {
+        cells.push(if row == 150 {
+            formula(row, 6, "=D5*1")
+        } else {
+            number(row, 6, 1.0)
+        });
+    }
+    let book = sheet1(cells, 400, 12);
+    assert_eq!(book.number(0, 7), 309.0);
+    assert_eq!(book.number(0, 8), 0.0);
+}
+
 /// Iterative calculation off. C8..N8 each name their own cell as the base of an OFFSET and read
 /// the cell to their left: twelve cycles of one cell for the engine, with no order between
 /// them. The fixup evaluates such cells once when a cell they refer to is repaired, as it

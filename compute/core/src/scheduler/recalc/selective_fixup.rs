@@ -19,9 +19,10 @@ impl ComputeCore {
     /// is the edited formulas alone, what depends on them waits for a calculate).
     /// When `None`, all selective deps are checked (full recalc).
     ///
-    /// What the changed selective deps feed is re-evaluated in two parts: the
-    /// cells that can be put in dependency order, in that order
-    /// ([`Self::fixup_ordered`]), and the others by the cascade below.
+    /// The changed selective deps then cascade through cell references, and
+    /// last the cells that can be put in dependency order are re-evaluated in
+    /// that order and end final ([`Self::fixup_ordered`]). A cell that has no
+    /// such order keeps what the cascade gave it.
     #[tracing::instrument(name = "selective_dep_fixup", skip_all)]
     pub(in super::super) fn selective_dep_fixup_pass(
         &mut self,
@@ -68,13 +69,6 @@ impl ComputeCore {
             selective_candidates = selective_cells.len(),
         )
         .entered();
-
-        // The selective deps are re-evaluated after cells they read have changed
-        // within this recalc, so the epoch-scoped caches can hold values computed
-        // from the old inputs (the subexpression cache keeps array-valued calls
-        // such as `CHOOSE(1,D2:D2)` for the whole epoch). Start from fresh
-        // caches, as the cycle handler does before re-evaluating dependents.
-        clear_thread_local_caches();
 
         // Pre-materialize ranges for these cells
         {
@@ -142,23 +136,6 @@ impl ComputeCore {
                 epoch_range_store.invalidate_dirty(&dirty_positions);
             }
 
-            // The cells that have a dependency order are re-evaluated in it,
-            // and end final. `unordered` are the others, by position: their
-            // inputs are not final, and they keep the cascade below.
-            // `cascaded` are the cells the cascade would have marked as
-            // changed by now had it evaluated the ordered cells itself.
-            let (unordered, cascaded) = self.fixup_ordered(
-                cell_store,
-                epoch_range_store,
-                metrics,
-                scope,
-                &selective_cells,
-                &mut changed_cells,
-                &mut projection_changes,
-                &mut errors,
-                &mut projection_deltas,
-            );
-
             // Use lightweight cell-to-cell BFS to find direct dependents,
             // then topo-sort just those. Avoids the expensive collect_dirty_set +
             // barrier_topo calls that affected_cells performs on the full graph.
@@ -177,18 +154,27 @@ impl ComputeCore {
                         }
                     }
                 }
-                unordered
+                let mut downstream: Vec<CellId> = visited
                     .into_iter()
                     .filter(|c| {
-                        visited.contains(c)
-                            && self.ast_cache.contains_key(c)
+                        self.ast_cache.contains_key(c)
                             && !selective_cells.contains(c)
                             && !changed_ids.contains(c)
+                            && scope.is_none_or(|s| s.contains(c))
                             && cell_store
                                 .sheet_for_cell(c)
                                 .is_none_or(|sid| cell_store.is_calculation_enabled(&sid))
                     })
-                    .collect()
+                    .collect();
+                // Cells with no order between them are taken by position, not
+                // in the order of a hash set.
+                downstream.sort_unstable_by_key(|c| {
+                    (
+                        cell_store.sheet_for_cell(c).map(|sid| sid.as_u128()),
+                        cell_store.resolve_position(c).map(|p| (p.row(), p.col())),
+                    )
+                });
+                downstream
             };
 
             if !downstream.is_empty() {
@@ -199,7 +185,7 @@ impl ComputeCore {
                 // re-evaluation — others will produce the same value as the
                 // main pass. This "dirty propagation" typically skips ~40-50%
                 // of cascade cells.
-                let mut cascade_dirty: FxHashSet<CellId> = cascaded;
+                let mut cascade_dirty: FxHashSet<CellId> = changed_ids.iter().copied().collect();
 
                 for level in &downstream_levels {
                     if level.is_empty() {
@@ -282,17 +268,27 @@ impl ComputeCore {
                     }
                 }
             }
+
+            // The cascade follows cell references, in their order alone. The
+            // cells that have a dependency order are now re-evaluated in it,
+            // and end final.
+            self.fixup_ordered(
+                cell_store,
+                epoch_range_store,
+                metrics,
+                scope,
+                &mut changed_cells,
+                &mut projection_changes,
+                &mut errors,
+                &mut projection_deltas,
+            );
         }
 
         (changed_cells, projection_changes, errors, projection_deltas)
     }
 
     /// Re-evaluate, in dependency order, the cells that the changed selective
-    /// deps feed and that have such an order. Returns the cells that have
-    /// none, by position, and the cells the cascade counts as changed: the
-    /// changed selective deps, and the ordered cells that changed and that it
-    /// would have evaluated itself (reached from those through cell
-    /// references, and not among the `reread` selective deps).
+    /// deps feed and that have such an order.
     ///
     /// Every cell that can depend on a changed selective dep is sorted once,
     /// and in that sort a selective range orders its reader after the cells it
@@ -304,6 +300,7 @@ impl ComputeCore {
     /// A selective dep whose range holds cells that depend on it gets no
     /// level, nor does a cell behind it: no such order exists, and which of
     /// those cells the selective dep does read only its evaluation tells.
+    /// Those cells are left as the cascade wrote them.
     #[allow(clippy::too_many_arguments)]
     fn fixup_ordered(
         &mut self,
@@ -311,21 +308,17 @@ impl ComputeCore {
         epoch_range_store: &mut RangeStore,
         metrics: &mut RecalcMetrics,
         scope: Option<&FxHashSet<CellId>>,
-        reread: &FxHashSet<CellId>,
         changed_cells: &mut Vec<CellChange>,
         projection_changes: &mut Vec<ProjectionChange>,
         errors: &mut Vec<CellErrorInfo>,
         projection_deltas: &mut Vec<ProjectionDelta>,
-    ) -> (Vec<CellId>, FxHashSet<CellId>) {
+    ) {
+        // What the re-read and the cascade changed.
         let mut changed = Changed::of(&*cell_store, changed_cells, projection_changes);
-        let reread_changed: Vec<CellId> = changed.cells.iter().copied().collect();
-        let mut cascaded: FxHashSet<CellId> = changed_cells
-            .iter()
-            .filter_map(|c| CellId::from_uuid_str(&c.cell_id).ok())
-            .collect();
+        let seeds: Vec<CellId> = changed.cells.iter().copied().collect();
         let affected: FxHashSet<CellId> = self
             .graph
-            .dependents_closure(&reread_changed, &*cell_store)
+            .dependents_closure(&seeds, &*cell_store)
             .into_iter()
             .filter(|c| {
                 self.ast_cache.contains_key(c)
@@ -335,12 +328,12 @@ impl ComputeCore {
                         .is_none_or(|sid| cell_store.is_calculation_enabled(&sid))
             })
             .collect();
-        let (levels, unordered) = self
+        let levels = self
             .graph
             .fixup_levels(&affected, &*cell_store)
             .into_value();
 
-        // The caches and the cached ranges hold what the re-read saw.
+        // The caches and the cached ranges hold what the cascade saw.
         clear_thread_local_caches();
         epoch_range_store.invalidate_dirty(&changed.positions());
 
@@ -395,19 +388,7 @@ impl ComputeCore {
             );
             epoch_range_store.invalidate_dirty(&level_changed.positions());
             changed.merge(level_changed);
-            for change in &changed_cells[changes_from..] {
-                if let Ok(cid) = CellId::from_uuid_str(&change.cell_id)
-                    && !reread.contains(&cid)
-                    && self
-                        .graph
-                        .get_precedent_cells(&cid)
-                        .any(|precedent| cascaded.contains(precedent))
-                {
-                    cascaded.insert(cid);
-                }
-            }
         }
-        (unordered, cascaded)
     }
 
     /// Whether `cell` reads a cell in `changed`: a cell it refers to, or one

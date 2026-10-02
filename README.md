@@ -11,23 +11,19 @@ The primary interface is Office.js: `Excel.run`, `context.workbook`,
 Excel JavaScript API, not a separate spreadsheet scripting language.
 
 [Website](https://sheetmog.ai) · [Documentation](docs/README.md) ·
-[Release preparation](docs/releasing.md)
+[Releasing](docs/releasing.md)
 
 ## Install
 
-Mog 1.0 is being prepared for release. Until it is published, build from source
-with stable Rust and a C compiler:
+Download the archive for your platform from the
+[latest release](https://github.com/fundamental-research-labs/mog/releases/latest).
+Verify it against `SHA256SUMS`, extract it, and put `mog` (or `mog.exe`) on your
+`PATH`. Builds are published for macOS (Apple Silicon and Intel), Linux (x64 and
+ARM64, glibc), and Windows (x64).
+
+With Node.js 22 or later:
 
 ```sh
-cargo install --path compute/officejs --locked
-mog --version
-```
-
-The 1.0 release will provide standalone binaries for macOS (Apple Silicon and
-Intel), Linux (x64 and ARM64, glibc), and Windows (x64), plus npm distribution:
-
-```sh
-# Once 1.0 is published:
 npm install -g @fundamental-research-labs/mog@1
 mog --help
 ```

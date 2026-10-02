@@ -1,20 +1,7 @@
 # Installation
 
-Mog 1.0 is being prepared for release. The binary and npm instructions below
-apply once that release is published. Build from source in the meantime.
-
-## From source
-
-Install stable Rust and a C compiler (QuickJS includes C code), then run from
-this repository:
-
-```sh
-cargo install --path compute/officejs --locked
-mog --version
-```
-
-This installs the native binary in Cargo's bin directory. For development, use
-`cargo build -p mog --locked` and `target-native/debug/mog` instead.
+Mog 1.0 is published. Install a standalone binary or the npm launcher. Building
+from source is for development.
 
 ## Standalone binary
 
@@ -55,3 +42,16 @@ Keep optional dependencies enabled. The launcher passes arguments, standard
 input/output, and exit status through to that binary. There are no install
 scripts, downloads at launch, Node bindings, or additional spreadsheet APIs.
 Scripts still run in the binary's embedded QuickJS runtime, not in Node.js.
+
+## From source
+
+Install stable Rust and a C compiler (QuickJS includes C code), then run from
+this repository:
+
+```sh
+cargo install --path compute/officejs --locked
+mog --version
+```
+
+This installs the native binary in Cargo's bin directory. For development, use
+`cargo build -p mog --locked` and `target-native/debug/mog` instead.

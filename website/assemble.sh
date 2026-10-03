@@ -8,6 +8,7 @@ rm -rf "$out"
 mkdir -p "$out"
 cp "$website/index.html" "$website/style.css" "$website/site.js" \
   "$website/llms.txt" "$website/index.md" "$website/robots.txt" "$website/sitemap.xml" \
+  "$website/CNAME" \
   "$out/"
 cp "$repo/docs/brand/logo/mog-app-icon.svg" "$out/favicon.svg"
 echo "Assembled $out"

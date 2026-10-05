@@ -34,9 +34,12 @@ fn insert_returns_range_for_chained_write_and_load() {
         .replace("MOVED", if shift == "Down" { "B4:C5" } else { "D2:E3" });
         let output = run_office_js_with_workbook(&workbook, &script)
             .expect("inserted range should support write and load");
-        assert_eq!(output.value, json!({
-            "address": "Sheet1!B2:C3", "values": [[5, 6], [7, 8]],
-            "rows": 2, "columns": 2, "moved": [[1, 2], [3, 4]],
-        }));
+        assert_eq!(
+            output.value,
+            json!({
+                "address": "Sheet1!B2:C3", "values": [[5, 6], [7, 8]],
+                "rows": 2, "columns": 2, "moved": [[1, 2], [3, 4]],
+            })
+        );
     }
 }

@@ -32,6 +32,9 @@
       rangeId: this._id,
       shift: shift == null ? "Down" : String(shift),
     });
+    // Resolve a fresh proxy after insertion, including for navigation-derived
+    // ranges whose address is not available until context.sync().
+    return this.getOffsetRange(0, 0);
   };
 
   Excel.Range.prototype.delete = function (shift) {

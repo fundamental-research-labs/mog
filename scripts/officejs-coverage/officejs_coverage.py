@@ -43,25 +43,18 @@ CATALOG_SOURCE = {
 SKIP_METHODS = {"toJSON", "track", "untrack", "load", "set"}
 SKIP_PROPERTIES = {"context"}
 
-# Local constructor names that are not Excel.<same>.
+# Local constructor names that are not Excel.<same>. A tuple maps only
+# members defined on that local constructor, not later catalog-type additions.
 CTOR_ALIASES = {
     "FreezePaneCollection": "Excel.WorksheetFreezePanes",
     "ClientRequestContext": "Excel.RequestContext",
     "RequestContext": "Excel.RequestContext",
-    "PivotHierarchyList": "Excel.RowColumnPivotHierarchyCollection",
-    "DataHierarchyList": "Excel.DataPivotHierarchyCollection",
-    "DataHierarchy": "Excel.DataPivotHierarchy",
-}
-
-# One Mog constructor implements several Microsoft types. Table.sort returns
-# RangeSort; filterHierarchies uses PivotHierarchyList (already aliased to
-# RowColumnPivotHierarchyCollection). Copy implemented members onto those
-# catalog classes so host coverage matches what scripts call.
-SHARED_HOST_TYPES = {
-    "Excel.RangeSort": ("Excel.TableSort",),
-    "Excel.RowColumnPivotHierarchyCollection": (
+    "PivotHierarchyList": (
+        "Excel.RowColumnPivotHierarchyCollection",
         "Excel.FilterPivotHierarchyCollection",
     ),
+    "DataHierarchyList": "Excel.DataPivotHierarchyCollection",
+    "DataHierarchy": "Excel.DataPivotHierarchy",
 }
 
 APISET_RE = re.compile(
@@ -329,7 +322,7 @@ def matching_brace(text: str, open_idx: int) -> int:
     return n
 
 
-def resolve_ctor(name: str, aliases: dict[str, str], class_ids: set[str]) -> str | None:
+def resolve_ctor(name: str, aliases: dict[str, str], class_ids: set[str]) -> str | tuple[str, ...] | None:
     if name in CTOR_ALIASES:
         return CTOR_ALIASES[name]
     mapped = aliases.get(name)
@@ -359,7 +352,12 @@ def scan_officejs_host(src_dir: Path, catalog: dict[str, Any]) -> dict[tuple[str
     ):
         aliases[m.group(2)] = "Excel." + m.group(1)
 
-    def mark(cid: str | None, name: str, kind: str) -> None:
+    def mark(cid: str | tuple[str, ...] | None, name: str, kind: str) -> None:
+        if isinstance(cid, tuple):
+            for target in cid:
+                if target in class_ids:
+                    mark(target, name, kind)
+            return
         if not cid or not name or name.startswith("_"):
             return
         if name in SKIP_METHODS or name in SKIP_PROPERTIES:
@@ -462,22 +460,46 @@ def scan_officejs_host(src_dir: Path, catalog: dict[str, Any]) -> dict[tuple[str
     implemented[("Excel.RequestContext", "workbook")] = "property"
     implemented[("Excel.RequestContext", "sync")] = "method"
     implemented[("Excel", "run")] = "method"
-    expand_shared_host_types(implemented, class_ids)
+    # Table.sort delegates to Range.sort. Credit its methods only while both
+    # getters retain the known cached delegation, and the range method exists.
+    # Fail closed for other JS shapes: this scanner is not a JS interpreter.
+    if (
+        "Excel.TableSort" in class_ids
+        and ("Excel.Table", "getDataBodyRange") in implemented
+        and cached_getter_returns(joined_for_alias, "Table", "sort",
+                                  r"this\.getDataBodyRange\(\)\.sort")
+        and cached_getter_returns(joined_for_alias, "Range", "sort",
+                                  r"new\s+RangeSort\(this\.context,\s*this\)")
+    ):
+        for (cid, name), kind in list(implemented.items()):
+            if cid == "Excel.RangeSort":
+                mark("Excel.TableSort", name, kind)
     return implemented
 
 
-def expand_shared_host_types(
-    implemented: dict[tuple[str, str], str], class_ids: set[str]
-) -> None:
-    extra: dict[tuple[str, str], str] = {}
-    for src, dests in SHARED_HOST_TYPES.items():
-        for (cid, name), kind in implemented.items():
-            if cid != src:
-                continue
-            for dest in dests:
-                if dest in class_ids:
-                    extra[(dest, name)] = kind
-    implemented.update(extra)
+def cached_getter_returns(text: str, ctor: str, member: str, expression: str) -> bool:
+    """Recognize the host's bounded lazy-cache getter, without crossing bodies."""
+    pattern = (
+        r"Object\.defineProperty\(\s*(?:Excel\.)?" + re.escape(ctor)
+        + r"\.prototype\s*,\s*['\"]" + re.escape(member)
+        + r"['\"]\s*,\s*\{"
+    )
+    for match in re.finditer(pattern, text):
+        descriptor = text[match.end():matching_brace(text, match.end() - 1)]
+        getter = re.fullmatch(
+            r"\s*(?:configurable:\s*true,\s*)?get:\s*function\s*\(\s*\)\s*\{"
+            r"(?P<body>.*)\}\s*,?\s*", descriptor, re.S,
+        )
+        if not getter:
+            continue
+        assignment = r"this\.(?P=cache)\s*=\s*" + expression + r"\s*;"
+        if re.fullmatch(
+            r"\s*if\s*\(!this\.(?P<cache>_\w+)\)\s*"
+            + r"(?:\{\s*" + assignment + r"\s*\}|" + assignment + r")"
+            + r"\s*return\s+this\.(?P=cache)\s*;\s*", getter["body"],
+        ):
+            return True
+    return False
 
 
 TOKEN_RE = re.compile(

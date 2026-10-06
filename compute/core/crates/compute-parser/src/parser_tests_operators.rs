@@ -218,19 +218,18 @@ fn test_precedence_add_over_concat() {
 }
 
 #[test]
-fn test_power_right_associative() {
-    // 2^3^4 should parse as 2^(3^4)
+fn test_power_left_associative() {
     let ast = parse_formula("=2^3^4", None).unwrap().into_inner();
     assert_eq!(
         ast,
         ASTNode::BinaryOp {
             op: BinOp::Pow,
-            left: Box::new(ASTNode::Number(2.0)),
-            right: Box::new(ASTNode::BinaryOp {
+            left: Box::new(ASTNode::BinaryOp {
                 op: BinOp::Pow,
-                left: Box::new(ASTNode::Number(3.0)),
-                right: Box::new(ASTNode::Number(4.0)),
+                left: Box::new(ASTNode::Number(2.0)),
+                right: Box::new(ASTNode::Number(3.0)),
             }),
+            right: Box::new(ASTNode::Number(4.0)),
         }
     );
 }

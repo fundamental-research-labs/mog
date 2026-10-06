@@ -218,8 +218,8 @@ pub(in crate::eval) fn eval_binary_op(op: BinOp, left: &CellValue, right: &CellV
             };
             CellValue::Text(format!("{}{}", ls, rs).into())
         }
-        BinOp::Eq => CellValue::Boolean(cell_value_cmp(left, right) == 0),
-        BinOp::Neq => CellValue::Boolean(cell_value_cmp(left, right) != 0),
+        BinOp::Eq => CellValue::Boolean(formula_values_equal(left, right)),
+        BinOp::Neq => CellValue::Boolean(!formula_values_equal(left, right)),
         BinOp::Lt => CellValue::Boolean(cell_value_cmp(left, right) < 0),
         BinOp::Gt => CellValue::Boolean(cell_value_cmp(left, right) > 0),
         BinOp::Lte => CellValue::Boolean(cell_value_cmp(left, right) <= 0),
@@ -227,6 +227,21 @@ pub(in crate::eval) fn eval_binary_op(op: BinOp, left: &CellValue, right: &CellV
         // Value-level fallback only. Valid reference intersections are resolved
         // by the evaluator before their operands are materialized.
         BinOp::Intersect => CellValue::Error(CellError::Null, None),
+    }
+}
+
+// Formula equality follows the existing Unicode lowercase policy used for
+// ordinary COUNTIF text matching. Keep ordering, lookup and EXACT independent.
+fn formula_values_equal(left: &CellValue, right: &CellValue) -> bool {
+    match (left, right) {
+        (CellValue::Text(a), CellValue::Text(b)) => {
+            if a.is_ascii() && b.is_ascii() {
+                a.eq_ignore_ascii_case(b)
+            } else {
+                a.to_lowercase() == b.to_lowercase()
+            }
+        }
+        _ => cell_value_cmp(left, right) == 0,
     }
 }
 

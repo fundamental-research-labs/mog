@@ -9,9 +9,10 @@
 //!   Concat (&)
 //!   Add/Sub (+, -)
 //!   Mul/Div (*, /)
+//!   Unary plus / implicit intersection (+, @)
 //!   Exponentiation (^) — left-associative
-//!   Prefix unary (+, -)
 //!   Postfix percent (%)
+//!   Negation (-)
 //!   Intersection (space)
 //!   Range operator (:)
 

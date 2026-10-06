@@ -227,6 +227,378 @@ pub(in crate::storage::engine) fn clear_range_metadata(
     Ok(result)
 }
 
+/// Immutable source metadata, captured before an overlapping copy changes cells.
+pub(in crate::storage::engine) struct CopyMetadata {
+    source: SheetRange,
+    comments: Vec<(
+        cell_types::SheetPos,
+        crate::storage::sheet::comments::StoredComment,
+    )>,
+    links: Vec<(
+        SheetRange,
+        crate::storage::sheet::hyperlinks::StoredHyperlink,
+    )>,
+    validations: Vec<crate::storage::sheet::schemas::StoredValidation>,
+    formats: Vec<domain_types::domain::conditional_format::ConditionalFormat>,
+    covered: Vec<SheetRange>,
+}
+
+pub(in crate::storage::engine) fn capture_copy_metadata(
+    stores: &EngineStores,
+    cells: &CellStore,
+    sheet: &SheetId,
+    source: SheetRange,
+    skip_blanks: bool,
+) -> CopyMetadata {
+    let metadata = stores.storage.sheet_metadata.get(sheet);
+    let position = |id| {
+        cells
+            .get_sheet(sheet)
+            .and_then(|s| s.cell_position(&id))
+            .map(|(row, col)| cell_types::SheetPos::new(row, col))
+    };
+    let covered = if skip_blanks {
+        cells
+            .cells_in_range(
+                sheet,
+                source.start_row(),
+                source.start_col(),
+                source.end_row(),
+                source.end_col(),
+            )
+            .filter_map(|(id, _, _)| {
+                let pos = position(id)?;
+                let value = cells.get_cell_value_at(sheet, pos);
+                (value.is_some_and(|v| !v.is_null()) || cells.get_formula(&id).is_some())
+                    .then(|| SheetRange::single(pos.row(), pos.col()))
+            })
+            .collect()
+    } else {
+        vec![source]
+    };
+    let included =
+        |pos: cell_types::SheetPos| covered.iter().any(|r| r.contains(pos.row(), pos.col()));
+    let comments = metadata
+        .into_iter()
+        .flat_map(|m| m.comments.iter())
+        .filter_map(|comment| {
+            let pos = position(comment.cell_ref.cell()?)?;
+            included(pos).then(|| (pos, comment.clone()))
+        })
+        .collect();
+    let links = metadata
+        .into_iter()
+        .flat_map(|m| m.hyperlinks.iter())
+        .filter_map(|link| {
+            let start = position(link.start_id)?;
+            let end = position(link.end_id.unwrap_or(link.start_id))?;
+            let range = SheetRange::new(start.row(), start.col(), end.row(), end.col());
+            Some(
+                covered
+                    .iter()
+                    .filter_map(|r| cf_store::cf_intersect_ranges(r, &range))
+                    .map(|r| (r, link.clone()))
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .flatten()
+        .collect();
+    CopyMetadata {
+        source,
+        comments,
+        links,
+        covered,
+        validations: metadata
+            .map(|m| m.validations.rules.clone())
+            .unwrap_or_default(),
+        formats: cf_store::get_formats_for_sheet(&stores.storage, sheet),
+    }
+}
+
+pub(in crate::storage::engine) fn apply_copy_metadata(
+    stores: &mut EngineStores,
+    cells: &mut CellStore,
+    snapshot: CopyMetadata,
+    sheet: &SheetId,
+    target_row: u32,
+    target_col: u32,
+    transpose: bool,
+    row_tiles: u32,
+    col_tiles: u32,
+) -> Result<MutationResult, value_types::ComputeError> {
+    let mut result = MutationResult::empty();
+    let (height, width) = if transpose {
+        (
+            (snapshot.source.end_col() - snapshot.source.start_col() + 1),
+            (snapshot.source.end_row() - snapshot.source.start_row() + 1),
+        )
+    } else {
+        (
+            (snapshot.source.end_row() - snapshot.source.start_row() + 1),
+            (snapshot.source.end_col() - snapshot.source.start_col() + 1),
+        )
+    };
+    for tr in 0..row_tiles {
+        for tc in 0..col_tiles {
+            let row = target_row + tr * height;
+            let col = target_col + tc * width;
+            let translate = |range: SheetRange| {
+                let sr = range.start_row() - snapshot.source.start_row();
+                let sc = range.start_col() - snapshot.source.start_col();
+                let er = range.end_row() - snapshot.source.start_row();
+                let ec = range.end_col() - snapshot.source.start_col();
+                if transpose {
+                    SheetRange::new(row + sc, col + sr, row + ec, col + er)
+                } else {
+                    SheetRange::new(row + sr, col + sc, row + er, col + ec)
+                }
+            };
+            for source in &snapshot.covered {
+                let target = translate(*source);
+                let cleared = clear_range_metadata(stores, cells, sheet, target)?;
+                result.comment_changes.extend(cleared.comment_changes);
+                result.cf_changes.extend(cleared.cf_changes);
+                clear_hyperlink_fragments(stores, cells, sheet, target);
+            }
+            let ids: std::collections::HashMap<_, _> = snapshot
+                .comments
+                .iter()
+                .map(|(_, c)| (c.id.clone(), stores.next_id_uuid_string()))
+                .collect();
+            for (pos, comment) in &snapshot.comments {
+                let target = translate(SheetRange::single(pos.row(), pos.col()));
+                let id = super::cell_editing::ensure_cell_id(
+                    stores,
+                    cells,
+                    sheet,
+                    target.start_row(),
+                    target.start_col(),
+                )
+                .expect("target identity");
+                let mut copy = comment.clone();
+                copy.id = ids[&comment.id].clone();
+                copy.cell_ref = crate::storage::sheet::comments::CommentAnchor::Cell(id);
+                for link in [&mut copy.thread_id, &mut copy.parent_id]
+                    .into_iter()
+                    .flatten()
+                {
+                    if let Some(new) = ids.get(link) {
+                        *link = new.clone();
+                    }
+                }
+                crate::storage::engine::history::metadata::capture_sheet_vector_entry!(stores.storage,*sheet,comments,copy.id,entry=>entry.id);
+                stores
+                    .storage
+                    .sheet_metadata
+                    .get_mut(sheet)
+                    .expect("sheet")
+                    .comments
+                    .push(copy);
+                result.comment_changes.push(crate::snapshot::CommentChange {
+                    sheet_id: sheet.to_uuid_string(),
+                    cell_id: id.to_uuid_string(),
+                    position: Some(crate::snapshot::CellPosition {
+                        row: target.start_row(),
+                        col: target.start_col(),
+                    }),
+                    kind: ChangeKind::Set,
+                });
+            }
+            for (range, link) in &snapshot.links {
+                let target = translate(*range);
+                let mut copy = link.clone();
+                if copy.data.uid.is_some() {
+                    copy.data.uid = Some(stores.next_id_uuid_string());
+                }
+                copy.start_id = super::cell_editing::ensure_cell_id(
+                    stores,
+                    cells,
+                    sheet,
+                    target.start_row(),
+                    target.start_col(),
+                )
+                .expect("target identity");
+                copy.end_id = if target.start_row() != target.end_row()
+                    || target.start_col() != target.end_col()
+                {
+                    super::cell_editing::ensure_cell_id(
+                        stores,
+                        cells,
+                        sheet,
+                        target.end_row(),
+                        target.end_col(),
+                    )
+                } else {
+                    None
+                };
+                crate::storage::engine::history::metadata::capture_sheet_field!(
+                    stores.storage,
+                    *sheet,
+                    hyperlinks
+                );
+                stores
+                    .storage
+                    .sheet_metadata
+                    .get_mut(sheet)
+                    .expect("sheet")
+                    .hyperlinks
+                    .push(copy);
+            }
+            for original in &snapshot.formats {
+                let ranges: Vec<_> = original
+                    .ranges
+                    .iter()
+                    .flat_map(|range| {
+                        snapshot
+                            .covered
+                            .iter()
+                            .filter_map(|covered| cf_store::cf_intersect_ranges(range, covered))
+                            .map(translate)
+                    })
+                    .collect();
+                if ranges.is_empty() {
+                    continue;
+                }
+                let origin = original.ranges[0];
+                let target = ranges[0];
+                let mut copy = original.clone();
+                copy.id = stores.next_id_uuid_string();
+                copy.sheet_id = sheet.to_uuid_string();
+                copy.ranges = ranges;
+                let mut rules = serde_json::to_value(&copy.rules).expect("CF serialization");
+                if let Some(rules) = rules.as_array_mut() {
+                    for rule in rules {
+                        if let Some(object) = rule.as_object_mut() {
+                            object.insert(
+                                "id".into(),
+                                serde_json::Value::String(stores.next_id_uuid_string()),
+                            );
+                        }
+                    }
+                }
+                rebase_fields(
+                    &mut rules,
+                    i64::from(target.start_row()) - i64::from(origin.start_row()),
+                    i64::from(target.start_col()) - i64::from(origin.start_col()),
+                );
+                copy.rules = serde_json::from_value(rules).expect("CF shape");
+                cf_store::add_conditional_format(&mut stores.storage, &copy);
+                result.cf_changes.push(CfChange {
+                    sheet_id: sheet.to_uuid_string(),
+                    kind: ChangeKind::Set,
+                    rule_id: Some(copy.id),
+                });
+            }
+            for original in &snapshot.validations {
+                for text in &original.spec.ranges {
+                    let Some(range) = parse_range(text) else {
+                        continue;
+                    };
+                    for covered in &snapshot.covered {
+                        let Some(part) = cf_store::cf_intersect_ranges(&range, covered) else {
+                            continue;
+                        };
+                        let target = translate(part);
+                        let mut copy = original.clone();
+                        copy.id = stores.next_id_uuid_string();
+                        if copy.spec.uid.is_some() {
+                            copy.spec.uid = Some(copy.id.clone());
+                        }
+                        copy.spec.ranges = vec![target.to_string()];
+                        let mut rule = serde_json::to_value(&copy.spec.rule)
+                            .expect("validation serialization");
+                        rebase_fields(
+                            &mut rule,
+                            i64::from(target.start_row()) - i64::from(range.start_row()),
+                            i64::from(target.start_col()) - i64::from(range.start_col()),
+                        );
+                        copy.spec.rule = serde_json::from_value(rule).expect("validation shape");
+                        crate::storage::engine::history::metadata::capture_sheet_vector_entry!(stores.storage,*sheet,validations.rules,copy.id,entry=>entry.id);
+                        crate::storage::engine::history::metadata::capture_sheet_field!(
+                            stores.storage,
+                            *sheet,
+                            validations.declared_count
+                        );
+                        let metadata = stores.storage.sheet_metadata.get_mut(sheet).expect("sheet");
+                        metadata.validations.rules.push(copy);
+                        metadata.validations.declared_count = None;
+                    }
+                }
+            }
+        }
+    }
+    Ok(result)
+}
+
+fn clear_hyperlink_fragments(
+    stores: &mut EngineStores,
+    cells: &mut CellStore,
+    sheet: &SheetId,
+    cut: SheetRange,
+) {
+    let original = stores
+        .storage
+        .sheet_metadata
+        .get(sheet)
+        .map(|m| m.hyperlinks.clone())
+        .unwrap_or_default();
+    let mut replacement = Vec::new();
+    for link in &original {
+        let bounds = cells.get_sheet(sheet).and_then(|s| {
+            Some((
+                s.cell_position(&link.start_id)?,
+                s.cell_position(&link.end_id.unwrap_or(link.start_id))?,
+            ))
+        });
+        let Some(((sr, sc), (er, ec))) = bounds else {
+            replacement.push(link.clone());
+            continue;
+        };
+        let range = SheetRange::new(sr, sc, er, ec);
+        if !range.intersects(&cut) {
+            replacement.push(link.clone());
+            continue;
+        }
+        for part in cf_store::cf_subtract_range(&range, &cut) {
+            let mut copy = link.clone();
+            copy.start_id = super::cell_editing::ensure_cell_id(
+                stores,
+                cells,
+                sheet,
+                part.start_row(),
+                part.start_col(),
+            )
+            .expect("fragment identity");
+            copy.end_id =
+                if part.start_row() != part.end_row() || part.start_col() != part.end_col() {
+                    super::cell_editing::ensure_cell_id(
+                        stores,
+                        cells,
+                        sheet,
+                        part.end_row(),
+                        part.end_col(),
+                    )
+                } else {
+                    None
+                };
+            replacement.push(copy);
+        }
+    }
+    if replacement != original {
+        crate::storage::engine::history::metadata::capture_sheet_field!(
+            stores.storage,
+            *sheet,
+            hyperlinks
+        );
+        stores
+            .storage
+            .sheet_metadata
+            .get_mut(sheet)
+            .expect("sheet")
+            .hyperlinks = replacement;
+    }
+}
+
 #[cfg(test)]
 mod metadata_range_tests {
     #[test]

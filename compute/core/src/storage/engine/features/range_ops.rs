@@ -85,8 +85,17 @@ pub(super) fn copy_range(
     skip_blanks: bool,
     transpose: bool,
 ) -> Result<MutationResult, ComputeError> {
+    let metadata = matches!(copy_type, domain_types::CopyType::All).then(|| {
+        super::super::services::metadata_ranges::capture_copy_metadata(
+            &engine.stores,
+            &engine.cell_store,
+            source_sheet_id,
+            cell_types::SheetRange::new(src_start_row, src_start_col, src_end_row, src_end_col),
+            skip_blanks,
+        )
+    });
     let target_sheet = *target_sheet_id;
-    match engine.apply_mutation(
+    let mut result = match engine.apply_mutation(
         crate::storage::engine::mutation::EngineMutation::CopyRange {
             source_sheet_id: *source_sheet_id,
             src_start_row,
@@ -101,9 +110,26 @@ pub(super) fn copy_range(
             transpose,
         },
     )? {
-        crate::storage::engine::mutation::MutationOutput::Recalc(r) => Ok(r),
-        _ => Ok(MutationResult::empty()),
+        crate::storage::engine::mutation::MutationOutput::Recalc(r) => r,
+        _ => MutationResult::empty(),
+    };
+    if let Some(metadata) = metadata {
+        let changes = super::super::services::metadata_ranges::apply_copy_metadata(
+            &mut engine.stores,
+            &mut engine.cell_store,
+            metadata,
+            target_sheet_id,
+            target_row,
+            target_col,
+            transpose,
+            1,
+            1,
+        )?;
+        result.comment_changes.extend(changes.comment_changes);
+        result.cf_changes.extend(changes.cf_changes);
+        engine.refresh_cf_cache(target_sheet_id);
     }
+    Ok(result)
 }
 
 pub(super) fn copy_range_tiled(
@@ -122,6 +148,15 @@ pub(super) fn copy_range_tiled(
     row_tiles: u32,
     col_tiles: u32,
 ) -> Result<MutationResult, ComputeError> {
+    let metadata = matches!(copy_type, domain_types::CopyType::All).then(|| {
+        super::super::services::metadata_ranges::capture_copy_metadata(
+            &engine.stores,
+            &engine.cell_store,
+            source_sheet_id,
+            cell_types::SheetRange::new(src_start_row, src_start_col, src_end_row, src_end_col),
+            skip_blanks,
+        )
+    });
     let mut recalc = super::super::services::mutation_handlers::mutation_copy_range_tiled(
         &mut engine.stores,
         &mut engine.cell_store,
@@ -140,7 +175,24 @@ pub(super) fn copy_range_tiled(
         col_tiles,
     )?;
     engine.postprocess_mutation_recalc(&mut recalc);
-    Ok(MutationResult::from_recalc(recalc))
+    let mut result = MutationResult::from_recalc(recalc);
+    if let Some(metadata) = metadata {
+        let changes = super::super::services::metadata_ranges::apply_copy_metadata(
+            &mut engine.stores,
+            &mut engine.cell_store,
+            metadata,
+            target_sheet_id,
+            target_row,
+            target_col,
+            transpose,
+            row_tiles,
+            col_tiles,
+        )?;
+        result.comment_changes.extend(changes.comment_changes);
+        result.cf_changes.extend(changes.cf_changes);
+        engine.refresh_cf_cache(target_sheet_id);
+    }
+    Ok(result)
 }
 
 pub(super) fn remove_duplicates(

@@ -157,8 +157,21 @@ pub fn format_value(
     format_code: &str,
     locale: &CultureInfo,
 ) -> FormatResult {
+    format_value_with_date_system(value, format_code, locale, false)
+}
+
+/// Format a cell value with both locale and workbook date-system context.
+#[must_use]
+pub fn format_value_with_date_system(
+    value: &value_types::CellValue,
+    format_code: &str,
+    locale: &CultureInfo,
+    date1904: bool,
+) -> FormatResult {
     match value {
-        value_types::CellValue::Number(n) => format_number_result(**n, format_code, locale),
+        value_types::CellValue::Number(n) => {
+            format_number_internal_with_date_system(**n, format_code, locale, date1904)
+        }
         value_types::CellValue::Text(s) => {
             let text = format_text(s, format_code);
             FormatResult::text(text)

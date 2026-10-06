@@ -98,9 +98,9 @@
 //! - [`normalize`] -- Format code normalization and preview generation
 
 mod api;
-mod convenience;
 mod cell_info;
-pub use cell_info::{cell_format_info, CellFormatInfo};
+mod convenience;
+pub use cell_info::{CellFormatInfo, cell_format_info};
 mod datetime;
 mod fraction;
 mod general;
@@ -120,7 +120,8 @@ pub mod normalize;
 
 pub use api::{
     FormatEntry, format_number, format_number_result, format_number_with_date_system,
-    format_number_with_locale, format_text, format_value, format_values_batch,
+    format_number_with_locale, format_text, format_value, format_value_with_date_system,
+    format_values_batch,
 };
 pub use builder::{FormatOptions, FractionType, NegativeFormat, build_format_code};
 pub use color::{EXCEL_COLOR_PALETTE, FormatColor, palette_color};

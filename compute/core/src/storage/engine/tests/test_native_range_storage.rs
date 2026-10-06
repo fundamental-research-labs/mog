@@ -315,7 +315,7 @@ fn copy_native_ranges_and_formulas_owns_distinct_axes_and_edits() {
         (copy, 0, 100.0),
         (copy, 2, 114.0),
         (copy, 3, 114.0),
-        (copy, 4, 1.0),
+        (copy, 4, 100.0),
     ] {
         assert_eq!(
             as_f64(
@@ -327,6 +327,18 @@ fn copy_native_ranges_and_formulas_owns_distinct_axes_and_edits() {
             "sheet {sheet:?} column {col}"
         );
     }
+    let copied_formula_id = engine
+        .cell_store()
+        .resolve_cell_id(&copy, SheetPos::new(0, 4))
+        .unwrap();
+    let copied_formula = crate::storage::engine::formula_read::formula_text_for_cell_id(
+        &engine.stores,
+        engine.cell_store(),
+        &copy,
+        &copied_formula_id,
+    )
+    .unwrap();
+    assert_eq!(copied_formula, "=Copy!A1");
     let original = engine
         .cell_store()
         .get_sheet(&source)

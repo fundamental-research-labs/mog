@@ -147,7 +147,7 @@ impl ComputeEngine {
 
     /// Clear a range with a specific mode: "all", "contents", "formats", or "hyperlinks".
     ///
-    /// - "all" = clear contents + formats + hyperlinks
+    /// - "all" = clear contents, formats, hyperlinks, notes, validation and conditional formats
     /// - "contents" = clear cell values only, preserve formats
     /// - "formats" = clear formatting only, preserve values
     /// - "hyperlinks" = remove hyperlinks only
@@ -167,6 +167,12 @@ impl ComputeEngine {
                     // Clear contents (values + formulas)
                     let mut r1 =
                         engine.clear_range(sheet_id, start_row, start_col, end_row, end_col)?;
+                    let metadata = super::services::metadata_ranges::clear_range_metadata(
+                        &mut engine.stores,
+                        &engine.cell_store,
+                        sheet_id,
+                        cell_types::SheetRange::new(start_row, start_col, end_row, end_col),
+                    )?;
                     // Clear formats
                     let ranges = vec![(start_row, start_col, end_row, end_col)];
                     let r2 = {
@@ -182,6 +188,8 @@ impl ComputeEngine {
                         sheet_id, start_row, start_col, end_row, end_col,
                     )?;
                     r1.property_changes.extend(r2.property_changes);
+                    r1.comment_changes.extend(metadata.comment_changes);
+                    r1.cf_changes.extend(metadata.cf_changes);
 
                     Ok(r1)
                 }

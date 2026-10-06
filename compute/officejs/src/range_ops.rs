@@ -124,17 +124,28 @@ fn insert(operation: &Value, context: &HostDispatchContext<'_>) -> Result<(), Ba
         .and_then(Value::as_str)
         .unwrap_or("Down");
     let address = parsed(&range)?;
-    let (start_row, start_col, end_row, end_col) = address.bounds();
+    let (start_row, start_col, _, _) = address.bounds();
     let structure = range.sheet().structure();
     match shift {
-        "Down" | "down" => {
+        "Down" | "down" if address.is_entire_row() => {
             structure
                 .insert_rows(start_row, address.row_count())
                 .map_err(engine)?;
         }
-        "Right" | "right" => {
+        "Right" | "right" if address.is_entire_column() => {
             structure
                 .insert_columns(start_col, address.column_count())
+                .map_err(engine)?;
+        }
+        "Down" | "down" | "Right" | "right" => {
+            structure
+                .insert_cells_with_shift(
+                    start_row,
+                    start_col,
+                    address.row_count(),
+                    address.column_count(),
+                    matches!(shift, "Right" | "right"),
+                )
                 .map_err(engine)?;
         }
         other => {
@@ -143,7 +154,6 @@ fn insert(operation: &Value, context: &HostDispatchContext<'_>) -> Result<(), Ba
             )));
         }
     }
-    let _ = (end_row, end_col);
     Ok(())
 }
 

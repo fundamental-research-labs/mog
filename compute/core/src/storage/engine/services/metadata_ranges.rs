@@ -52,8 +52,16 @@ impl AstFold for Offset {
     }
     fn fold_range(&mut self, mut r: RangeRef) -> ASTNode {
         match (
-            self.reference(r.start, r.abs_start.row, r.abs_start.col),
-            self.reference(r.end, r.abs_end.row, r.abs_end.col),
+            self.reference(
+                r.start,
+                r.abs_start.row || r.range_type == formula_types::RangeType::ColumnRange,
+                r.abs_start.col || r.range_type == formula_types::RangeType::RowRange,
+            ),
+            self.reference(
+                r.end,
+                r.abs_end.row || r.range_type == formula_types::RangeType::ColumnRange,
+                r.abs_end.col || r.range_type == formula_types::RangeType::RowRange,
+            ),
         ) {
             (Some(start), Some(end)) => {
                 r.start = start;
@@ -217,4 +225,19 @@ pub(in crate::storage::engine) fn clear_range_metadata(
         }
     }
     Ok(result)
+}
+
+#[cfg(test)]
+mod metadata_range_tests {
+    #[test]
+    fn whole_axis_reference_rebase_preserves_unbounded_dimension() {
+        assert_eq!(
+            super::rebase_formula("SUM(A:A,$B:$B,1:1,$2:$2)", 1, 1),
+            "SUM(B:B,$B:$B,2:2,$2:$2)"
+        );
+        assert_eq!(
+            super::rebase_formula("AND(A1>0,$C$3=10,\"A1\"=\"A1\")", 1, 1),
+            "AND(B2>0,$C$3=10,\"A1\"=\"A1\")"
+        );
+    }
 }

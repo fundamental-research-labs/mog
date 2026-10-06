@@ -335,7 +335,13 @@ pub(in crate::storage::engine) fn resize_table(
         new_end_col,
     );
 
-    Ok(MutationResult::empty())
+    // Explicit structured references outside the resized range also depend
+    // on the table bounds. Refresh their dependency edges and live values.
+    Ok(MutationResult::from_recalc(
+        stores
+            .compute
+            .structure_change_with_formula_refresh(cell_store, None, &[])?,
+    ))
 }
 
 /// Toggle the totals row on/off for a table.

@@ -30,9 +30,8 @@ use crate::eval::functions::dense_aggregate::{
 ///   Booleans are coerced to 1.0/0.0, nulls to 0.0.
 ///
 /// - **InlineArray**: from elements of inline array constants like `{1,TRUE}`.
-///   For SUM/AVERAGE/MIN/MAX booleans are coerced (same as Inline), but for
-///   COUNT booleans are **skipped** (same as Range). This matches Excel
-///   where `SUM({TRUE,1})` = 2 but `COUNT({TRUE,1})` = 1.
+///   SUM and COUNT skip booleans (same as Range). Other reducers keep
+///   their own coercion policy.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::eval) enum ValueSource {
     Range,
@@ -108,7 +107,7 @@ pub(in crate::eval) fn flatten_tagged(
                     ValueSource::Range
                 } else if source == ValueSource::Inline {
                     // Elements of inline array constants (e.g., `{1, TRUE}`) get
-                    // InlineArray so SUM coerces booleans but COUNT skips them.
+                    // InlineArray so each reducer applies its array coercion policy.
                     ValueSource::InlineArray
                 } else {
                     source
@@ -157,14 +156,10 @@ fn agg_sum<'a>(vals: impl Iterator<Item = (&'a CellValue, ValueSource)>) -> Cell
             match value {
                 CellValue::Error(e, _) => return CellValue::Error(*e, None),
                 CellValue::Number(n) => acc.add_dd(n.to_f64x2()),
-                CellValue::Boolean(b)
-                    if source == ValueSource::Inline || source == ValueSource::InlineArray =>
-                {
+                CellValue::Boolean(b) if source == ValueSource::Inline => {
                     acc.add(if *b { 1.0 } else { 0.0 });
                 }
-                CellValue::Null
-                    if source == ValueSource::Inline || source == ValueSource::InlineArray =>
-                {
+                CellValue::Null if source == ValueSource::Inline => {
                     acc.add(0.0);
                 }
                 _ => {}
@@ -177,6 +172,12 @@ fn agg_sum<'a>(vals: impl Iterator<Item = (&'a CellValue, ValueSource)>) -> Cell
     {
         let mut acc = value_types::KahanSum::new();
         for (value, source) in vals {
+            // Array constants, like references, do not coerce booleans in SUM.
+            let source = if source == ValueSource::InlineArray {
+                ValueSource::Range
+            } else {
+                source
+            };
             match value_to_number(value, source) {
                 Some(Ok(n)) => acc.add(n),
                 Some(Err(e)) => return CellValue::Error(e, None),

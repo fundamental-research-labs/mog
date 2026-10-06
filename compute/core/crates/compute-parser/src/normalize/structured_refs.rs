@@ -5,7 +5,7 @@ use super::scan::skip_double_quoted;
 
 /// Qualify implicit structured references by prepending the table name.
 ///
-/// Rewrites `[@Column]` to `TableName[@Column]` throughout the formula.
+/// Rewrites short and long this-row references with their containing table name.
 /// Only applies when `table_name` is `Some` (cell is inside a table).
 ///
 /// # Examples
@@ -61,12 +61,15 @@ pub fn qualify_implicit_structured_refs(formula: &str, table_name: Option<&str>)
             continue;
         }
 
-        // Check for `[@` pattern
-        if bytes[i] == b'[' && i + 1 < len && bytes[i + 1] == b'@' {
+        // Only the outer opening bracket can start an implicit reference.
+        let long_this_row = formula[i..]
+            .get(.."[[#This Row],".len())
+            .is_some_and(|s| s.eq_ignore_ascii_case("[[#This Row],"));
+        if bytes[i] == b'[' && ((i + 1 < len && bytes[i + 1] == b'@') || long_this_row) {
             // Check if preceded by an identifier char (means it's already qualified)
             let preceded_by_ident = if i > 0 {
-                let prev = bytes[i - 1];
-                prev.is_ascii_alphanumeric() || prev == b'_' || prev == b'.'
+                let prev = formula[..i].chars().next_back().unwrap();
+                prev.is_alphanumeric() || prev == '_' || prev == '.' || prev == '[' || prev == '\''
             } else {
                 false
             };

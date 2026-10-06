@@ -282,8 +282,16 @@ fn parse_nested_brackets(inner: &str) -> Option<Vec<StructuredRefSpecifier>> {
                     name: unescape_column_name(bracket_inner),
                 });
             }
+        } else if parts.len() == 2
+            && matches!(specifiers.as_slice(), [StructuredRefSpecifier::ThisRow])
+            && !trimmed_part.contains(['[', ']', '#', '@', ':'])
+        {
+            // Long this-row syntax may use a simple unbracketed column name:
+            // [[#This Row],Sales]. Reserved punctuation still needs brackets.
+            specifiers.push(StructuredRefSpecifier::Column {
+                name: unescape_column_name(trimmed_part),
+            });
         } else {
-            // Not bracketed — invalid in nested context
             return None;
         }
     }

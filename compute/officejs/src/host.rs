@@ -2604,6 +2604,30 @@ impl Host {
                                         },
                                     );
                                 }
+                                "hyperlink" => {
+                                    let address = range
+                                        .sheet
+                                        .hyperlinks()
+                                        .get(metadata.row_index, metadata.column_index)
+                                        .map_err(engine_error)?;
+                                    let mut hyperlink = serde_json::Map::new();
+                                    if let Some(address) = address {
+                                        hyperlink.insert("address".to_string(), json!(address));
+                                        hyperlink.insert(
+                                            "textToDisplay".to_string(),
+                                            json!(
+                                                range
+                                                    .sheet
+                                                    .get_display_value((
+                                                        metadata.row_index,
+                                                        metadata.column_index
+                                                    ))
+                                                    .map_err(engine_error)?
+                                            ),
+                                        );
+                                    }
+                                    props.insert(property.clone(), Value::Object(hyperlink));
+                                }
                                 "numberFormat" | "text" | "valueTypes" => {
                                     props.extend(if unbounded {
                                         HashMap::from([(property.clone(), Value::Null)])

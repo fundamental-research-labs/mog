@@ -40,7 +40,9 @@ pub(super) fn write_book_views(w: &mut XmlWriter, workbook_views: &[WorkbookView
             w.attr_num("activeTab", view.active_tab);
         }
         if let Some(ratio) = view.tab_ratio {
-            w.attr_num("tabRatio", ratio);
+            // ECMA-376 types tabRatio as xsd:unsignedInt (per mille, 0..=1000);
+            // a fractional value makes strict readers (e.g. openpyxl) reject the file.
+            w.attr_num("tabRatio", ratio.round().clamp(0.0, 1000.0) as u32);
         }
         if !view.show_horizontal_scroll {
             w.attr_bool("showHorizontalScroll", false);

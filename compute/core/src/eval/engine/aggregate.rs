@@ -132,6 +132,7 @@ fn value_to_number(value: &CellValue, source: ValueSource) -> Option<Result<f64,
     match value {
         CellValue::Error(e, _) => Some(Err(*e)),
         CellValue::Number(n) => Some(Ok(n.get())),
+        CellValue::Text(_) if source == ValueSource::Inline => Some(value.coerce_to_number()),
         CellValue::Boolean(b)
             if source == ValueSource::Inline || source == ValueSource::InlineArray =>
         {
@@ -157,6 +158,12 @@ fn agg_sum<'a>(vals: impl Iterator<Item = (&'a CellValue, ValueSource)>) -> Cell
             match value {
                 CellValue::Error(e, _) => return CellValue::Error(*e, None),
                 CellValue::Number(n) => acc.add_dd(n.to_f64x2()),
+                CellValue::Text(_) if source == ValueSource::Inline => {
+                    match value.coerce_to_number() {
+                        Ok(n) => acc.add(n),
+                        Err(e) => return CellValue::Error(e, None),
+                    }
+                }
                 CellValue::Boolean(b)
                     if source == ValueSource::Inline || source == ValueSource::InlineArray =>
                 {
@@ -447,6 +454,45 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             op,
             flat.iter().map(|tagged| (&tagged.value, tagged.source)),
         ))
+    }
+
+    /// Preserve scalar/reference provenance for PRODUCT and SUMSQ too.
+    pub(in crate::eval) async fn eval_product_or_sumsq(
+        &mut self,
+        args: &[ASTNode],
+        product: bool,
+    ) -> Result<CellValue, ComputeError> {
+        if args.is_empty() {
+            return Ok(CellValue::Error(CellError::Value, None));
+        }
+        let vals = self.eval_and_flatten_tagged(args).await?;
+        let mut sum = value_types::KahanSum::new();
+        let mut result = 1.0;
+        let mut seen = false;
+        for tagged in vals {
+            let source = if tagged.source == ValueSource::InlineArray {
+                ValueSource::Range
+            } else {
+                tagged.source
+            };
+            match value_to_number(&tagged.value, source) {
+                Some(Ok(n)) => {
+                    seen = true;
+                    if product {
+                        result *= n;
+                    } else {
+                        sum.add(n * n);
+                    }
+                }
+                Some(Err(e)) => return Ok(CellValue::Error(e, None)),
+                None => {}
+            }
+        }
+        Ok(CellValue::number(if product {
+            if seen { result } else { 0.0 }
+        } else {
+            sum.total()
+        }))
     }
 
     /// Evaluate args and flatten arrays, tagging each value with whether it

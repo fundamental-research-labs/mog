@@ -753,7 +753,13 @@ pub(crate) fn add_rows(
         // they are empty. If occupied cells exist below the table, preserve
         // them by shifting the used sheet region down before writing.
         if sheet_has_rows_at_or_below(&sheet, absolute)? {
-            insert_sheet_rows(&sheet, absolute, row_count, table.range.end_col)?;
+            insert_table_cells(
+                &sheet,
+                absolute,
+                row_count,
+                table.range.start_col,
+                table.range.end_col,
+            )?;
         }
         let grid = parsed_values.as_ref();
         if let Some(grid) = grid {
@@ -770,7 +776,13 @@ pub(crate) fn add_rows(
     }
 
     let insert_row = data_insert_row(&table, requested_index)?;
-    insert_sheet_rows(&sheet, insert_row, row_count, table.range.end_col)?;
+    insert_table_cells(
+        &sheet,
+        insert_row,
+        row_count,
+        table.range.start_col,
+        table.range.end_col,
+    )?;
     let new_end = table.range.end_row.checked_add(row_count).ok_or_else(|| {
         invalid("The added rows would exceed the worksheet row limit".to_string())
     })?;
@@ -898,10 +910,10 @@ fn delete_table_row(
     }
 
     let sheet = table_ref.sheet();
-    let column_count = sheet_shift_column_count(&sheet, table.range.end_col)?;
+    let column_count = table.range.end_col - table.range.start_col + 1;
     sheet
         .structure()
-        .delete_cells_with_shift(absolute_row, 0, 1, column_count, false)
+        .delete_cells_with_shift(absolute_row, table.range.start_col, 1, column_count, false)
         .map_err(engine)?;
 
     let new_end = table.range.end_row.checked_sub(1).ok_or_else(|| {
@@ -920,38 +932,20 @@ fn delete_table_row(
     Ok(())
 }
 
-/// Add worksheet rows by remapping the used cell region from `at` downward.
-///
-/// The range width includes the table and every currently used neighboring
-/// column. This preserves adjacent values/formulas while keeping table
-/// metadata under explicit control at the call site.
-fn insert_sheet_rows(
+/// Reserve space only within the table columns; adjacent cells keep their positions.
+/// Partial shifts leave table metadata under explicit control at the call site.
+fn insert_table_cells(
     sheet: &Sheet,
     at: u32,
     count: u32,
-    table_end_col: u32,
+    start_col: u32,
+    end_col: u32,
 ) -> Result<(), TableCollectionError> {
-    let column_count = sheet_shift_column_count(sheet, table_end_col)?;
     sheet
         .structure()
-        .insert_cells_with_shift(at, 0, count, column_count, false)
+        .insert_cells_with_shift(at, start_col, count, end_col - start_col + 1, false)
         .map_err(engine)?;
     Ok(())
-}
-
-fn sheet_shift_column_count(
-    sheet: &Sheet,
-    table_end_col: u32,
-) -> Result<u32, TableCollectionError> {
-    let table_width = table_end_col
-        .checked_add(1)
-        .ok_or_else(|| invalid("The table exceeds the worksheet column limit".to_string()))?;
-    let used_width = sheet
-        .get_data_bounds()
-        .map_err(engine)?
-        .and_then(|bounds| bounds.max_col.checked_add(1))
-        .unwrap_or(0);
-    Ok(table_width.max(used_width))
 }
 
 fn sheet_has_rows_at_or_below(sheet: &Sheet, row: u32) -> Result<bool, TableCollectionError> {

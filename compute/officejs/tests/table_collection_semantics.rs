@@ -174,7 +174,7 @@ fn row_append_middle_insert_delete_preserve_neighbor_order_and_ranges() {
     );
     assert_eq!(
         output.value["sideAfterInsert"],
-        json!([["Side"], ["side-1"], [""], ["side-2"], ["side-3"], [""]])
+        json!([["Side"], ["side-1"], ["side-2"], ["side-3"], ["side-4"], [""]])
     );
     assert_eq!(
         output.value["sideAfterDelete"],
@@ -183,8 +183,8 @@ fn row_append_middle_insert_delete_preserve_neighbor_order_and_ranges() {
             ["side-1"],
             ["side-2"],
             ["side-3"],
-            [""],
-            ["side-4"]
+            ["side-4"],
+            [""]
         ])
     );
 }
@@ -260,7 +260,7 @@ fn always_insert_false_uses_blank_space_and_shifts_occupied_neighbors() {
         json!({
             "added": {"index": 2, "values": [["E", 5]]},
             "body": {"address": "Sheet1!A2:B3", "values": [["A", 1], ["B", 2]]},
-            "neighbors": [["E", 5, ""], ["tail", 99, "side-tail"]]
+            "neighbors": [["E", 5, "side-tail"], ["tail", 99, ""]]
         })
     );
 }

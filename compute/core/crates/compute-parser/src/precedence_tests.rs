@@ -9,7 +9,7 @@
 //!   Concat (&)
 //!   Add/Sub (+, -)
 //!   Mul/Div (*, /)
-//!   Exponentiation (^) — right-associative
+//!   Exponentiation (^) — left-associative
 //!   Prefix unary (+, -)
 //!   Postfix percent (%)
 //!   Intersection (space)
@@ -212,39 +212,31 @@ mod complex_precedence_chains {
 }
 
 // ===========================================================================
-// 2. Right-Associativity of Power
+// 2. Excel exponentiation is left associative.
 // ===========================================================================
-mod right_associativity_of_power {
+mod left_associativity_of_power {
     use super::*;
-
     #[test]
-    fn power_is_right_associative_two_ops() {
-        // Excel: 2^3^4 = 2^(3^4), NOT (2^3)^4
-        // 2^(3^4) = 2^81 = a huge number
-        // (2^3)^4 = 8^4 = 4096
-        // Excel gives 2^(3^4).
+    fn power_is_left_associative_two_ops() {
         let ast = parse("2^3^4");
-        let (two, inner_pow) = expect_binop(&ast, BinOp::Pow);
+        let (inner, four) = expect_binop(&ast, BinOp::Pow);
+        let (two, three) = expect_binop(inner, BinOp::Pow);
         expect_number(two, 2.0);
-        let (three, four) = expect_binop(inner_pow, BinOp::Pow);
         expect_number(three, 3.0);
         expect_number(four, 4.0);
     }
-
     #[test]
-    fn power_is_right_associative_chain_of_four() {
-        // A1^B1^C1^D1 = A1^(B1^(C1^D1))
+    fn power_is_left_associative_chain_of_four() {
         let ast = parse("A1^B1^C1^D1");
-        let (a1, rest) = expect_binop(&ast, BinOp::Pow);
-        expect_cell_ref(a1);
-        let (b1, rest2) = expect_binop(rest, BinOp::Pow);
-        expect_cell_ref(b1);
-        let (c1, d1) = expect_binop(rest2, BinOp::Pow);
-        expect_cell_ref(c1);
-        expect_cell_ref(d1);
+        let (abc, d) = expect_binop(&ast, BinOp::Pow);
+        let (ab, c) = expect_binop(abc, BinOp::Pow);
+        let (a, b) = expect_binop(ab, BinOp::Pow);
+        expect_cell_ref(a);
+        expect_cell_ref(b);
+        expect_cell_ref(c);
+        expect_cell_ref(d);
     }
 }
-
 // ===========================================================================
 // 3. Left-Associativity of Other Operators
 // ===========================================================================
@@ -420,13 +412,10 @@ mod unary_prefix {
 
     #[test]
     fn unary_minus_vs_power() {
-        // Excel semantics: -A1^B1 = -(A1^B1). Excel evaluates -2^2 as -4.
-        // Unary minus binds LOOSER than ^, so power captures the operand first.
+        // Excel negation precedes exponentiation: (-A1)^B1.
         let ast = parse("-A1^B1");
-        // Expected: -(A1^B1)
-        let inner = expect_unary(&ast, UnaryOp::Minus);
-        let (left, right) = expect_binop(inner, BinOp::Pow);
-        expect_cell_ref(left);
+        let (left, right) = expect_binop(&ast, BinOp::Pow);
+        expect_cell_ref(expect_unary(left, UnaryOp::Minus));
         expect_cell_ref(right);
     }
 
@@ -529,7 +518,7 @@ mod mixed_unary_and_binary {
     #[test]
     fn power_right_side_consumes_unary() {
         // 1^-2 = 1^(-2)
-        // Power is right-associative, and in the right-hand recursive call
+        // In the right-hand recursive call
         // the parser encounters unary minus and consumes it.
         let ast = parse("1^-2");
         let (left, right) = expect_binop(&ast, BinOp::Pow);
@@ -540,13 +529,9 @@ mod mixed_unary_and_binary {
 
     #[test]
     fn unary_minus_before_power_with_numbers() {
-        // Excel: -1^2 = -(1^2) = -1
-        // Unary minus binds looser than ^.
         let ast = parse("-1^2");
-        // Expected: -(1^2)
-        let inner = expect_unary(&ast, UnaryOp::Minus);
-        let (left, right) = expect_binop(inner, BinOp::Pow);
-        expect_number(left, 1.0);
+        let (left, right) = expect_binop(&ast, BinOp::Pow);
+        expect_number(expect_unary(left, UnaryOp::Minus), 1.0);
         expect_number(right, 2.0);
     }
 }

@@ -198,6 +198,20 @@ fn test_custom_view() {
 }
 
 #[test]
+fn test_tab_ratio_written_as_integer() {
+    let mut writer = WorkbookWriter::new();
+    writer.add_sheet("Sheet1", "rId1");
+    writer.set_view(WorkbookView {
+        tab_ratio: Some(874.3356112376613),
+        ..Default::default()
+    });
+
+    let xml = String::from_utf8(writer.to_xml()).unwrap();
+
+    assert!(xml.contains("tabRatio=\"874\""));
+}
+
+#[test]
 fn test_default_calc_settings() {
     let writer = WorkbookWriter::new();
     let xml = String::from_utf8(writer.to_xml()).unwrap();

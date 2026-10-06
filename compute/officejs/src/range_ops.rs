@@ -208,7 +208,7 @@ fn copy_from(operation: &Value, context: &HostDispatchContext<'_>) -> Result<(),
         return Err(invalid("Range.copyFrom requires a source range"));
     };
     let (src_sr, src_sc, src_er, src_ec) = bounds(&source)?;
-    let (dst_sr, dst_sc, _, _) = bounds(&dest)?;
+    let (dst_sr, dst_sc, dst_er, dst_ec) = bounds(&dest)?;
     let copy_type = match operation
         .get("copyType")
         .and_then(Value::as_str)
@@ -220,10 +220,28 @@ fn copy_from(operation: &Value, context: &HostDispatchContext<'_>) -> Result<(),
         "Formats" | "formats" => CopyType::Formats,
         other => return Err(invalid(format!("Unsupported RangeCopyType '{other}'"))),
     };
+    let transpose = operation
+        .get("transpose")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let (height, width) = if transpose {
+        (src_ec - src_sc + 1, src_er - src_sr + 1)
+    } else {
+        (src_er - src_sr + 1, src_ec - src_sc + 1)
+    };
+    let rows = (dst_er - dst_sr + 1).max(height);
+    let cols = (dst_ec - dst_sc + 1).max(width);
+    // Preserve the existing single-copy behavior for nonmultiple extents;
+    // this change only adds the documented exact-multiple replication.
+    let (row_tiles, col_tiles) = if rows % height == 0 && cols % width == 0 {
+        (rows / height, cols / width)
+    } else {
+        (1, 1)
+    };
     source
         .sheet()
         .structure()
-        .copy_range(
+        .copy_range_tiled(
             src_sr,
             src_sc,
             src_er,
@@ -236,10 +254,9 @@ fn copy_from(operation: &Value, context: &HostDispatchContext<'_>) -> Result<(),
                 .get("skipBlanks")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
-            operation
-                .get("transpose")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
+            transpose,
+            row_tiles,
+            col_tiles,
         )
         .map_err(engine)?;
     Ok(())

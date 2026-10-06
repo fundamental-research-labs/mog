@@ -106,6 +106,43 @@ pub(super) fn copy_range(
     }
 }
 
+pub(super) fn copy_range_tiled(
+    engine: &mut ComputeEngine,
+    source_sheet_id: &SheetId,
+    src_start_row: u32,
+    src_start_col: u32,
+    src_end_row: u32,
+    src_end_col: u32,
+    target_sheet_id: &SheetId,
+    target_row: u32,
+    target_col: u32,
+    copy_type: domain_types::domain::copy::CopyType,
+    skip_blanks: bool,
+    transpose: bool,
+    row_tiles: u32,
+    col_tiles: u32,
+) -> Result<MutationResult, ComputeError> {
+    let mut recalc = super::super::services::mutation_handlers::mutation_copy_range_tiled(
+        &mut engine.stores,
+        &mut engine.cell_store,
+        source_sheet_id,
+        src_start_row,
+        src_start_col,
+        src_end_row,
+        src_end_col,
+        target_sheet_id,
+        target_row,
+        target_col,
+        copy_type,
+        skip_blanks,
+        transpose,
+        row_tiles,
+        col_tiles,
+    )?;
+    engine.postprocess_mutation_recalc(&mut recalc);
+    Ok(MutationResult::from_recalc(recalc))
+}
+
 pub(super) fn remove_duplicates(
     engine: &mut ComputeEngine,
     sheet_id: &SheetId,

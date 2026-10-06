@@ -87,8 +87,79 @@ pub(in crate::storage::engine) fn mutation_copy_range(
     skip_blanks: bool,
     transpose: bool,
 ) -> Result<RecalcResult, ComputeError> {
+    mutation_copy_range_tiled(
+        stores,
+        cell_store,
+        source_sheet_id,
+        src_start_row,
+        src_start_col,
+        src_end_row,
+        src_end_col,
+        target_sheet_id,
+        target_row,
+        target_col,
+        copy_type,
+        skip_blanks,
+        transpose,
+        1,
+        1,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(in crate::storage::engine) fn mutation_copy_range_tiled(
+    stores: &mut EngineStores,
+    cell_store: &mut CellStore,
+    source_sheet_id: &SheetId,
+    src_start_row: u32,
+    src_start_col: u32,
+    src_end_row: u32,
+    src_end_col: u32,
+    target_sheet_id: &SheetId,
+    target_row: u32,
+    target_col: u32,
+    copy_type: domain_types::CopyType,
+    skip_blanks: bool,
+    transpose: bool,
+    row_tiles: u32,
+    col_tiles: u32,
+) -> Result<RecalcResult, ComputeError> {
     use crate::storage::properties;
     use domain_types::CopyType;
+
+    super::super::super::super::validation::range::validate_range_bounds(
+        src_start_row,
+        src_start_col,
+        src_end_row,
+        src_end_col,
+    )?;
+    let (height, width) = if transpose {
+        (
+            src_end_col - src_start_col + 1,
+            src_end_row - src_start_row + 1,
+        )
+    } else {
+        (
+            src_end_row - src_start_row + 1,
+            src_end_col - src_start_col + 1,
+        )
+    };
+    let invalid_extent = || ComputeError::InvalidInput {
+        message: "Invalid tiled copy extent".into(),
+    };
+    let end_row = height
+        .checked_mul(row_tiles)
+        .and_then(|n| n.checked_sub(1))
+        .and_then(|n| target_row.checked_add(n))
+        .ok_or_else(invalid_extent)?;
+    let end_col = width
+        .checked_mul(col_tiles)
+        .and_then(|n| n.checked_sub(1))
+        .and_then(|n| target_col.checked_add(n))
+        .ok_or_else(invalid_extent)?;
+    super::super::super::super::validation::range::validate_range_bounds(
+        target_row, target_col, end_row, end_col,
+    )?;
 
     // Range guard: reject if the destination sheet is Range-backed.
     if cell_store
@@ -122,80 +193,88 @@ pub(in crate::storage::engine) fn mutation_copy_range(
     {
         let sheet_store = cell_store.get_sheet(source_sheet_id);
 
-        for src_row in src_start_row..=src_end_row {
-            for src_col in src_start_col..=src_end_col {
-                let row_offset = src_row - src_start_row;
-                let col_offset = src_col - src_start_col;
+        // Freeze every tile before writing any target, including overlapping copies.
+        for tile_row in 0..row_tiles {
+            for tile_col in 0..col_tiles {
+                let target_row = target_row + tile_row * height;
+                let target_col = target_col + tile_col * width;
+                for src_row in src_start_row..=src_end_row {
+                    for src_col in src_start_col..=src_end_col {
+                        let row_offset = src_row - src_start_row;
+                        let col_offset = src_col - src_start_col;
 
-                // Apply transpose: swap row/col offsets
-                let (tgt_row, tgt_col) = if transpose {
-                    (target_row + col_offset, target_col + row_offset)
-                } else {
-                    (target_row + row_offset, target_col + col_offset)
-                };
+                        // Apply transpose: swap row/col offsets
+                        let (tgt_row, tgt_col) = if transpose {
+                            (target_row + col_offset, target_col + row_offset)
+                        } else {
+                            (target_row + row_offset, target_col + col_offset)
+                        };
 
-                let pos = SheetPos::new(src_row, src_col);
+                        let pos = SheetPos::new(src_row, src_col);
 
-                // Read source value
-                let value = cell_store
-                    .get_cell_value_at(source_sheet_id, pos)
-                    .cloned()
-                    .unwrap_or(CellValue::Null);
+                        // Read source value
+                        let value = cell_store
+                            .get_cell_value_at(source_sheet_id, pos)
+                            .cloned()
+                            .unwrap_or(CellValue::Null);
 
-                // Read source formula (identity formula for ref adjustment)
-                let source_formula = sheet_store.and_then(|sheet| {
-                    let id = sheet.cell_id_at(pos)?;
-                    Some((id, cell_store.get_formula(&id)?))
-                });
-                let (formula, formula_text, ref_positions) =
-                    if let Some((cell_id, id_formula)) = source_formula {
-                        let formula_text = stores.compute.get_formula(&cell_id).map(str::to_string);
-                        let positions = id_formula
-                            .refs
-                            .iter()
-                            .map(|reference| {
-                                resolve_identity_ref_to_fill_position(
-                                    cell_store,
-                                    source_sheet_id,
-                                    reference,
-                                    src_row,
-                                    src_col,
-                                )
-                            })
-                            .collect();
-                        (Some(id_formula.clone()), formula_text, positions)
-                    } else {
-                        (None, None, Vec::new())
-                    };
+                        // Read source formula (identity formula for ref adjustment)
+                        let source_formula = sheet_store.and_then(|sheet| {
+                            let id = sheet.cell_id_at(pos)?;
+                            Some((id, cell_store.get_formula(&id)?))
+                        });
+                        let (formula, formula_text, ref_positions) =
+                            if let Some((cell_id, id_formula)) = source_formula {
+                                let formula_text =
+                                    stores.compute.get_formula(&cell_id).map(str::to_string);
+                                let positions = id_formula
+                                    .refs
+                                    .iter()
+                                    .map(|reference| {
+                                        resolve_identity_ref_to_fill_position(
+                                            cell_store,
+                                            source_sheet_id,
+                                            reference,
+                                            src_row,
+                                            src_col,
+                                        )
+                                    })
+                                    .collect();
+                                (Some(id_formula.clone()), formula_text, positions)
+                            } else {
+                                (None, None, Vec::new())
+                            };
 
-                // Skip blank cells when skip_blanks is enabled
-                if skip_blanks && value == CellValue::Null && formula.is_none() {
-                    continue;
+                        // Skip blank cells when skip_blanks is enabled
+                        if skip_blanks && value == CellValue::Null && formula.is_none() {
+                            continue;
+                        }
+
+                        // Read source format (only needed for All and Formats modes)
+                        let format = match copy_type {
+                            CopyType::All | CopyType::Formats => Some(source_format_at(
+                                stores,
+                                cell_store,
+                                source_sheet_id,
+                                src_row,
+                                src_col,
+                            )),
+                            _ => None,
+                        };
+
+                        source_data.push(SourceCellData {
+                            src_row,
+                            src_col,
+                            tgt_row,
+                            tgt_col,
+                            value,
+                            formula,
+                            formula_text,
+                            ref_positions,
+                            format,
+                        });
+                    }
                 }
-
-                // Read source format (only needed for All and Formats modes)
-                let format = match copy_type {
-                    CopyType::All | CopyType::Formats => Some(source_format_at(
-                        stores,
-                        cell_store,
-                        source_sheet_id,
-                        src_row,
-                        src_col,
-                    )),
-                    _ => None,
-                };
-
-                source_data.push(SourceCellData {
-                    src_row,
-                    src_col,
-                    tgt_row,
-                    tgt_col,
-                    value,
-                    formula,
-                    formula_text,
-                    ref_positions,
-                    format,
-                });
             }
         }
     } // sheet_store borrow ends here

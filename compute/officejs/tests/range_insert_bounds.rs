@@ -106,3 +106,48 @@ fn bounded_insert_moves_formulas_and_formats_with_cells() {
         serde_json::json!([[[14]], [["=A2*2"]], [["0.00"]], [[15]], [["=A3+1"]]])
     );
 }
+
+#[test]
+fn bounded_insert_grows_compact_imported_axes_without_losing_tail_cells() {
+    for (script, read, expected) in [
+        (
+            r#"
+await Excel.run(async (context) => {
+  const sheet = context.workbook.worksheets.getActiveWorksheet();
+  sheet.getRange("A1:B2").values = [[1, 2], [3, 4]];
+  sheet.getRange("B1:B2").insert(Excel.InsertShiftDirection.right);
+  sheet.getRange("B1:B2").values = [[8], [9]];
+  await context.sync();
+});
+"#,
+            "A1:C2",
+            serde_json::json!([[1, 8, 2], [3, 9, 4]]),
+        ),
+        (
+            r#"
+await Excel.run(async (context) => {
+  const sheet = context.workbook.worksheets.getActiveWorksheet();
+  sheet.getRange("A1:A3").values = [[1], [2], [3]];
+  sheet.getRange("A2:A2").insert(Excel.InsertShiftDirection.down);
+  sheet.getRange("A2").values = [[99]];
+  await context.sync();
+});
+"#,
+            "A1:A4",
+            serde_json::json!([[1], [99], [2], [3]]),
+        ),
+    ] {
+        let workbook = Workbook::from_xlsx_bytes(include_bytes!("fixtures/insert-compact.xlsx"))
+            .unwrap()
+            .0;
+        run_office_js_with_workbook(&workbook, script).unwrap();
+        let exported = workbook.to_xlsx_bytes().unwrap();
+        let imported = Workbook::from_xlsx_bytes(&exported).unwrap().0;
+        for w in [&workbook, &imported] {
+            let result=run_office_js_with_workbook(w,&format!(r#"
+return await Excel.run(async c=>{{const r=c.workbook.worksheets.getActiveWorksheet().getRange("{read}");r.load("values");await c.sync();return r.values;}});
+"#)).unwrap();
+            assert_eq!(result.value, expected);
+        }
+    }
+}

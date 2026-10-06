@@ -10,7 +10,7 @@
 //!    evaluates condition, true-value, and false-value independently, then does
 //!    a single-pass conditional sum without an intermediate array from IF.
 //! 3. **Standard multi-arg** — `SUMPRODUCT(A1:A10, B1:B10)`: evaluate each
-//!    argument, convert to 2D f64 grids, multiply-accumulate with broadcasting.
+//!    argument, require equal dimensions, then multiply-accumulate.
 
 use crate::eval::context::traits::{EvalDataAccess, EvalMetadata};
 use crate::eval::engine::evaluator::Evaluator;
@@ -39,7 +39,7 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
     }
 
     /// Standard multi-arg SUMPRODUCT: evaluate each arg, convert to flat grids,
-    /// multiply-accumulate with broadcasting.
+    /// require equal dimensions, then multiply-accumulate.
     async fn eval_sumproduct_standard(
         &mut self,
         args: &[ASTNode],
@@ -54,6 +54,16 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         }
 
         if grids.is_empty() {
+            return Ok(CellValue::Error(CellError::Value, None));
+        }
+
+        // Separate arguments must have the same dimensions. Broadcasting belongs
+        // only to a single expression such as SUMPRODUCT(A1:A2 * B1:C1).
+        let first = &grids[0];
+        if grids
+            .iter()
+            .any(|grid| grid.rows != first.rows || grid.cols != first.cols)
+        {
             return Ok(CellValue::Error(CellError::Value, None));
         }
 

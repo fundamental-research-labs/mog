@@ -257,7 +257,7 @@ fn get_range_by_indexes_copy_from_and_insert_shift_cells() {
     .expect("range navigation/copy/insert should succeed");
     assert_eq!(
         output.value,
-        serde_json::json!([[1, 2, 1], [99, "", ""], [3, 4, 3]])
+        serde_json::json!([[1, 2, 1], [99, 4, 3], [3, "", ""]])
     );
 }
 

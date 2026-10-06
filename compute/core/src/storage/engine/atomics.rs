@@ -190,6 +190,7 @@ impl ComputeEngine {
                     r1.property_changes.extend(r2.property_changes);
                     r1.comment_changes.extend(metadata.comment_changes);
                     r1.cf_changes.extend(metadata.cf_changes);
+                    engine.refresh_cf_cache(sheet_id);
 
                     Ok(r1)
                 }
@@ -515,6 +516,39 @@ mod tests {
 
         let result = engine.clear_range_with_mode(&sid, 0, 0, 0, 0, "all");
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn atomics_clear_all_refreshes_conditional_format_cache() {
+        let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let sid = sheet_id();
+        engine.add_cf_rule(&sid,serde_json::json!({
+            "id":"always-red", "sheetId":sid.to_uuid_string(),
+            "ranges":[{"startRow":0,"startCol":0,"endRow":1,"endCol":0}],
+            "rules":[{"id":"rule","priority":1,"type":"formula","formula":"TRUE","style":{"backgroundColor":"#FF0000"}}]
+        })).unwrap();
+        let id = engine.resolve_cell_id_at(&sid, 0, 0).unwrap();
+        assert_eq!(
+            engine
+                .get_cell_format_with_cf(&sid, &id, 0, 0)
+                .background_color
+                .as_deref(),
+            Some("#ff0000")
+        );
+        engine
+            .clear_range_with_mode(&sid, 0, 0, 0, 0, "all")
+            .unwrap();
+        assert_ne!(
+            engine
+                .get_cell_format_with_cf(&sid, &id, 0, 0)
+                .background_color
+                .as_deref(),
+            Some("#ff0000")
+        );
+        assert!(
+            engine.get_all_cf_rules(&sid).len() == 1,
+            "outside-row rule survives"
+        );
     }
 
     #[test]

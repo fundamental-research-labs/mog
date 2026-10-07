@@ -32,6 +32,15 @@ use crate::worksheets::{self, WorksheetError, WorksheetRef};
 #[derive(Debug, Deserialize)]
 #[serde(tag = "op")]
 enum Op {
+    #[serde(rename = "applicationSetMode")]
+    ApplicationSetMode { mode: String },
+    #[serde(rename = "applicationCalculate")]
+    ApplicationCalculate {
+        #[serde(rename = "calculationType")]
+        calculation_type: String,
+    },
+    #[serde(rename = "applicationLoad")]
+    ApplicationLoad { id: String, properties: Vec<String> },
     #[serde(rename = "getItem")]
     GetItem { id: String, name: String },
     #[serde(rename = "getWorksheetCollection")]
@@ -806,6 +815,61 @@ impl Host {
                 }
             };
             match op {
+                Op::ApplicationSetMode { mode } => {
+                    let mode = match mode.as_str() {
+                        "Manual" => "manual",
+                        "Automatic" => "auto",
+                        "AutomaticExceptTables" => "autoNoTable",
+                        _ => {
+                            return Err(BatchError {
+                                code: "InvalidArgument",
+                                message: format!("Unknown calculation mode: {mode}"),
+                            });
+                        }
+                    };
+                    let previous = self
+                        .workbook
+                        .settings()
+                        .calculation_mode()
+                        .map_err(engine_error)?;
+                    self.workbook
+                        .settings()
+                        .set_calculation_mode(mode)
+                        .map_err(write_error)?;
+                    if previous == "manual" && mode != "manual" {
+                        self.workbook.recalculate().map_err(write_error)?;
+                    }
+                }
+                Op::ApplicationCalculate { calculation_type } => {
+                    if calculation_type != "Full" {
+                        return Err(BatchError {
+                            code: "NotSupported",
+                            message: "Only Application.calculate(Full) is supported.".into(),
+                        });
+                    }
+                    self.workbook.recalculate().map_err(write_error)?;
+                }
+                Op::ApplicationLoad { id, properties } => {
+                    for property in properties {
+                        if property != "calculationMode" {
+                            return Err(unsupported_load_property("Application", &property));
+                        }
+                        let mode = self
+                            .workbook
+                            .settings()
+                            .calculation_mode()
+                            .map_err(engine_error)?;
+                        let mode = match mode.as_str() {
+                            "manual" => "Manual",
+                            "autoNoTable" => "AutomaticExceptTables",
+                            _ => "Automatic",
+                        };
+                        loaded
+                            .entry(id.clone())
+                            .or_default()
+                            .insert(property, json!(mode));
+                    }
+                }
                 Op::GetItem { id, name } => {
                     let worksheet =
                         worksheets::get_item(&self.workbook, &name).map_err(worksheet_error)?;

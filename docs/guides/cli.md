@@ -21,10 +21,32 @@ mog --version
 
 `-e` / `--eval` takes inline JavaScript; `-f` / `--file` loads a script file.
 Use `--file=-script.js` for a filename beginning with `-`. Opening and saving without
-a script preserves imported formula caches. `-r` / `--recalculate` evaluates
-formulas before export. Scripts automatically trigger full recalculation after
-they finish, including workbooks imported in manual calculation mode. Within a
-script, `context.sync()` retains the Office.js calculation behavior.
+a script still follows the workbook's calculation settings. Automatic workbooks
+are calculated on load and after scripts. Manual workbooks retain cached results
+during reads and edits; changing a precedent can leave dependent results stale.
+Saving calculates formulas when `calcOnSave` is enabled, including in manual mode.
+Missing settings use the XLSX defaults: automatic mode and calculation on save.
+`-r` / `--recalculate` explicitly calculates formulas even in manual mode.
+
+`--preserve-results` explicitly sets manual calculation mode and disables
+calculation on save before reading or editing the workbook. Both settings are
+saved in the output and remain in a session; other calculation settings stay
+unchanged. This is a mode override, not a claim that an automatic-mode Excel open
+would retain old cached values. It conflicts with `-r`; the command fails before
+running a script or writing output. The flag is not applied again on later
+session requests unless supplied again, so a script can subsequently switch back
+to automatic mode. Restart sessions created by older binaries before using the
+new calculation policy; script requests to workers without support are rejected.
+
+Scripts can queue `context.application.calculationMode` changes using `Manual`,
+`Automatic`, or `AutomaticExceptTables`, load that property, and call
+`context.application.calculate(Excel.CalculationType.full)`. These operations run
+in queue order at `context.sync()`. Switching from manual to automatic calculates
+before subsequent queued reads; full calculation does not change the mode.
+`Recalculate` and `FullRebuild` calculation types are not yet supported. The
+same-input native Excel checks cover manual/automatic behavior for the tested
+workbooks; they do not establish every Excel version/freshness or data-table
+calculation condition.
 
 Exports finish serialization before touching an explicit destination, so a
 serialization failure does not truncate the input. Mog first tries atomic rename.

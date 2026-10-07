@@ -343,6 +343,7 @@
   function RequestContext() {
     ClientRequestContext.call(this);
     this.workbook = new Workbook(this);
+    this.application = new Application(this);
   }
   RequestContext.prototype = Object.create(ClientRequestContext.prototype);
   RequestContext.prototype.constructor = RequestContext;
@@ -591,6 +592,29 @@
     }
     return collection;
   }
+
+  function Application(context) {
+    ClientObject.call(this, context);
+  }
+  Application.prototype = Object.create(ClientObject.prototype);
+  Application.prototype.constructor = Application;
+  Application.prototype.load = function (props) {
+    this.context._queue.push({ op: "applicationLoad", id: this._id,
+      properties: normalizeLoad(props, ["calculationMode"]) });
+    return this;
+  };
+  Object.defineProperty(Application.prototype, "calculationMode", {
+    get: function () {
+      if (!this._loaded.calculationMode) throw propertyNotLoaded("calculationMode");
+      return this._calculationMode;
+    },
+    set: function (value) {
+      this.context._queue.push({ op: "applicationSetMode", mode: String(value) });
+    }
+  });
+  Application.prototype.calculate = function (calculationType) {
+    this.context._queue.push({ op: "applicationCalculate", calculationType: String(calculationType) });
+  };
 
   function Workbook(context) {
     ClientObject.call(this, context);

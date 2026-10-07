@@ -94,6 +94,11 @@ impl WorkbookSettings {
     // Atomic settings methods
     // -----------------------------------------------------------------
 
+    /// Read the current calculation mode ("auto", "autoNoTable", "manual").
+    pub fn calculation_mode(&self) -> Result<String, ComputeApiError> {
+        self.dispatch.query_engine(|e| e.get_calc_mode())
+    }
+
     /// Set the calculation mode ("auto", "autoNoTable", "manual").
     ///
     /// Atomically reads current settings, updates only the calc mode, and writes back.

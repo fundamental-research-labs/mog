@@ -21,6 +21,8 @@ const MAX_MESSAGE: u64 = 16 * 1024 * 1024;
 struct Record {
     port: u16,
     token: String,
+    #[serde(default)]
+    preserve_results: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -179,6 +181,7 @@ pub(super) fn worker() -> Result<()> {
         let record = Record {
             port: listener.local_addr()?.port(),
             token: Uuid::new_v4().to_string(),
+            preserve_results: true,
         };
         let path = record_path(&id)?;
         let mut file = tempfile::NamedTempFile::new_in(path.parent().unwrap())?;
@@ -249,6 +252,12 @@ pub(super) fn execute(id: &str, request: &Request) -> Result<String> {
     let record: Record = serde_json::from_slice(
         &fs::read(&path).map_err(|e| format!("session {id} is unavailable: {e}"))?,
     )?;
+    if (request.preserve_results || request.source.is_some()) && !record.preserve_results {
+        return Err(
+            "session does not support current calculation-mode policy; restart it with the current mog binary"
+                .into(),
+        );
+    }
     let address = SocketAddr::from((Ipv4Addr::LOCALHOST, record.port));
     let mut stream = match TcpStream::connect_timeout(&address, IO_TIMEOUT) {
         Ok(stream) => stream,

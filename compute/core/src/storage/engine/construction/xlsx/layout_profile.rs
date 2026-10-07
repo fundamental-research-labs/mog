@@ -37,6 +37,7 @@ pub(super) fn resolve(storage: &WorkbookStorage, mut metrics: LayoutMetrics) -> 
     } else {
         match (name.map(str::to_ascii_lowercase).as_deref(), font.size) {
             (Some("calibri"), Some(11.0)) => ImportedNormalFont::Calibri11,
+            (Some("calibri"), Some(12.0)) => ImportedNormalFont::Calibri12,
             (Some("calibri"), Some(20.0)) => ImportedNormalFont::Calibri20,
             (Some("arial"), Some(11.0)) => ImportedNormalFont::Arial11,
             _ => ImportedNormalFont::Unsupported,

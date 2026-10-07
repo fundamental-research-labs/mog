@@ -5,9 +5,15 @@ use std::path::Path;
 // Observations from identical synthetic inputs/actions in desktop Excel.
 // These are bounded profiles, not a font rasterizer or a universal platform default.
 #[test]
-fn imported_layout_matches_twelve_frozen_native_observations() {
+fn imported_layout_matches_eighteen_frozen_native_observations() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/layout");
     for case in [
+        "calibri12-base8",
+        "calibri12-column10",
+        "officejs-align_center",
+        "officejs-align_wrap",
+        "officejs-col_row_size",
+        "scratch-column_row_sizes",
         "calibri11-base8",
         "calibri11-base10",
         "calibri11-default10",
@@ -120,6 +126,33 @@ fn unknown_font_two_cell_chart_cannot_bake_unverified_untouched_dimension() {
             serde_json::to_value(sheet.charts().get_all().unwrap()).unwrap(),
             before,
             "{property} must not mutate geometry"
+        );
+    }
+}
+
+#[test]
+fn calibri12_public_point_setters_match_separate_native_readbacks() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/layout");
+    for case in [
+        "officejs-align_center",
+        "officejs-align_wrap",
+        "officejs-col_row_size",
+        "scratch-column_row_sizes",
+    ] {
+        let dir = root.join(case);
+        let (w, _) =
+            Workbook::from_xlsx_bytes(&std::fs::read(dir.join("input.xlsx")).unwrap()).unwrap();
+        let script = std::fs::read_to_string(dir.join("observe.js")).unwrap();
+        let expected = std::fs::read_to_string(dir.join("observe-expected.txt")).unwrap();
+        let out = run_office_js_with_workbook(&w, &script).unwrap();
+        assert_eq!(out.stdout.trim_end(), expected.trim_end(), "{case}");
+        let (w, _) = Workbook::from_xlsx_bytes(&w.to_xlsx_bytes().unwrap()).unwrap();
+        let (_, readback) = script.rsplit_once("\nawait Excel.run").unwrap();
+        let out = run_office_js_with_workbook(&w, &format!("await Excel.run{readback}")).unwrap();
+        assert_eq!(
+            out.stdout.trim_end(),
+            expected.trim_end(),
+            "{case} saved geometry without reapplying setters"
         );
     }
 }

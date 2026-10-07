@@ -201,6 +201,7 @@ pub const DEFAULT_COL_WIDTH: CharWidth = CharWidth(8.43);
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ImportedNormalFont {
     Calibri11,
+    Calibri12,
     Calibri20,
     Arial11,
     Unsupported,
@@ -209,6 +210,7 @@ impl ImportedNormalFont {
     pub fn base_character_pixels(self) -> Option<f64> {
         match self {
             Self::Calibri11 => Some(8.0),
+            Self::Calibri12 => Some(9.0),
             Self::Calibri20 => Some(16.0),
             Self::Arial11 => Some(9.0),
             Self::Unsupported => None,
@@ -217,6 +219,7 @@ impl ImportedNormalFont {
     pub fn row_height_points(self) -> Option<f64> {
         match self {
             Self::Calibri11 => Some(15.0),
+            Self::Calibri12 => Some(15.75),
             Self::Calibri20 => Some(26.25),
             Self::Arial11 => Some(14.25),
             Self::Unsupported => None,
@@ -225,6 +228,7 @@ impl ImportedNormalFont {
     pub fn explicit_width_mdw(self) -> Option<f64> {
         match self {
             Self::Calibri11 => Some(7.0),
+            Self::Calibri12 => Some(8.0),
             Self::Calibri20 => Some(14.0),
             Self::Arial11 => Some(8.0),
             Self::Unsupported => None,

@@ -1,0 +1,1 @@
+{"aWidth":24,"aHeight":30,"bWidth":67.5}

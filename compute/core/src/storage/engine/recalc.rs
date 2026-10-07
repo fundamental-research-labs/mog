@@ -144,7 +144,11 @@ impl ComputeEngine {
                 engine.stores.layout_metrics,
             )?;
             rebuilt_store.char_code_page = char_code_page;
+            let runtime_mode = engine.stores.compute.runtime_calc_mode_override();
             engine.stores.compute = ComputeCore::new();
+            if let Some(mode) = runtime_mode {
+                engine.stores.compute.set_runtime_calc_mode(mode);
+            }
             let recalc = engine
                 .stores
                 .compute

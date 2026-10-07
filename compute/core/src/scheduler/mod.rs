@@ -647,6 +647,11 @@ impl ComputeCore {
         self.calc_mode
     }
 
+    /// Session override, retained across rebuilds but absent in new engines.
+    pub(crate) fn runtime_calc_mode_override(&self) -> Option<CalcMode> {
+        self.runtime_calc_mode
+    }
+
     /// Override calculation behavior for this engine session only.
     pub fn set_runtime_calc_mode(&mut self, mode: CalcMode) {
         self.runtime_calc_mode = Some(mode);

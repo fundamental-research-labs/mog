@@ -22,6 +22,11 @@ jobs:
     name: Build and test
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    env:
+      # The workspace test binaries exhaust the runner disk with debug symbols.
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -37,6 +42,7 @@ jobs:
         with:
           # Workspace cargo config sets build.target-dir = "target-native".
           workspaces: ". -> target-native"
+          key: tests-no-debuginfo-v1
           cache-on-failure: true
 
       - name: Build Mog

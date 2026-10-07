@@ -5,7 +5,7 @@ use std::{
     process::{Command, Output},
 };
 use tempfile::TempDir;
-use value_types::CellValue;
+use value_types::{CellError, CellValue};
 
 struct Fixture(TempDir);
 impl Fixture {
@@ -167,11 +167,11 @@ fn default_manual_script_preserves_and_automatic_transition_recalculates() {
     let sheet = w.sheet_by_index(0).unwrap();
     assert!(matches!(
         sheet.get_cell_value("A1").unwrap(),
-        CellValue::Error(..)
+        CellValue::Error(CellError::Name, _)
     ));
     assert!(matches!(
         sheet.get_cell_value("A2").unwrap(),
-        CellValue::Error(..)
+        CellValue::Error(CellError::Name, _)
     ));
     assert_eq!(w.settings().calculation_mode().unwrap(), "auto");
 }
@@ -396,11 +396,11 @@ fn imported_mode_and_calculation_on_save_control_live_and_saved_values() {
         if live_error || save_calc {
             assert!(matches!(
                 sheet.get_cell_value("A1").unwrap(),
-                CellValue::Error(..)
+                CellValue::Error(CellError::Name, _)
             ));
             assert!(matches!(
                 sheet.get_cell_value("A2").unwrap(),
-                CellValue::Error(..)
+                CellValue::Error(CellError::Name, _)
             ));
         } else {
             f.values("output.xlsx", 42.0, 84.0);

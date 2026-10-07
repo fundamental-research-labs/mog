@@ -252,12 +252,6 @@ pub(super) fn execute(id: &str, request: &Request) -> Result<String> {
     let record: Record = serde_json::from_slice(
         &fs::read(&path).map_err(|e| format!("session {id} is unavailable: {e}"))?,
     )?;
-    if !request.discard && !record.preserve_results {
-        return Err(
-            "session does not support current calculation-mode policy; restart it with the current mog binary"
-                .into(),
-        );
-    }
     let address = SocketAddr::from((Ipv4Addr::LOCALHOST, record.port));
     let mut stream = match TcpStream::connect_timeout(&address, IO_TIMEOUT) {
         Ok(stream) => stream,
@@ -268,6 +262,11 @@ pub(super) fn execute(id: &str, request: &Request) -> Result<String> {
             return Err(format!("session {id} is unavailable: {error}").into());
         }
     };
+    // Probe liveness first so dead registrations retain normal cleanup. A live
+    // unsupported worker receives no request bytes before this guard returns.
+    if !request.discard && !record.preserve_results {
+        return Err("session does not support current calculation-mode policy; restart it with the current mog binary".into());
+    }
     stream.set_write_timeout(Some(IO_TIMEOUT))?;
     // Scripts and large exports can take arbitrarily long; do not time them out
     // and leave the caller unsure whether an operation completed.

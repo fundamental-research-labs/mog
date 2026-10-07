@@ -2,6 +2,9 @@ use crate::storage::WorkbookStorage;
 use domain_types::units::{ImportedNormalFont, LayoutMetrics};
 
 pub(super) fn resolve(storage: &WorkbookStorage, mut metrics: LayoutMetrics) -> LayoutMetrics {
+    if !metrics.derive_imported_normal_font {
+        return metrics;
+    }
     metrics.imported_normal_font = None;
     // Select the actual Normal style, not whichever font appears first.
     let Some(styles) = storage.metadata.stylesheet.as_ref() else {

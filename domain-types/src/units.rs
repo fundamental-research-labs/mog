@@ -243,6 +243,10 @@ impl ImportedNormalFont {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutMetrics {
+    /// Derive imported Normal-font metrics only for the default import policy.
+    /// Explicit host profiles keep their caller-provided conversion contract.
+    #[serde(default)]
+    pub derive_imported_normal_font: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub imported_normal_font: Option<ImportedNormalFont>,
     pub column_width_mdw: f64,
@@ -257,6 +261,7 @@ impl LayoutMetrics {
         }
 
         Some(Self {
+            derive_imported_normal_font: false,
             imported_normal_font: None,
             column_width_mdw,
             default_column_width_px: char_width_to_pixels(DEFAULT_COL_WIDTH, column_width_mdw).0,
@@ -300,7 +305,10 @@ impl LayoutMetrics {
     }
 
     pub fn platform_default() -> Self {
-        Self::from_column_width_mdw(platform_mdw()).expect("platform MDW must be valid")
+        let mut metrics =
+            Self::from_column_width_mdw(platform_mdw()).expect("platform MDW must be valid");
+        metrics.derive_imported_normal_font = true;
+        metrics
     }
 
     pub fn validate(self) -> Option<Self> {
@@ -462,6 +470,7 @@ mod tests {
         assert_eq!(
             LayoutMetrics::from_column_width_mdw(MDW_CALIBRI_11_96DPI),
             Some(LayoutMetrics {
+                derive_imported_normal_font: false,
                 imported_normal_font: None,
                 column_width_mdw: 7.0,
                 default_column_width_px: 64.0,
@@ -471,6 +480,7 @@ mod tests {
         assert_eq!(
             LayoutMetrics::from_column_width_mdw(MDW_CALIBRI_11_MACOS),
             Some(LayoutMetrics {
+                derive_imported_normal_font: false,
                 imported_normal_font: None,
                 column_width_mdw: 8.0,
                 default_column_width_px: 72.0,
@@ -559,6 +569,7 @@ mod tests {
     #[test]
     fn resolve_default_column_width_uses_profile_when_sheet_values_absent() {
         let metrics = LayoutMetrics {
+            derive_imported_normal_font: false,
             imported_normal_font: None,
             column_width_mdw: 9.0,
             default_column_width_px: 123.0,

@@ -6,6 +6,39 @@ fn part(w: &Workbook, path: &str) -> String {
     let z = xlsx_parser::zip::XlsxArchive::new(&bytes).unwrap();
     String::from_utf8(z.read_file(path).unwrap()).unwrap()
 }
+fn assert_sales_series_cache(xml: &str) {
+    use xlsx_parser::domain::charts::{CatDataSource, Chart, NumDataSource};
+    let chart = Chart::parse(xml.as_bytes());
+    assert_eq!(chart.series.len(), 1, "Expected exactly one Sales series");
+    let series = &chart.series[0];
+    let values = match series.val.as_ref().expect("Series value source") {
+        NumDataSource::Ref(reference) => reference.num_cache.as_ref().expect("Numeric cache"),
+        other => panic!("Expected worksheet numeric reference, got {other:?}"),
+    };
+    assert_eq!(values.pt_count, Some(3));
+    assert_eq!(
+        values
+            .pts
+            .iter()
+            .map(|point| (point.idx, point.v.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(0, "15"), (1, "20"), (2, "10")]
+    );
+    let categories = match series.cat.as_ref().expect("Series category source") {
+        CatDataSource::StrRef(reference) => reference.str_cache.as_ref().expect("String cache"),
+        other => panic!("Expected worksheet string reference, got {other:?}"),
+    };
+    assert_eq!(categories.pt_count, Some(3));
+    assert_eq!(
+        categories
+            .pts
+            .iter()
+            .map(|point| (point.idx, point.v.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(0, "A"), (1, "B"), (2, "C")]
+    );
+}
+
 #[test]
 fn original_sized_chart_persists_name_geometry_legend_and_content() {
     let (w, _) = Workbook::blank().unwrap();
@@ -33,14 +66,12 @@ fn original_sized_chart_persists_name_geometry_legend_and_content() {
             drawing.contains("cx=\"6096000\" cy=\"3810000\""),
             "{drawing}"
         );
+        assert_sales_series_cache(&chart);
         for text in [
             "Revised title",
             "Category",
             "Revenue",
             "<c:legendPos val=\"b\"",
-            "15",
-            "20",
-            "10",
         ] {
             assert!(chart.contains(text), "missing {text}: {chart}");
         }
@@ -66,6 +97,7 @@ fn original_set_position_includes_end_cell_and_uses_sheet_geometry() {
         object.common.height,
         sheet.layout().get_row_position(18).unwrap() - sheet.layout().get_row_position(1).unwrap()
     );
+    assert_sales_series_cache(&part(&w, "xl/charts/chart1.xml"));
     let drawing = part(&w, "xl/drawings/drawing1.xml");
     assert!(drawing.contains("<xdr:twoCellAnchor"), "{drawing}");
     assert!(
@@ -113,6 +145,7 @@ fn imported_chart_rename_does_not_replace_title_or_series_cache() {
     .unwrap();
     assert!(part(&w, "xl/drawings/drawing1.xml").contains("name=\"Renamed\""));
     let chart = part(&w, "xl/charts/chart1.xml");
+    assert_sales_series_cache(&chart);
     for text in [
         "Another title",
         "Sales",

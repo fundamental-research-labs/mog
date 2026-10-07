@@ -494,7 +494,7 @@ pub(in crate::eval) async fn try_eval_single_criteria_borrowed<
                     &[criteria_slice],
                     &ss,
                     total_rows,
-                    &[NormalizedKey::Text(text.to_ascii_lowercase())],
+                    &[NormalizedKey::Text(text.to_lowercase())],
                 ),
             )
         } else {

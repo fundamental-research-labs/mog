@@ -141,3 +141,25 @@ fn range_endpoints_and_single_anchor_use_live_sheet_positions() {
     .unwrap();
     assert_eq!(output.value, json!([0, 0, true, true]));
 }
+
+#[test]
+fn size_only_change_keeps_positioned_start_cell() {
+    let (w, _) = Workbook::blank().unwrap();
+    run_office_js_with_workbook(&w, include_str!("fixtures/issue440_position.js")).unwrap();
+    run_office_js_with_workbook(
+        &w,
+        r#"await Excel.run(async c=>{
+      const ch=c.workbook.worksheets.getItem("Sheet1").charts.getItem("SyntheticSales");
+      ch.width=480;await c.sync();
+    });"#,
+    )
+    .unwrap();
+    let drawing = part(&w, "xl/drawings/drawing1.xml");
+    assert!(drawing.contains("<xdr:oneCellAnchor>"), "{drawing}");
+    assert!(
+        drawing.contains("<xdr:col>3</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row>"),
+        "{drawing}"
+    );
+    assert!(drawing.contains("cx=\"6096000\""), "{drawing}");
+    assert!(!drawing.contains("absoluteAnchor"));
+}

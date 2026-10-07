@@ -117,6 +117,28 @@ pub(crate) fn set(sheet: &Sheet, id: &str, property: &str, value: &Value) -> Res
                 "absoluteXEmu":(left*EMU_PER_POINT).round() as i64,"absoluteYEmu":(top*EMU_PER_POINT).round() as i64,
                 "extentCxEmu":(width*EMU_PER_POINT).round() as i64,"extentCyEmu":(height*EMU_PER_POINT).round() as i64,
                 "endRow":null,"endCol":null,"endRowOffsetEmu":null,"endColOffsetEmu":null}});
+            if matches!(property, "width" | "height")
+                && current["anchor"]["anchorMode"] != "absolute"
+            {
+                // Resizing must not bake a platform-specific cell origin into
+                // absolute coordinates. Preserve the existing start marker.
+                let mut anchor = current["anchor"].clone();
+                anchor["anchorMode"] = json!("oneCell");
+                for key in [
+                    "absoluteXEmu",
+                    "absoluteYEmu",
+                    "endRow",
+                    "endCol",
+                    "endRowOffsetEmu",
+                    "endColOffsetEmu",
+                ] {
+                    anchor[key] = Value::Null;
+                }
+                anchor["extentCxEmu"] = json!((width * EMU_PER_POINT).round() as i64);
+                anchor["extentCyEmu"] = json!((height * EMU_PER_POINT).round() as i64);
+                updates["anchor"] = anchor;
+                updates["anchorCellId"] = current["anchorCellId"].clone();
+            }
         }
         "setPosition" => {
             let bounds = |v: &Value| -> Result<(u32, u32, u32, u32), String> {

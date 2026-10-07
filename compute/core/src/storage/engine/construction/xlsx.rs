@@ -1,5 +1,6 @@
 use super::*;
 mod stream;
+mod layout_profile;
 use stream::NativeCellSink;
 
 /// Construct a `ComputeEngine` from raw XLSX bytes without recalculation.
@@ -37,6 +38,8 @@ fn from_xlsx_bytes_with_layout(
         formula_cells,
         stats,
     ) = parse_and_hydrate_xlsx(xlsx_data, &mut on_chunk)?;
+
+    let layout_metrics = layout_profile::resolve(&storage, layout_metrics);
 
     let (cell_store, compute, recalc_result) = {
         let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "store_compute_rebuild");

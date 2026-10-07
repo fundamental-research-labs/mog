@@ -33,8 +33,7 @@ impl ComputeEngine {
     ) -> Result<MutationResult, ComputeError> {
         // Validate in canonical units (char-width)
         let width_px = domain_types::units::Pixels(width_px);
-        let mdw = self.stores.layout_metrics.column_width_mdw;
-        let width_cw = domain_types::units::pixels_to_char_width(width_px, mdw);
+        let width_cw = self.stores.layout_metrics.pixels_to_column_width(width_px);
         validation::structure::validate_col_width(width_cw)?;
         services::structural::set_col_width(
             &mut self.stores,
@@ -50,13 +49,12 @@ impl ComputeEngine {
         sheet_id: &SheetId,
         widths: &[(u32, f64)],
     ) -> Result<MutationResult, ComputeError> {
-        let mdw = self.stores.layout_metrics.column_width_mdw;
         let widths_px: Vec<(u32, domain_types::units::Pixels)> = widths
             .iter()
             .map(|(col, width)| (*col, domain_types::units::Pixels(*width)))
             .collect();
         for (_, width_px) in &widths_px {
-            let width_cw = domain_types::units::pixels_to_char_width(*width_px, mdw);
+            let width_cw = self.stores.layout_metrics.pixels_to_column_width(*width_px);
             validation::structure::validate_col_width(width_cw)?;
         }
         services::structural::set_col_widths(

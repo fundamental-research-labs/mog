@@ -196,6 +196,42 @@ pub const DEFAULT_ROW_HEIGHT: Points = Points(15.0);
 /// Default column width: 8.43 character-width units.
 pub const DEFAULT_COL_WIDTH: CharWidth = CharWidth(8.43);
 
+/// Bounded Windows Excel metrics established by native import probes.
+/// Unknown imported fonts remain importable but physical geometry is unsupported.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum ImportedNormalFont {
+    Calibri11,
+    Calibri20,
+    Arial11,
+    Unsupported,
+}
+impl ImportedNormalFont {
+    pub fn base_character_pixels(self) -> Option<f64> {
+        match self {
+            Self::Calibri11 => Some(8.0),
+            Self::Calibri20 => Some(16.0),
+            Self::Arial11 => Some(9.0),
+            Self::Unsupported => None,
+        }
+    }
+    pub fn row_height_points(self) -> Option<f64> {
+        match self {
+            Self::Calibri11 => Some(15.0),
+            Self::Calibri20 => Some(26.25),
+            Self::Arial11 => Some(14.25),
+            Self::Unsupported => None,
+        }
+    }
+    pub fn explicit_width_mdw(self) -> Option<f64> {
+        match self {
+            Self::Calibri11 => Some(7.0),
+            Self::Calibri20 => Some(14.0),
+            Self::Arial11 => Some(8.0),
+            Self::Unsupported => None,
+        }
+    }
+}
+
 /// Runtime layout metrics used to convert canonical spreadsheet dimensions
 /// into pixels.
 ///
@@ -203,6 +239,8 @@ pub const DEFAULT_COL_WIDTH: CharWidth = CharWidth(8.43);
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutMetrics {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imported_normal_font: Option<ImportedNormalFont>,
     pub column_width_mdw: f64,
     pub default_column_width_px: f64,
     pub default_row_height_px: f64,
@@ -215,10 +253,46 @@ impl LayoutMetrics {
         }
 
         Some(Self {
+            imported_normal_font: None,
             column_width_mdw,
             default_column_width_px: char_width_to_pixels(DEFAULT_COL_WIDTH, column_width_mdw).0,
             default_row_height_px: points_to_pixels(DEFAULT_ROW_HEIGHT).0,
         })
+    }
+
+    pub fn column_width_to_pixels(self, width: CharWidth) -> Pixels {
+        if let Some(mdw) = self
+            .imported_normal_font
+            .and_then(ImportedNormalFont::explicit_width_mdw)
+        {
+            return Pixels(
+                (((256.0 * width.0 + (128.0 / mdw).trunc()) / 256.0) * mdw)
+                    .trunc()
+                    .max(0.0),
+            );
+        }
+        char_width_to_pixels(width, self.column_width_mdw)
+    }
+    pub fn pixels_to_column_width(self, pixels: Pixels) -> CharWidth {
+        if let Some(mdw) = self
+            .imported_normal_font
+            .and_then(ImportedNormalFont::explicit_width_mdw)
+        {
+            return CharWidth((pixels.0 / mdw * 256.0).trunc() / 256.0);
+        }
+        pixels_to_char_width(pixels, self.column_width_mdw)
+    }
+    pub fn effective_row_height(self, declared: Option<Points>, custom: bool) -> Pixels {
+        if !custom
+            && let Some(points) = self
+                .imported_normal_font
+                .and_then(ImportedNormalFont::row_height_points)
+        {
+            return points_to_pixels(Points(points));
+        }
+        declared
+            .map(points_to_pixels)
+            .unwrap_or_else(|| self.default_row_height())
     }
 
     pub fn platform_default() -> Self {
@@ -330,6 +404,21 @@ pub fn resolve_default_column_width(
     layout_metrics: LayoutMetrics,
 ) -> ResolvedDefaultColumnWidth {
     let effective = effective_default_column_width(default_col_width.map(|w| w.0), base_col_width);
+    if let Some(font) = layout_metrics.imported_normal_font {
+        if default_col_width.is_some() {
+            return ResolvedDefaultColumnWidth {
+                pixels: layout_metrics.column_width_to_pixels(effective.width),
+                source: effective.source,
+            };
+        }
+        if let Some(unit) = font.base_character_pixels() {
+            return ResolvedDefaultColumnWidth {
+                pixels: Pixels(f64::from(base_col_width.unwrap_or(8)) * unit),
+                source: effective.source,
+            };
+        }
+    }
+
     let pixels = match effective.source {
         DefaultColumnWidthSource::ProfileFallback => layout_metrics.default_column_width(),
         DefaultColumnWidthSource::ExplicitDefault | DefaultColumnWidthSource::BaseDerived => {
@@ -369,6 +458,7 @@ mod tests {
         assert_eq!(
             LayoutMetrics::from_column_width_mdw(MDW_CALIBRI_11_96DPI),
             Some(LayoutMetrics {
+                imported_normal_font: None,
                 column_width_mdw: 7.0,
                 default_column_width_px: 64.0,
                 default_row_height_px: 20.0,
@@ -377,6 +467,7 @@ mod tests {
         assert_eq!(
             LayoutMetrics::from_column_width_mdw(MDW_CALIBRI_11_MACOS),
             Some(LayoutMetrics {
+                imported_normal_font: None,
                 column_width_mdw: 8.0,
                 default_column_width_px: 72.0,
                 default_row_height_px: 20.0,
@@ -445,8 +536,7 @@ mod tests {
         // resolves in pixels; a sheet carrying only `baseColWidth` must not get
         // two different answers.
         let metrics = LayoutMetrics::from_column_width_mdw(MDW_CALIBRI_11_96DPI).unwrap();
-        for (default_width, base_width) in
-            [(Some(9.25), Some(10)), (None, Some(10)), (None, None)]
+        for (default_width, base_width) in [(Some(9.25), Some(10)), (None, Some(10)), (None, None)]
         {
             let chars = effective_default_column_width(default_width, base_width);
             let pixels =
@@ -465,6 +555,7 @@ mod tests {
     #[test]
     fn resolve_default_column_width_uses_profile_when_sheet_values_absent() {
         let metrics = LayoutMetrics {
+            imported_normal_font: None,
             column_width_mdw: 9.0,
             default_column_width_px: 123.0,
             default_row_height_px: 20.0,

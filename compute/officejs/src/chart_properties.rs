@@ -23,6 +23,12 @@ fn origin(sheet: &Sheet, value: &Value) -> Result<(f64, f64), String> {
     }
     let row = a["anchorRow"].as_u64().unwrap_or(0) as u32;
     let col = a["anchorCol"].as_u64().unwrap_or(0) as u32;
+    if row == 0 && col == 0 {
+        return Ok((
+            a["anchorColOffsetEmu"].as_f64().unwrap_or(0.0) / EMU_PER_POINT,
+            a["anchorRowOffsetEmu"].as_f64().unwrap_or(0.0) / EMU_PER_POINT,
+        ));
+    }
     Ok((
         sheet
             .layout()
@@ -45,9 +51,22 @@ pub(crate) fn get(sheet: &Sheet, id: &str, property: &str) -> Result<Value, Stri
         "name" => Ok(value["name"].clone()),
         "left" => Ok(json!(origin(sheet, &value)?.0)),
         "top" => Ok(json!(origin(sheet, &value)?.1)),
-        "width" | "height" => Ok(json!(
-            value[property].as_f64().unwrap_or(0.0) / PIXELS_PER_POINT
-        )),
+        "width" | "height" => {
+            // A two-cell extent depends on the effective grid, unlike an explicit EMU extent.
+            if value["anchor"]["anchorMode"] == "twoCell" {
+                sheet
+                    .layout()
+                    .get_col_position(0)
+                    .map_err(|e| e.to_string())?;
+                sheet
+                    .layout()
+                    .get_row_position(0)
+                    .map_err(|e| e.to_string())?;
+            }
+            Ok(json!(
+                value[property].as_f64().unwrap_or(0.0) / PIXELS_PER_POINT
+            ))
+        }
         _ => Err(format!("Unsupported Chart load property '{property}'")),
     }
 }

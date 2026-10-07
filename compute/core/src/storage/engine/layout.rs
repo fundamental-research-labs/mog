@@ -18,6 +18,27 @@ use value_types::ComputeError;
     crate_path = "compute_core"
 )]
 impl ComputeEngine {
+    /// Explain why a physical geometry operation cannot use verified import metrics.
+    /// Import, value edits, and lossless metadata export remain available.
+    #[bridge::read]
+    pub fn physical_layout_error(&self, sheet_id: &SheetId, columns: bool) -> Option<String> {
+        use domain_types::units::ImportedNormalFont;
+        let font = self.stores.layout_metrics.imported_normal_font?;
+        if font == ImportedNormalFont::Unsupported {
+            return Some("Physical geometry is unsupported for this imported Normal font; no verified font metrics are available".into());
+        }
+        if columns && font != ImportedNormalFont::Calibri11 {
+            let metadata =
+                crate::storage::sheet::settings::get_roundtrip_meta(&self.stores.storage, sheet_id);
+            if metadata.default_col_width.is_none()
+                && metadata.base_col_width.is_some_and(|width| width != 8)
+            {
+                return Some("Physical column geometry is unsupported for this unmeasured base width and imported Normal font".into());
+            }
+        }
+        None
+    }
+
     /// Get the pixel position (top edge) of a row.
     #[bridge::read]
     pub fn get_row_position(&self, sheet_id: &SheetId, row: u32) -> f64 {

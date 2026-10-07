@@ -2612,7 +2612,15 @@ impl Host {
                                         .map_err(engine_error)?;
                                     let mut hyperlink = serde_json::Map::new();
                                     if let Some(address) = address {
+                                        let (address, document_reference) =
+                                            domain_types::domain::hyperlink::web_hyperlink_parts(
+                                                &address,
+                                            );
                                         hyperlink.insert("address".to_string(), json!(address));
+                                        hyperlink.insert(
+                                            "documentReference".to_string(),
+                                            json!(document_reference),
+                                        );
                                         hyperlink.insert(
                                             "textToDisplay".to_string(),
                                             json!(

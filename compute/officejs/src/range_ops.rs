@@ -352,27 +352,41 @@ fn named_style_patch(name: &str) -> Result<Value, BatchError> {
     })
 }
 
-// Excel stores a slash for an empty HTTP(S) path. Do not rewrite other
-// address components or apply web-path rules to file, mail or document links.
-fn normalize_web_hyperlink_path(address: &str) -> Cow<'_, str> {
-    let Some((scheme, rest)) = address.split_once("://") else {
+// Native Excel separates URL fragments into documentReference, folds the
+// scheme/host case and supplies an empty path for HTTP(S) and FTP addresses.
+// Other schemes and relative/document links retain their existing behavior.
+fn normalize_web_hyperlink<'a>(address: &'a str, document_reference: Option<&str>) -> Cow<'a, str> {
+    let (base, fragment) = domain_types::domain::hyperlink::web_hyperlink_parts(address);
+    let Some((scheme, rest)) = base.split_once("://") else {
         return Cow::Borrowed(address);
     };
-    if !scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https") {
-        return Cow::Borrowed(address);
-    }
-    let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
-    let authority = &rest[..authority_end];
-    let suffix = &rest[authority_end..];
-    if authority.is_empty()
-        || authority.rsplit('@').next().is_none_or(str::is_empty)
-        || authority.chars().any(|c| c.is_whitespace() || c == '\\')
-        || suffix.starts_with('/')
+    if !["http", "https", "ftp"]
+        .iter()
+        .any(|s| scheme.eq_ignore_ascii_case(s))
     {
         return Cow::Borrowed(address);
     }
-    let path_start = address.len() - suffix.len();
-    Cow::Owned(format!("{}/{suffix}", &address[..path_start]))
+    let authority_end = rest.find(['/', '?']).unwrap_or(rest.len());
+    let authority = &rest[..authority_end];
+    let suffix = &rest[authority_end..];
+    let host_start = authority.rfind('@').map_or(0, |i| i + 1);
+    let (userinfo, host_port) = authority.split_at(host_start);
+    if host_port.is_empty() || authority.chars().any(|c| c.is_whitespace() || c == '\\') {
+        return Cow::Borrowed(address);
+    }
+    let path = if suffix.starts_with('/') { "" } else { "/" };
+    let mut target = format!(
+        "{}://{userinfo}{}{path}{suffix}",
+        scheme.to_ascii_lowercase(),
+        host_port.to_ascii_lowercase()
+    );
+    // Native Excel uses a nonempty explicit reference in preference to the
+    // address fragment; an empty explicit reference does not erase a fragment.
+    if let Some(reference) = document_reference.filter(|r| !r.is_empty()).or(fragment) {
+        target.push('#');
+        target.push_str(reference);
+    }
+    Cow::Owned(target)
 }
 
 fn set_hyperlink(range: &RangeRef, value: &Value) -> Result<(), BatchError> {
@@ -383,7 +397,7 @@ fn set_hyperlink(range: &RangeRef, value: &Value) -> Result<(), BatchError> {
         .get("address")
         .and_then(Value::as_str)
         .ok_or_else(|| invalid("Range.hyperlink.address must be a string"))?;
-    let url = normalize_web_hyperlink_path(url);
+    let url = normalize_web_hyperlink(url, object.get("documentReference").and_then(Value::as_str));
     let (start_row, start_col, end_row, end_col) = bounds(range)?;
     if let Some(display) = object.get("textToDisplay").and_then(Value::as_str) {
         range

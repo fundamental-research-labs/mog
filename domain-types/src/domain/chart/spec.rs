@@ -359,6 +359,12 @@ impl ChartSpec {
         frame: &mut ChartDrawingFrameOoxmlProps,
         common: &FloatingObjectCommon,
     ) {
+        if !common.name.is_empty()
+            && frame.graphic_frame.nv_graphic_frame_pr.c_nv_pr.name != common.name
+        {
+            frame.graphic_frame.nv_graphic_frame_pr.c_nv_pr.name = common.name.clone();
+            frame.raw_alternate_content = None;
+        }
         let Some(common_rotation_units) = Self::rotation_units_from_degrees(common.rotation) else {
             return;
         };
@@ -694,7 +700,9 @@ impl ChartSpec {
             standard_chart_provenance,
             standard_chart_export_authority,
             is_chart_ex,
-            cnv_pr_name,
+            cnv_pr_name: (!common.name.is_empty())
+                .then(|| common.name.clone())
+                .or(cnv_pr_name),
             cnv_pr_id,
             cnv_pr_descr,
             cnv_pr_title,

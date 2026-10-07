@@ -418,6 +418,13 @@ enum Op {
         range_id: Option<String>,
         formula: Option<String>,
     },
+    #[serde(rename = "getChart")]
+    GetChart {
+        id: String,
+        #[serde(rename = "worksheetId")]
+        worksheet_id: String,
+        key: String,
+    },
     #[serde(rename = "addChart")]
     AddChart {
         id: String,
@@ -2197,6 +2204,42 @@ impl Host {
                         })
                         .map_err(engine_error)?;
                 }
+                Op::GetChart {
+                    id,
+                    worksheet_id,
+                    key,
+                } => {
+                    let sheet = self
+                        .sheets
+                        .lock()
+                        .expect("sheets lock")
+                        .get(&worksheet_id)
+                        .ok_or_else(|| BatchError {
+                            code: "InvalidObjectPath",
+                            message: "Chart worksheet unavailable".into(),
+                        })?
+                        .sheet();
+                    let object = sheet
+                        .charts()
+                        .get_all()
+                        .map_err(engine_error)?
+                        .into_iter()
+                        .find(|object| object.common.id == key || object.common.name == key)
+                        .ok_or_else(|| BatchError {
+                            code: "ItemNotFound",
+                            message: format!("Chart '{key}' was not found"),
+                        })?;
+                    self.charts.lock().expect("charts lock").insert(
+                        id,
+                        ChartRef {
+                            sheet,
+                            chart_id: object.common.id,
+                            title: None,
+                            category_title: None,
+                            value_title: None,
+                        },
+                    );
+                }
                 Op::AddChart {
                     id,
                     worksheet_id,
@@ -2406,6 +2449,23 @@ impl Host {
                     }
                 }
                 Op::Load { id, properties } => {
+                    if let Some(chart) = self.charts.lock().expect("charts lock").get(&id) {
+                        let props = loaded.entry(id).or_default();
+                        for property in &properties {
+                            let value = crate::chart_properties::get(
+                                &chart.sheet,
+                                &chart.chart_id,
+                                property,
+                            )
+                            .map_err(|message| BatchError {
+                                code: "InvalidArgument",
+                                message,
+                            })?;
+                            props.insert(property.clone(), value);
+                        }
+                        continue;
+                    }
+
                     if let Some(areas) = self.range_areas.lock().expect("range areas lock").get(&id)
                     {
                         let props = loaded.entry(id).or_default();
@@ -2870,6 +2930,42 @@ impl Host {
             code: "InvalidObjectPath",
             message: "The chart object is not available.".to_string(),
         })?;
+        if matches!(
+            property,
+            "name"
+                | "left"
+                | "top"
+                | "width"
+                | "height"
+                | "legend.visible"
+                | "legend.position"
+                | "setPosition"
+        ) {
+            let mut value = value.clone();
+            if property == "setPosition" {
+                for key in ["start", "end"] {
+                    if let Some(range_id) = value[key]["rangeId"].as_str() {
+                        let ranges = self.ranges.lock().expect("ranges lock");
+                        let range = ranges.get(range_id).ok_or_else(|| BatchError {
+                            code: "InvalidObjectPath",
+                            message: "Position range is unavailable".into(),
+                        })?;
+                        if range.sheet.id() != chart.sheet.id() {
+                            return Err(BatchError {
+                                code: "InvalidArgument",
+                                message: "Position range must belong to the chart worksheet".into(),
+                            });
+                        }
+                        value[key] = json!({"address": range.address});
+                    }
+                }
+            }
+            return crate::chart_properties::set(&chart.sheet, &chart.chart_id, property, &value)
+                .map_err(|message| BatchError {
+                    code: "InvalidArgument",
+                    message,
+                });
+        }
         let text = match value {
             Value::String(s) => s.clone(),
             other => other.to_string(),
@@ -2878,7 +2974,7 @@ impl Host {
             "title.text" => chart.title = Some(text),
             "axes.categoryAxis.title.text" => chart.category_title = Some(text),
             "axes.valueAxis.title.text" => chart.value_title = Some(text),
-            "title.visible" | "legend.visible" | "legend.position" => return Ok(()),
+            "title.visible" => return Ok(()),
             other => {
                 return Err(BatchError {
                     code: "InvalidArgument",

@@ -61,6 +61,20 @@ impl SheetLayout {
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
+    /// Pixel position of the top edge of a row, including custom sizes and visibility.
+    pub fn get_row_position(&self, row: u32) -> Result<f64, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .query_engine(move |e| e.get_row_position(&sid, row))
+    }
+
+    /// Pixel position of the left edge of a column, including custom sizes and visibility.
+    pub fn get_col_position(&self, col: u32) -> Result<f64, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .query_engine(move |e| e.get_col_position(&sid, col))
+    }
+
     /// Get the height of a row (returns 0 for hidden rows, default for unset).
     pub fn get_row_height(&self, row: u32) -> Result<f64, ComputeApiError> {
         let sid = self.sheet_id;

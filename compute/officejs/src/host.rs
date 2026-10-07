@@ -2337,6 +2337,9 @@ impl Host {
                         .sheet
                         .set_range_typed(address, &grid)
                         .map_err(write_error)?;
+                    if matches!(write_property, WriteProperty::Values) {
+                        expand_tables_after_adjacent_values(&range.sheet, bounds, &grid)?;
+                    }
                 }
                 Op::Load { id, properties } => {
                     if let Some(areas) = self.range_areas.lock().expect("range areas lock").get(&id)
@@ -3395,6 +3398,56 @@ fn has_formula_intent(value: &str, property: WriteProperty) -> bool {
         // values and retain their JavaScript string type.
         WriteProperty::Formulas => value.starts_with('='),
     }
+}
+
+/// Grow a table for populated rows written immediately below its columns.
+/// Keep this host-input policy separate from low-level engine cell writes.
+fn expand_tables_after_adjacent_values(
+    sheet: &Sheet,
+    bounds: (u32, u32, u32, u32),
+    grid: &[Vec<Option<CellInput>>],
+) -> Result<(), BatchError> {
+    let (sr, sc, er, ec) = bounds;
+    if !grid.iter().all(|row| {
+        row.iter()
+            .any(|input| matches!(input, Some(value) if !matches!(value, CellInput::Clear)))
+    }) {
+        return Ok(());
+    }
+    let tables = sheet.tables().get_all().map_err(engine_error)?;
+    for table in &tables {
+        if !table.auto_expand
+            || table.has_totals_row
+            || table.range.end_row().checked_add(1) != Some(sr)
+            || sc < table.range.start_col()
+            || ec > table.range.end_col()
+        {
+            continue;
+        }
+        // A valid cell write must not become a failed resize after mutation
+        // when the adjacent cells belong to another table.
+        if tables.iter().any(|other| {
+            other.id != table.id
+                && other.range.start_row() <= er
+                && other.range.end_row() >= table.range.start_row()
+                && other.range.start_col() <= table.range.end_col()
+                && other.range.end_col() >= table.range.start_col()
+        }) {
+            continue;
+        }
+        // Reuse normal resize validation and dependency refresh.
+        crate::tables::TableRef::get_item(sheet.clone(), &table.name)
+            .and_then(|table_ref| {
+                table_ref.resize_bounds(
+                    table.range.start_row(),
+                    table.range.start_col(),
+                    er,
+                    table.range.end_col(),
+                )
+            })
+            .map_err(table_error)?;
+    }
+    Ok(())
 }
 
 fn range_values_json(sheet: &Sheet, bounds: (u32, u32, u32, u32)) -> Result<Value, BatchError> {

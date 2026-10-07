@@ -98,3 +98,28 @@ fn imported_profile_uses_normal_style_font_not_first_font_record() {
         include_str!("fixtures/layout/arial11-base8/expected.txt").trim_end()
     );
 }
+
+#[test]
+fn unknown_font_two_cell_chart_cannot_bake_unverified_untouched_dimension() {
+    for property in ["width", "height", "left", "top"] {
+        let (w, _) = Workbook::from_xlsx_bytes(include_bytes!(
+            "fixtures/layout/unknown-font-two-cell-chart.xlsx"
+        ))
+        .unwrap();
+        let sheet = w.sheet_by_name("Sheet1").unwrap();
+        let before = serde_json::to_value(sheet.charts().get_all().unwrap()).unwrap();
+        let script = format!(
+            "await Excel.run(async c=>{{const ch=c.workbook.worksheets.getItem('Sheet1').charts.getItem('Guarded');ch.{property}=120;await c.sync();}});"
+        );
+        let error = run_office_js_with_workbook(&w, &script).unwrap_err();
+        assert!(
+            error.to_string().contains("unsupported"),
+            "{property}: {error}"
+        );
+        assert_eq!(
+            serde_json::to_value(sheet.charts().get_all().unwrap()).unwrap(),
+            before,
+            "{property} must not mutate geometry"
+        );
+    }
+}

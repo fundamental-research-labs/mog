@@ -45,28 +45,34 @@ fn origin(sheet: &Sheet, value: &Value) -> Result<(f64, f64), String> {
     ))
 }
 
+fn dimension(sheet: &Sheet, value: &Value, property: &str) -> Result<f64, String> {
+    // Only cell-derived extents require font metrics. Check the relevant axis.
+    if value["anchor"]["anchorMode"] == "twoCell" {
+        if property == "width" {
+            sheet
+                .layout()
+                .get_col_position(0)
+                .map_err(|e| e.to_string())?;
+        } else {
+            sheet
+                .layout()
+                .get_row_position(0)
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    value[property]
+        .as_f64()
+        .map(|v| v / PIXELS_PER_POINT)
+        .ok_or_else(|| format!("Chart {property} is unavailable"))
+}
+
 pub(crate) fn get(sheet: &Sheet, id: &str, property: &str) -> Result<Value, String> {
     let value = object(sheet, id)?;
     match property {
         "name" => Ok(value["name"].clone()),
         "left" => Ok(json!(origin(sheet, &value)?.0)),
         "top" => Ok(json!(origin(sheet, &value)?.1)),
-        "width" | "height" => {
-            // A two-cell extent depends on the effective grid, unlike an explicit EMU extent.
-            if value["anchor"]["anchorMode"] == "twoCell" {
-                sheet
-                    .layout()
-                    .get_col_position(0)
-                    .map_err(|e| e.to_string())?;
-                sheet
-                    .layout()
-                    .get_row_position(0)
-                    .map_err(|e| e.to_string())?;
-            }
-            Ok(json!(
-                value[property].as_f64().unwrap_or(0.0) / PIXELS_PER_POINT
-            ))
-        }
+        "width" | "height" => Ok(json!(dimension(sheet, &value, property)?)),
         _ => Err(format!("Unsupported Chart load property '{property}'")),
     }
 }
@@ -115,14 +121,17 @@ pub(crate) fn set(sheet: &Sheet, id: &str, property: &str, value: &Value) -> Res
                 return Err("Chart size must be positive".into());
             }
             let (mut left, mut top) = origin(sheet, &current)?;
-            let mut width = current["width"]
-                .as_f64()
-                .ok_or("Chart width is unavailable")?
-                / PIXELS_PER_POINT;
-            let mut height = current["height"]
-                .as_f64()
-                .ok_or("Chart height is unavailable")?
-                / PIXELS_PER_POINT;
+            // Replacing one axis still needs a verified value for the untouched axis.
+            let mut width = if property == "width" {
+                number
+            } else {
+                dimension(sheet, &current, "width")?
+            };
+            let mut height = if property == "height" {
+                number
+            } else {
+                dimension(sheet, &current, "height")?
+            };
             match property {
                 "left" => left = number,
                 "top" => top = number,
@@ -186,8 +195,8 @@ pub(crate) fn set(sheet: &Sheet, id: &str, property: &str, value: &Value) -> Res
                     "anchorRow":sr,"anchorCol":sc,"anchorRowOffsetEmu":0,"anchorColOffsetEmu":0,
                     "absoluteXEmu":null,"absoluteYEmu":null,"endRow":null,"endCol":null,
                     "endRowOffsetEmu":null,"endColOffsetEmu":null,
-                    "extentCxEmu":(current["width"].as_f64().ok_or("Chart width is unavailable")?*9525.0).round() as i64,
-                    "extentCyEmu":(current["height"].as_f64().ok_or("Chart height is unavailable")?*9525.0).round() as i64}});
+                    "extentCxEmu":(dimension(sheet, &current, "width")?*EMU_PER_POINT).round() as i64,
+                    "extentCyEmu":(dimension(sheet, &current, "height")?*EMU_PER_POINT).round() as i64}});
             } else {
                 let (_, _, er, ec) = bounds(&value["end"])?;
                 if er < sr || ec < sc {

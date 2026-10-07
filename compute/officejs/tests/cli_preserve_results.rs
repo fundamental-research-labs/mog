@@ -173,7 +173,7 @@ fn default_manual_script_preserves_and_automatic_transition_recalculates() {
         sheet.get_cell_value("A2").unwrap(),
         CellValue::Error(CellError::Name, _)
     ));
-    assert_eq!(w.settings().calculation_mode().unwrap(), "auto");
+    assert_eq!(w.settings().calculation_mode().unwrap(), "manual");
 }
 
 #[test]

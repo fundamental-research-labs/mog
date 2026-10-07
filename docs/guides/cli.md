@@ -44,6 +44,9 @@ Scripts can queue `context.application.calculationMode` changes using `Manual`,
 `context.application.calculate(Excel.CalculationType.full)`. These operations run
 in queue order at `context.sync()`. Switching from manual to automatic calculates
 before subsequent queued reads; full calculation does not change the mode.
+Office.js mode changes affect the current workbook engine session across requests,
+but do not overwrite the stored workbook mode. Reopening uses the stored mode.
+This runtime setting is separate from the deliberate persisted CLI override.
 `Recalculate` and `FullRebuild` calculation types are not yet supported. The
 same-input native Excel checks cover manual/automatic behavior for the tested
 workbooks; they do not establish every Excel version/freshness or data-table

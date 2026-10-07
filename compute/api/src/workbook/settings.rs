@@ -94,9 +94,23 @@ impl WorkbookSettings {
     // Atomic settings methods
     // -----------------------------------------------------------------
 
-    /// Read the current calculation mode ("auto", "autoNoTable", "manual").
+    /// Read the stored workbook calculation mode ("auto", "autoNoTable", "manual").
     pub fn calculation_mode(&self) -> Result<String, ComputeApiError> {
         self.dispatch.query_engine(|e| e.get_calc_mode())
+    }
+
+    /// Effective calculation mode for this workbook session, including an override.
+    pub fn runtime_calculation_mode(&self) -> Result<String, ComputeApiError> {
+        self.dispatch
+            .query_engine(|e| e.get_runtime_calculation_mode())
+    }
+
+    /// Override the running engine's mode without changing exported settings.
+    pub fn set_runtime_calculation_mode(&self, mode: &str) -> Result<(), ComputeApiError> {
+        let mode = mode.to_owned();
+        self.dispatch
+            .call_engine(move |e| e.set_runtime_calculation_mode(&mode))
+            .and_then(|result| result.map_err(ComputeApiError::from))
     }
 
     /// Set the calculation mode ("auto", "autoNoTable", "manual").

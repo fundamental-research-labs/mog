@@ -837,11 +837,11 @@ impl Host {
                     let previous = self
                         .workbook
                         .settings()
-                        .calculation_mode()
+                        .runtime_calculation_mode()
                         .map_err(engine_error)?;
                     self.workbook
                         .settings()
-                        .set_calculation_mode(mode)
+                        .set_runtime_calculation_mode(mode)
                         .map_err(write_error)?;
                     if previous == "manual" && mode != "manual" {
                         self.workbook.recalculate().map_err(write_error)?;
@@ -864,7 +864,7 @@ impl Host {
                         let mode = self
                             .workbook
                             .settings()
-                            .calculation_mode()
+                            .runtime_calculation_mode()
                             .map_err(engine_error)?;
                         let mode = match mode.as_str() {
                             "manual" => "Manual",

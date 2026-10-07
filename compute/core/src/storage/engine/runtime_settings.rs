@@ -1,7 +1,36 @@
-use crate::snapshot::{CalculationSettings, WorkbookSettings};
+use crate::snapshot::{CalcMode, CalculationSettings, WorkbookSettings};
 use crate::storage::engine::ComputeEngine;
 
 impl ComputeEngine {
+    /// Effective mode for this workbook engine session, not exported metadata.
+    pub fn get_runtime_calculation_mode(&self) -> String {
+        match self.stores.compute.calc_mode() {
+            CalcMode::Auto => "auto",
+            CalcMode::AutoNoTable => "autoNoTable",
+            CalcMode::Manual => "manual",
+        }
+        .into()
+    }
+
+    /// Office.js calculation-mode changes apply to the running engine only.
+    pub fn set_runtime_calculation_mode(
+        &mut self,
+        mode: &str,
+    ) -> Result<(), value_types::ComputeError> {
+        let mode = match mode {
+            "auto" => CalcMode::Auto,
+            "autoNoTable" => CalcMode::AutoNoTable,
+            "manual" => CalcMode::Manual,
+            _ => {
+                return Err(value_types::ComputeError::Eval {
+                    message: format!("Invalid calculation mode: {mode}"),
+                });
+            }
+        };
+        self.stores.compute.set_runtime_calc_mode(mode);
+        Ok(())
+    }
+
     pub(crate) fn sync_runtime_workbook_settings(
         &mut self,
         pre: &WorkbookSettings,

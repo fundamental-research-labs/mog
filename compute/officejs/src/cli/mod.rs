@@ -160,7 +160,7 @@ impl State {
         };
         if request.recalculate
             || (request.source.is_some()
-                && self.workbook.settings().calculation_mode()? != "manual")
+                && self.workbook.settings().runtime_calculation_mode()? != "manual")
         {
             let stage = Stage::start("recalculate");
             self.workbook.recalculate()?;
@@ -237,6 +237,7 @@ fn preserve_results(workbook: &Workbook) -> Result<()> {
     calculation.calc_on_save = false;
     workbook.settings().set_workbook_settings(settings)?;
     workbook.settings().set_calculation_mode("manual")?;
+    workbook.settings().set_runtime_calculation_mode("manual")?;
     Ok(())
 }
 

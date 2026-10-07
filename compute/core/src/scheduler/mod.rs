@@ -196,6 +196,8 @@ pub struct ComputeCore {
     /// edited cells/new formula seeds; dependent formulas keep their last value
     /// until an explicit calculate call.
     calc_mode: CalcMode,
+    /// Session-only override. Never serialized as workbook calculation metadata.
+    runtime_calc_mode: Option<CalcMode>,
     /// Maximum time allowed for a full recalculation (default: 30s).
     /// Set to `Duration::MAX` to disable.
     recalc_timeout: std::time::Duration,
@@ -254,6 +256,7 @@ impl ComputeCore {
             max_iterations: 100,
             max_change: 0.001,
             calc_mode: CalcMode::Auto,
+            runtime_calc_mode: None,
             recalc_timeout: std::time::Duration::from_secs(30),
             schema_map: None,
             workbook_cache: crate::eval::cache::workbook_cache::WorkbookCache::new(),
@@ -636,16 +639,26 @@ impl ComputeCore {
 
     /// Current workbook calculation mode.
     pub fn calc_mode(&self) -> CalcMode {
+        self.runtime_calc_mode.unwrap_or(self.calc_mode)
+    }
+
+    /// Persisted/imported mode, separate from an Office.js runtime override.
+    pub fn stored_calc_mode(&self) -> CalcMode {
         self.calc_mode
     }
 
-    /// Set the workbook calculation mode at runtime.
+    /// Override calculation behavior for this engine session only.
+    pub fn set_runtime_calc_mode(&mut self, mode: CalcMode) {
+        self.runtime_calc_mode = Some(mode);
+    }
+
+    /// Update the imported/persisted mode without replacing a runtime override.
     pub fn set_calc_mode(&mut self, mode: CalcMode) {
         self.calc_mode = mode;
     }
 
     pub(crate) fn is_manual_calculation(&self) -> bool {
-        self.calc_mode == CalcMode::Manual
+        self.calc_mode() == CalcMode::Manual
     }
 
     pub(crate) fn has_volatile_cells(&self) -> bool {
@@ -699,9 +712,7 @@ impl ComputeCore {
 
     /// Get a snapshot of workbook cache statistics (hit/miss/eviction counters, memory estimates).
     pub fn workbook_cache_stats(&self) -> crate::eval::WorkbookCacheStatsSnapshot {
-        {
-            self.workbook_cache.stats_snapshot()
-        }
+        { self.workbook_cache.stats_snapshot() }
     }
 
     /// Get the direct dependents of a cell as CellId values.

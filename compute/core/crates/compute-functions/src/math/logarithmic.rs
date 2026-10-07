@@ -3,7 +3,7 @@
 use value_types::{CellError, CellValue};
 
 use crate::helpers::coercion::check_error;
-use crate::helpers::power::{normalize_power_result, try_negative_base_pow};
+use crate::helpers::power::{normalize_power_result, real_power, try_negative_base_pow};
 use crate::{FunctionRegistry, PureFunction};
 
 pub(super) struct FnLog;
@@ -254,7 +254,7 @@ impl PureFunction for FnPower {
                     let is_even = exp % 2.0 == 0.0;
                     return CellValue::number(if is_even { 1.0 } else { -1.0 });
                 }
-                let r = base.powf(exp);
+                let r = real_power(base, exp);
                 if r.is_nan() || r.is_infinite() {
                     // Small positive base with negative exp overflows to inf
                     // → Excel returns #DIV/0! (conceptually 1/0)

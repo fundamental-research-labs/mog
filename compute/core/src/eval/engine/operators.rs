@@ -3,7 +3,7 @@
 #[cfg(feature = "dd-precision")]
 use compute_functions::helpers::arithmetic::normalize_formula_value;
 use compute_functions::helpers::arithmetic::{is_formula_zero, normalize_formula_result};
-use compute_functions::helpers::power::try_negative_base_pow;
+use compute_functions::helpers::power::{real_power, try_negative_base_pow};
 use compute_parser::{BinOp, UnaryOp};
 use value_types::{CellArray, CellError, CellValue};
 
@@ -191,7 +191,7 @@ pub(in crate::eval) fn eval_binary_op(op: BinOp, left: &CellValue, right: &CellV
                         let is_even = rn % 2.0 == 0.0;
                         return formula_number(if is_even { 1.0 } else { -1.0 });
                     }
-                    let r = ln.powf(rn);
+                    let r = real_power(ln, rn);
                     if r.is_nan() || r.is_infinite() {
                         // Small positive base with negative exp overflows to inf
                         // → Excel returns #DIV/0! (conceptually 1/0)

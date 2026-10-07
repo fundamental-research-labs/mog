@@ -155,7 +155,7 @@ fn apply_arith(op: ArithOp, a: f64, b: f64) -> f64 {
         }
         ArithOp::Mul => a * b,
         ArithOp::Div => a / b,
-        ArithOp::Pow => a.powf(b),
+        ArithOp::Pow => compute_functions::helpers::power::real_power(a, b),
     }
 }
 

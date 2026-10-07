@@ -19,6 +19,39 @@ pub fn normalize_power_result(result: f64) -> f64 {
     normalize_formula_result(result)
 }
 
+/// Evaluate negative bases with exact integer exponents by repeated squaring.
+/// Native Excel uses this rounding path for negative integer powers. Keep the
+/// positive-base and fractional-exponent paths unchanged. The bounded integer
+/// conversion also avoids narrowing large exponents to i32.
+#[inline]
+pub fn real_power(base: f64, exponent: f64) -> f64 {
+    if base < 0.0
+        && exponent.is_finite()
+        && exponent == exponent.trunc()
+        && exponent.abs() <= 9_007_199_254_740_992.0
+    {
+        let mut n = exponent.abs() as u64;
+        let mut factor = base;
+        let mut result = 1.0;
+        while n != 0 {
+            if n & 1 != 0 {
+                result *= factor;
+            }
+            n >>= 1;
+            if n != 0 {
+                factor *= factor;
+            }
+        }
+        if exponent < 0.0 {
+            1.0 / result
+        } else {
+            result
+        }
+    } else {
+        base.powf(exponent)
+    }
+}
+
 /// Maximum odd denominator to test when detecting rational exponents.
 /// Covers all common fractional exponents like 1/3, 2/3, 1/5, 3/7, etc.
 const MAX_ODD_DENOM: u64 = 99;

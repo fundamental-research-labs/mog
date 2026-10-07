@@ -129,25 +129,51 @@ fn test_power_negative_base_rational_domain_remains_real() {
 }
 
 #[test]
-fn test_power_integer_exponents_use_coherent_signed_path() {
-    // This is the invariant of Mog's real-number POWER contract: for a
-    // nonzero base, (-x)^n has the same magnitude as x^n and changes sign only
-    // when n is odd. Excel's committed cache may contain asymmetric last-bit
-    // results from its host implementation; those values do not justify an
-    // input-specific correction.
-    for exponent in [-307.0, -3.0, -1.0, 0.0, 1.0, 2.0, 3.0, 307.0] {
-        let positive = FnPower.call(&[num(10.0), num(exponent)]);
-        let negative = FnPower.call(&[num(-10.0), num(exponent)]);
-        let (CellValue::Number(positive), CellValue::Number(negative)) = (positive, negative)
-        else {
-            panic!("POWER(±10, {exponent}) must remain in the finite integer domain");
-        };
-        let expected_negative = if (exponent as i64) % 2 == 0 {
-            positive.get()
-        } else {
-            -positive.get()
-        };
-        assert_eq!(negative.get(), expected_negative, "POWER(-10, {exponent})");
+fn test_negative_integer_powers_match_native_excel() {
+    // Fresh Excel full calculation, covering five bases and seven exponents.
+    // Exact values matter: rounding here can change a downstream QUOTIENT.
+    for (base, exponent, expected) in [
+        (-10.0, -307.0, -9.999999999999995e-308),
+        (-10.0, -20.0, 1e-20),
+        (-10.0, -3.0, -0.001),
+        (-10.0, 2.0, 100.0),
+        (-10.0, 3.0, -1000.0),
+        (-10.0, 20.0, 1e+20),
+        (-10.0, 307.0, -1.0000000000000005e+307),
+        (-2.0, -307.0, -3.835229269763849e-93),
+        (-2.0, -20.0, 9.5367431640625e-07),
+        (-2.0, -3.0, -0.125),
+        (-2.0, 2.0, 4.0),
+        (-2.0, 3.0, -8.0),
+        (-2.0, 20.0, 1048576.0),
+        (-2.0, 307.0, -2.6074060497081422e+92),
+        (-3.0, -307.0, -3.340217915476827e-147),
+        (-3.0, -20.0, 2.8679719907924413e-10),
+        (-3.0, -3.0, -0.037037037037037035),
+        (-3.0, 2.0, 9.0),
+        (-3.0, 3.0, -27.0),
+        (-3.0, 20.0, 3486784401.0),
+        (-3.0, 307.0, -2.9938166470113275e+146),
+        (-1.1, -307.0, -1.9608557968541054e-13),
+        (-1.1, -20.0, 0.1486436280241435),
+        (-1.1, -3.0, -0.7513148009015775),
+        (-1.1, 2.0, 1.2100000000000002),
+        (-1.1, 3.0, -1.3310000000000004),
+        (-1.1, 20.0, 6.727499949325609),
+        (-1.1, 307.0, -5099814079160.476),
+        (-0.1, -307.0, -9.99999999999967e+306),
+        (-0.1, -20.0, 9.999999999999979e+19),
+        (-0.1, -3.0, -999.9999999999998),
+        (-0.1, 2.0, 0.010000000000000002),
+        (-0.1, 3.0, -0.0010000000000000002),
+        (-0.1, 20.0, 1.0000000000000022e-20),
+        (-0.1, 307.0, -1.000000000000033e-307),
+    ] {
+        assert_eq!(
+            FnPower.call(&[num(base), num(exponent)]),
+            num(expected),
+            "POWER({base}, {exponent})"
+        );
     }
 }
 

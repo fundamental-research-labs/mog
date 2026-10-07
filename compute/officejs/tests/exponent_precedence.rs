@@ -37,3 +37,27 @@ fn exponent_precedence_and_controls() {
     }
     assert!((values[5][0].as_f64().unwrap() - 2f64.powf(0.03)).abs() < 1e-12);
 }
+
+#[test]
+fn negative_integer_power_preserves_quotient_boundary() {
+    let workbook = Workbook::blank().unwrap().0;
+    let output = run_office_js_with_workbook(
+        &workbook,
+        r#"
+        return await Excel.run(async c => {
+            const s = c.workbook.worksheets.getItem("Sheet1");
+            s.getRange("A1:C2").formulas = [
+                ["=10^(-307)", "=-10^(-307)", "=QUOTIENT(B1,A1)"],
+                ["=POWER(10,-307)", "=POWER(-10,-307)", "=QUOTIENT(B2,A2)"]
+            ];
+            const r = s.getRange("A1:C2");
+            r.load("values"); await c.sync(); return r.values;
+        });
+    "#,
+    )
+    .unwrap();
+    for row in output.value.as_array().unwrap() {
+        assert_eq!(row[1].as_f64().unwrap(), -9.999999999999995e-308);
+        assert_eq!(row[2].as_f64().unwrap(), 0.0);
+    }
+}

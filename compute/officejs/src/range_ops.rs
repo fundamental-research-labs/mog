@@ -1,5 +1,7 @@
 //! Range structure and layout mutations that are not core values/formulas.
 
+use std::borrow::Cow;
+
 use domain_types::domain::copy::CopyType;
 use serde_json::{Value, json};
 
@@ -350,6 +352,29 @@ fn named_style_patch(name: &str) -> Result<Value, BatchError> {
     })
 }
 
+// Excel stores a slash for an empty HTTP(S) path. Do not rewrite other
+// address components or apply web-path rules to file, mail or document links.
+fn normalize_web_hyperlink_path(address: &str) -> Cow<'_, str> {
+    let Some((scheme, rest)) = address.split_once("://") else {
+        return Cow::Borrowed(address);
+    };
+    if !scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https") {
+        return Cow::Borrowed(address);
+    }
+    let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let authority = &rest[..authority_end];
+    let suffix = &rest[authority_end..];
+    if authority.is_empty()
+        || authority.rsplit('@').next().is_none_or(str::is_empty)
+        || authority.chars().any(|c| c.is_whitespace() || c == '\\')
+        || suffix.starts_with('/')
+    {
+        return Cow::Borrowed(address);
+    }
+    let path_start = address.len() - suffix.len();
+    Cow::Owned(format!("{}/{suffix}", &address[..path_start]))
+}
+
 fn set_hyperlink(range: &RangeRef, value: &Value) -> Result<(), BatchError> {
     let object = value
         .as_object()
@@ -358,6 +383,7 @@ fn set_hyperlink(range: &RangeRef, value: &Value) -> Result<(), BatchError> {
         .get("address")
         .and_then(Value::as_str)
         .ok_or_else(|| invalid("Range.hyperlink.address must be a string"))?;
+    let url = normalize_web_hyperlink_path(url);
     let (start_row, start_col, end_row, end_col) = bounds(range)?;
     if let Some(display) = object.get("textToDisplay").and_then(Value::as_str) {
         range
@@ -375,7 +401,7 @@ fn set_hyperlink(range: &RangeRef, value: &Value) -> Result<(), BatchError> {
             range
                 .sheet()
                 .hyperlinks()
-                .set(row, col, url)
+                .set(row, col, url.as_ref())
                 .map_err(engine)?;
         }
     }

@@ -46,7 +46,13 @@ in queue order at `context.sync()`. Switching from manual to automatic calculate
 before subsequent queued reads; full calculation does not change the mode.
 Office.js mode changes affect the current workbook engine session across requests,
 but do not overwrite the stored workbook mode. Reopening uses the stored mode.
-This runtime setting is separate from the deliberate persisted CLI override.
+The loaded Office.js property reports the stored/opened mode, independently of
+runtime scheduling. This matches the measured Windows Excel 16.0.20430.20146
+behavior across fresh syncs and contexts; it is not a claim about every Office
+version. For example, opening Automatic then requesting Manual leaves the getter
+Automatic while dependent edits stay pending. Saving retains Automatic, so a
+later reopen calculates those edits. This runtime setting is separate from the
+deliberate persisted CLI override.
 `Recalculate` and `FullRebuild` calculation types are not yet supported. The
 same-input native Excel checks cover manual/automatic behavior for the tested
 workbooks; they do not establish every Excel version/freshness or data-table

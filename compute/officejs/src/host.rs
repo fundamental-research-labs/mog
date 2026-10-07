@@ -857,6 +857,9 @@ impl Host {
                     self.workbook.recalculate().map_err(write_error)?;
                 }
                 Op::ApplicationLoad { id, properties } => {
+                    // Excel 16.0.20430.20146 reports the stored/opened mode even
+                    // after a runtime setter changes dependency scheduling.
+                    // Keep readback separate from the effective scheduler mode.
                     for property in properties {
                         if property != "calculationMode" {
                             return Err(unsupported_load_property("Application", &property));
@@ -864,7 +867,7 @@ impl Host {
                         let mode = self
                             .workbook
                             .settings()
-                            .runtime_calculation_mode()
+                            .calculation_mode()
                             .map_err(engine_error)?;
                         let mode = match mode.as_str() {
                             "manual" => "Manual",

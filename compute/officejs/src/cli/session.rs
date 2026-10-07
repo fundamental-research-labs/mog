@@ -252,7 +252,7 @@ pub(super) fn execute(id: &str, request: &Request) -> Result<String> {
     let record: Record = serde_json::from_slice(
         &fs::read(&path).map_err(|e| format!("session {id} is unavailable: {e}"))?,
     )?;
-    if (request.preserve_results || request.source.is_some()) && !record.preserve_results {
+    if !request.discard && !record.preserve_results {
         return Err(
             "session does not support current calculation-mode policy; restart it with the current mog binary"
                 .into(),

@@ -261,16 +261,30 @@ fn session_mode_persists_but_request_flag_does_not_override_later_mode_changes()
 }
 
 #[test]
-fn older_session_without_capability_rejects_preservation_before_dispatch() {
+fn older_session_rejects_non_discard_requests_before_dispatch_or_save() {
     let f = Fixture::new();
     let id = f.ok(&["-s", "-i", "input.xlsx"]);
     let path = f.0.path().join("sessions").join(format!("{id}.json"));
-    let mut record: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    let original_record = fs::read(&path).unwrap();
+    let mut record: serde_json::Value = serde_json::from_slice(&original_record).unwrap();
     record.as_object_mut().unwrap().remove("preserve_results");
     fs::write(&path, serde_json::to_vec(&record).unwrap()).unwrap();
     let o = f.run(&["-s", &id, "--preserve-results", "-e", EDIT]);
     assert!(!o.status.success());
     assert!(String::from_utf8_lossy(&o.stderr).contains("restart"));
+    for args in [
+        vec!["-s", id.as_str(), "--close", "-o", "rejected.xlsx"],
+        vec!["-s", id.as_str(), "-o", "rejected.xlsx"],
+        vec!["-s", id.as_str()],
+        vec!["--close-all"],
+    ] {
+        let result = f.run(&args);
+        assert!(!result.status.success());
+        assert!(String::from_utf8_lossy(&result.stderr).contains("restart"));
+        assert!(!f.0.path().join("rejected.xlsx").exists());
+        assert!(path.exists());
+    }
+    fs::write(&path, original_record).unwrap();
     f.ok(&["-s", &id, "--close", "-o", "untouched.xlsx"]);
     f.values("untouched.xlsx", 42.0, 84.0);
 }

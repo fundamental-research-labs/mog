@@ -36,7 +36,8 @@ would retain old cached values. It conflicts with `-r`; the command fails before
 running a script or writing output. The flag is not applied again on later
 session requests unless supplied again, so a script can subsequently switch back
 to automatic mode. Restart sessions created by older binaries before using the
-new calculation policy; script requests to workers without support are rejected.
+new calculation policy; requests to workers without support are rejected except
+for explicit discard. This includes save-only and close requests.
 
 Scripts can queue `context.application.calculationMode` changes using `Manual`,
 `Automatic`, or `AutomaticExceptTables`, load that property, and call

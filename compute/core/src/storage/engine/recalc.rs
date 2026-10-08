@@ -56,7 +56,6 @@ impl ComputeEngine {
             || self.stores.compute.is_manual_calculation()
             || settings.full_calc_on_load
             || settings.force_full_calc
-            || !self.import_report.force_recalc_cells.is_empty()
             || !meta.imported_formula_caches_complete
             || !meta
                 .imported_calculation_features
@@ -70,9 +69,43 @@ impl ComputeEngine {
         {
             return Ok(false);
         }
+        // A per-formula ca flag requests this cell, not a full workbook pass.
+        // Native ordinary-open controls leave an unflagged dependent cached.
+        let mut forced = Vec::new();
+        for cell in &self.import_report.force_recalc_cells {
+            let Some(sheet) = self
+                .stores
+                .storage
+                .metadata
+                .sheet_order
+                .get(cell.sheet_index as usize)
+            else {
+                return Ok(false);
+            };
+            let Some(id) = self
+                .cell_store
+                .resolve_cell_id(sheet, cell_types::SheetPos::new(cell.row, cell.col))
+            else {
+                return Ok(false);
+            };
+            forced.push(id);
+        }
+        if !self
+            .stores
+            .compute
+            .recalculate_import_forced_cells(&mut self.cell_store, &forced)?
+        {
+            return Ok(false);
+        }
         // The dependency graph includes volatile cells even with no edited seeds.
         // Only their dependent closure is evaluated; unrelated imported caches stay.
-        self.stores.compute.recalc(&mut self.cell_store, &[])?;
+        if !self
+            .stores
+            .compute
+            .recalculate_import_volatile_cells(&mut self.cell_store)?
+        {
+            return Ok(false);
+        }
         self.sync_imported_array_cache_invalidations();
         self.init_cf_caches();
         Ok(true)

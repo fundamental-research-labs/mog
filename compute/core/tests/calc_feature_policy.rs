@@ -19,19 +19,28 @@ fn input(names: &[&str], ns: &str, flags: &str, sheet_flags: &str, missing: bool
         .iter()
         .map(|n| format!(r#"<p:feature name="microsoft.com:{n}"/>"#))
         .collect::<String>();
-    z.add_file("xl/workbook.xml",format!(r#"<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets><calcPr calcOnSave="1" {flags}/><extLst><ext uri="{{B58B0392-4F1F-4190-BB64-5DF3571DCE5F}}" xmlns:p="{ns}"><p:calcFeatures>{features}</p:calcFeatures></ext></extLst></workbook>"#).into_bytes());
+    let defined_names = if flags.contains("calcId=\"127\"") {
+        "<definedNames><definedName name=\"UnusedVolatile\">OFFSET(#REF!,0,0,COUNTA(#REF!)-1)</definedName></definedNames>"
+    } else {
+        ""
+    };
+    z.add_file("xl/workbook.xml",format!(r#"<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets>{defined_names}<calcPr calcOnSave="1" {flags}/><extLst><ext uri="{{B58B0392-4F1F-4190-BB64-5DF3571DCE5F}}" xmlns:p="{ns}"><p:calcFeatures>{features}</p:calcFeatures></ext></extLst></workbook>"#).into_bytes());
     let formula_flags = if flags.contains("calcId=\"124\"") {
         " ca=\"1\""
     } else {
         ""
     };
     let cache = if missing { "" } else { "<v>99</v>" };
-    let volatile = if flags.contains("calcId=\"123\"") {
+    let volatile = if flags.contains("calcId=\"123\"") || flags.contains("calcId=\"127\"") {
         "<c r=\"D1\"><v>0.25</v></c><c r=\"E1\"><v>0.5</v></c>"
     } else {
         "<c r=\"D1\"><f>RAND()</f><v>0.25</v></c><c r=\"E1\"><f>D1*2</f><v>0.5</v></c>"
     };
-    z.add_file("xl/worksheets/sheet1.xml",format!(r#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:E1"/><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f{formula_flags}>CUSTOMFUNC(2)</f><v>42</v></c><c r="C1"><f>A1*2</f>{cache}</c>{volatile}</row></sheetData>{sheet_flags}</worksheet>"#).into_bytes());
+    if flags.contains("calcId=\"124\"") {
+        z.add_file("xl/worksheets/sheet1.xml", br#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:B2"/><sheetData><row r="1"><c r="A1"><f ca="1">1+1</f><v>42</v></c><c r="B1"><f>1+2</f><v>99</v></c></row><row r="2"><c r="A2"><f>A1*2</f><v>84</v></c><c r="B2" t="str"><f>IFERROR(1/0,&quot;&quot;)</f><v/></c></row></sheetData></worksheet>"#.to_vec());
+    } else {
+        z.add_file("xl/worksheets/sheet1.xml",format!(r#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:E1"/><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f{formula_flags}>CUSTOMFUNC(2)</f><v>42</v></c><c r="C1"><f>A1*2</f>{cache}</c>{volatile}</row></sheetData>{sheet_flags}</worksheet>"#).into_bytes());
+    }
     z.finish().unwrap()
 }
 const NS: &str = "http://schemas.microsoft.com/office/spreadsheetml/2018/calcfeatures";
@@ -54,7 +63,6 @@ fn ordinary_profile_preserves_unrelated_caches_refreshes_volatile_and_explicit_f
 #[test]
 fn incompatible_or_incomplete_imports_never_reuse_caches() {
     for (names, ns, flags, sheet, missing) in [
-        (NAMES, NS, "calcId=\"124\"", "", false),
         (&NAMES[..1], NS, "", "", false),
         (&NAMES[1..], NS, "", "", false),
         (NAMES, "urn:lookalike", "", "", false),
@@ -126,4 +134,34 @@ fn feature_parser_rejects_foreign_hierarchy_and_duplicate_profiles() {
     let foreign = ext.replace("<ext ", "<ext xmlns=\"urn:evil\" ");
     assert!(parse(doc(&format!("<extLst>{foreign}</extLst>")).as_bytes()).is_none());
     assert!(parse(doc(&format!("<extLst xmlns=\"urn:evil\">{ext}</extLst>")).as_bytes()).is_none());
+}
+
+#[test]
+fn per_formula_force_refresh_does_not_invalidate_unflagged_import_dependents() {
+    // Same formulas/caches as the frozen Excel ca-selective ordinary/Full probe.
+    let (mut e, _) =
+        ComputeEngine::from_xlsx_bytes(&input(NAMES, NS, "calcId=\"124\"", "", false)).unwrap();
+    let s = *e.cell_store().sheet_ids().next().unwrap();
+    assert!(e.recalculate_compatible_import().unwrap());
+    assert_eq!(e.get_cell_value(&s, 0, 0), CellValue::number(2.));
+    assert_eq!(e.get_cell_value(&s, 1, 0), CellValue::number(84.));
+    assert_eq!(e.get_cell_value(&s, 0, 1), CellValue::number(99.));
+    assert_eq!(e.get_cell_value(&s, 1, 1), CellValue::Text("".into()));
+    assert!(e.recalculate_compatible_import().unwrap());
+    assert_eq!(e.get_cell_value(&s, 1, 0), CellValue::number(84.));
+    e.recalculate().unwrap();
+    assert_eq!(e.get_cell_value(&s, 0, 0), CellValue::number(2.));
+    assert_eq!(e.get_cell_value(&s, 1, 0), CellValue::number(4.));
+    assert_eq!(e.get_cell_value(&s, 0, 1), CellValue::number(3.));
+    assert_eq!(e.get_cell_value(&s, 1, 1), CellValue::Text("".into()));
+}
+
+#[test]
+fn unused_volatile_defined_name_does_not_recalculate_unrelated_caches() {
+    let (mut e, _) =
+        ComputeEngine::from_xlsx_bytes(&input(NAMES, NS, "calcId=\"127\"", "", false)).unwrap();
+    let s = *e.cell_store().sheet_ids().next().unwrap();
+    assert!(e.recalculate_compatible_import().unwrap());
+    assert_eq!(e.get_cell_value(&s, 0, 1), CellValue::number(42.));
+    assert_eq!(e.get_cell_value(&s, 0, 2), CellValue::number(99.));
 }

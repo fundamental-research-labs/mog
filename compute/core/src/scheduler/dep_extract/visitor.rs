@@ -10,7 +10,8 @@ use formula_types::CellRef;
 
 use super::formula_text::{FormulaTextCollectOutcome, FormulaTextDepCollector};
 use super::policy::{
-    is_ref_arg_metadata_only, is_static_ref, metadata_arg_index, selective_range_arg_pattern,
+    is_ref_arg_metadata_only, is_static_area_ref, is_static_ref, metadata_arg_index,
+    selective_range_arg_pattern,
 };
 use super::refs::{cell_ref_to_position, push_cell_ref_dep_targets, ref_in_sheet_ctx};
 
@@ -333,6 +334,12 @@ impl<'a> AstVisitor for DepExtractor<'a> {
                     self.visit(arg);
                 }
             }
+            return;
+        }
+
+        // A static AREAS argument uses only reference topology. Value edges
+        // would create spurious cycles when one of its areas contains this cell.
+        if name.eq_ignore_ascii_case("AREAS") && args.len() == 1 && is_static_area_ref(&args[0]) {
             return;
         }
 

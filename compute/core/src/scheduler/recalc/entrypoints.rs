@@ -1,6 +1,88 @@
 use super::*;
 
 impl ComputeCore {
+    /// Refresh the volatile dependent closure without global recalc prepasses.
+    pub(crate) fn recalculate_import_volatile_cells(
+        &mut self,
+        cell_store: &mut CellStore,
+    ) -> Result<bool, ComputeError> {
+        if !self.has_volatile_cells() {
+            return Ok(true);
+        }
+        let cells = self.graph.affected_cells(&[], &*cell_store).into_value();
+        let cells: Vec<_> = cells
+            .into_iter()
+            .filter(|id| {
+                self.cell_formula_text.contains_key(id)
+                    && cell_store
+                        .sheet_for_cell(id)
+                        .is_some_and(|sheet| cell_store.is_calculation_enabled(&sheet))
+            })
+            .collect();
+        self.recalculate_import_forced_cells(cell_store, &cells)
+    }
+
+    /// Refresh scalar imported ca cells without aggregate prepasses, cycle
+    /// recovery, spill expansion, or unflagged dependent scheduling. Unsupported
+    /// cycle/array results return false so the caller can use full calculation.
+    pub(crate) fn recalculate_import_forced_cells(
+        &mut self,
+        cell_store: &mut CellStore,
+        cells: &[CellId],
+    ) -> Result<bool, ComputeError> {
+        if cells.is_empty() {
+            return Ok(true);
+        }
+        self.ensure_graph_built(cell_store)?;
+        let (levels, cycles) = self.graph.subset_levels(cells, &*cell_store).into_value();
+        if !cycles.is_empty() {
+            return Ok(false);
+        }
+        if cells.iter().any(|id| {
+            cell_store.projection_registry.is_source(id)
+                || cell_store.declared_array_extent(id).is_some()
+        }) {
+            return Ok(false);
+        }
+        self.begin_recalc_clock(None);
+        self.begin_sumifs_cache_epoch();
+        clear_thread_local_caches();
+        for cell_id in levels.into_iter().flatten() {
+            let Some(entry) = self.ast_cache.get(&cell_id) else {
+                return Ok(false);
+            };
+            let Some(sheet_id) = self.find_sheet_for_cell(cell_store, &cell_id) else {
+                return Ok(false);
+            };
+            let range_store = crate::eval::cache::range_store::RangeStore::new();
+            let mut ctx = crate::eval_bridge::EvalContext::with_range_store(
+                cell_store,
+                cell_id,
+                sheet_id,
+                &range_store,
+            )
+            .with_sumifs_cache_epoch(self.current_sumifs_cache_epoch())
+            .with_recalc_clock(self.recalc_clock());
+            ctx.ast_cache = Some(&self.ast_cache);
+            ctx.access.ordered_sheets = self.ordered_sheets_cache.clone();
+            ctx.access.formula_text_provider = self.formula_text_provider();
+            ctx.workbook_cache = Some(&self.workbook_cache);
+            let Ok(mut value) = crate::eval::sync_block_on(crate::eval::Evaluator::evaluate(
+                &entry.ast, &ctx, &ctx,
+            )) else {
+                return Ok(false);
+            };
+            if matches!(value, CellValue::Array(_) | CellValue::Image(_)) {
+                return Ok(false);
+            }
+            if matches!(value, CellValue::Null) {
+                value = CellValue::number(0.0);
+            }
+            cell_store.set_value_mut(&cell_id, value);
+        }
+        Ok(true)
+    }
+
     // -----------------------------------------------------------------------
     // Internal: recalculation
     // -----------------------------------------------------------------------

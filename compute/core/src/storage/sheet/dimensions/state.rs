@@ -103,6 +103,8 @@ impl RowMetadata {
 pub(crate) struct ColumnMetadata {
     pub format: Option<StoredAxisFormat>,
     pub width: Option<CharWidth>,
+    /// Runtime pixel setter provenance; imported/direct character widths remain canonical.
+    pub width_from_pixels: bool,
     pub width_str: Option<String>,
     pub width_present: Option<bool>,
     pub custom_width: bool,
@@ -122,6 +124,7 @@ impl ColumnMetadata {
         Self {
             format: None,
             width: Some(CharWidth(source.width)),
+            width_from_pixels: false,
             width_str: source.width_str.clone(),
             width_present: source.width_present.clone(),
             custom_width: source.custom_width.clone(),

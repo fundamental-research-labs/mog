@@ -46,6 +46,17 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
         return SheetDimensions::default();
     };
     let grid = stores.grid_indexes.get(sheet_id);
+    // Fresh automatic workbooks use host pixel metrics in memory, but the XLSX
+    // writer supplies a Calibri11 Normal style when no stylesheet/theme exists.
+    // Translate pixel-authored widths at that boundary; imported/direct-character
+    // records and explicit-host workbooks retain their canonical widths.
+    let export_authored_widths = stores.layout_metrics.derive_imported_normal_font
+        && stores.layout_metrics.imported_normal_font.is_none()
+        && stores.storage.metadata.stylesheet.is_none()
+        && stores.storage.metadata.theme.is_none();
+    let mut xlsx_metrics = stores.layout_metrics;
+    xlsx_metrics.imported_normal_font = Some(domain_types::units::ImportedNormalFont::Calibri11);
+
     let default_row = domain_types::units::Points(meta.format.default_row_height.unwrap_or(15.0));
     let default_col = meta.format.effective_default_col_width();
     let hidden_rows: std::collections::BTreeSet<_> = queries::get_hidden_rows(stores, sheet_id)
@@ -83,6 +94,18 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
             let col = grid?.col_index(id)?;
             let hidden = hidden_columns.contains(&col);
             let mut dimension = record.to_domain(col, default_col, hidden);
+            if export_authored_widths
+                && record.width_from_pixels
+                && record.width.is_some()
+                && dimension.width_present != Some(false)
+            {
+                let pixels = stores
+                    .layout_metrics
+                    .column_width_to_pixels(domain_types::units::CharWidth(dimension.width));
+                dimension.width = xlsx_metrics.pixels_to_column_width(pixels).0;
+                dimension.width_str = None;
+            }
+
             dimension.hidden_attr = dimension
                 .hidden_attr
                 .map(|_| hidden)
@@ -591,5 +614,132 @@ fn table_sort_state_from_ooxml(sort: OoxmlSortState) -> TableSortState {
             })
             .collect(),
         ext_lst_raw: sort.ext_lst_raw,
+    }
+}
+
+#[cfg(test)]
+mod authored_width_tests {
+    use super::*;
+    use crate::snapshot::{SheetSnapshot, WorkbookSnapshot};
+    use crate::storage::engine::{ComputeEngine, construction};
+    use domain_types::units::LayoutMetrics;
+
+    #[test]
+    fn automatic_host_widths_export_for_calibri_normal_on_both_host_profiles() {
+        for mdw in [7.0, 8.0] {
+            let mut profile = LayoutMetrics::from_column_width_mdw(mdw).unwrap();
+            // Select the default import/export policy with an explicit host MDW,
+            // so Linux and Mac branches both run on every test host.
+            profile.derive_imported_normal_font = true;
+            let snapshot = WorkbookSnapshot {
+                sheets: vec![SheetSnapshot {
+                    id: "550e8400-e29b-41d4-a716-446655440000".into(),
+                    name: "Widths".into(),
+                    rows: 3,
+                    cols: 3,
+                    identities: vec![],
+                    row_axis: None,
+                    col_axis: None,
+                    cells: vec![],
+                    ranges: vec![],
+                }],
+                ..Default::default()
+            };
+            let (mut engine, _) =
+                construction::from_snapshot_with_layout_metrics(snapshot, profile).unwrap();
+            let sid = *engine.cell_store.sheet_ids().next().unwrap();
+            // A representable sheet default exercises equality elision: 10 chars
+            // maps to75px on MDW7 and85px on MDW8 in the live host profile.
+            let matching_default = mdw * 10.0 + 5.0;
+            engine
+                .set_sheet_setting(&sid, "defaultColWidth", &matching_default.to_string())
+                .unwrap();
+            engine.set_col_width(&sid, 3, matching_default).unwrap();
+            engine.set_col_width(&sid, 2, 180.0).unwrap();
+            engine.set_col_width_chars(&sid, 2, 23.0).unwrap();
+            assert_eq!(
+                engine.build_parse_output().unwrap().sheets[0]
+                    .dimensions
+                    .col_widths
+                    .iter()
+                    .find(|dimension| dimension.col == 2)
+                    .unwrap()
+                    .width,
+                23.0,
+                "explicit character setter clears pixel provenance"
+            );
+            engine.set_col_width(&sid, 8, 188.0).unwrap();
+            engine
+                .set_col_widths(&sid, &[(0, 137.0), (7, 211.0)])
+                .unwrap();
+            // The explicitly canonical API is not a pixel edit, even in a fresh workbook.
+            engine.set_col_width_chars(&sid, 1, 22.0).unwrap();
+            let canonical_width = |engine: &ComputeEngine| {
+                engine.build_parse_output().unwrap().sheets[0]
+                    .dimensions
+                    .col_widths
+                    .iter()
+                    .find(|dimension| dimension.col == 1)
+                    .unwrap()
+                    .width
+            };
+            assert_eq!(canonical_width(&engine), 22.0);
+            engine.set_col_width(&sid, 1, 199.0).unwrap();
+            engine.undo().unwrap();
+            assert_eq!(
+                canonical_width(&engine),
+                22.0,
+                "undo restores canonical provenance"
+            );
+            engine.redo().unwrap();
+            engine.rebuild_compute_core().unwrap();
+            // Native rebuilds carry the dimension metadata alongside the cell snapshot.
+            let snapshot =
+                construction::build_workbook_snapshot(&engine.stores, &engine.cell_store);
+            let (mut native, _) =
+                construction::from_snapshot_with_layout_metrics(snapshot, profile).unwrap();
+            native.stores.storage = engine.stores.storage.clone();
+            native.rebuild_compute_core().unwrap();
+            engine = native;
+            engine.copy_sheet(&sid, "Copied widths").unwrap();
+            let bytes = engine.export_to_xlsx_bytes().unwrap();
+            let (reloaded, _) = ComputeEngine::from_xlsx_bytes(&bytes).unwrap();
+            let second_bytes = reloaded.export_to_xlsx_bytes().unwrap();
+            let (second_reload, _) = ComputeEngine::from_xlsx_bytes(&second_bytes).unwrap();
+            for workbook in [&reloaded, &second_reload] {
+                assert_eq!(workbook.cell_store.sheet_ids().count(), 2);
+                for id in workbook.cell_store.sheet_ids() {
+                    for (col, expected) in [
+                        (8, 188.0),
+                        (0, 137.0),
+                        (7, 211.0),
+                        (1, 199.0),
+                        (3, matching_default),
+                    ] {
+                        assert!(
+                            (workbook.get_col_width_query(id, col) - expected).abs() < 1.0,
+                            "copied/re-exported host{mdw} col{col}"
+                        );
+                    }
+                }
+            }
+            let rsid = *reloaded.cell_store.sheet_ids().next().unwrap();
+            for (col, expected) in [
+                (8, 188.0),
+                (0, 137.0),
+                (7, 211.0),
+                (1, 199.0),
+                (3, matching_default),
+            ] {
+                assert!(
+                    (engine.get_col_width_query(&sid, col) - expected).abs() < 1.0,
+                    "live host{mdw}"
+                );
+                assert!(
+                    (reloaded.get_col_width_query(&rsid, col) - expected).abs() < 1.0,
+                    "reloaded host{mdw} col{col}"
+                );
+            }
+        }
     }
 }

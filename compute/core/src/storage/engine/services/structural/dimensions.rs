@@ -97,7 +97,7 @@ pub(in crate::storage::engine) fn set_col_width(
     ensure_axis_capacity(stores, cell_store, sheet_id, 0, col)?;
     // Store canonical units (char-width) in native metadata
     let width_cw = stores.layout_metrics.pixels_to_column_width(width_px);
-    dimensions::set_col_width(
+    dimensions::set_col_width_from_pixels(
         &mut stores.storage,
         sheet_id,
         col,
@@ -138,7 +138,7 @@ pub(in crate::storage::engine) fn set_col_widths(
 
     for (col, width_px) in widths {
         let width_cw = stores.layout_metrics.pixels_to_column_width(*width_px);
-        dimensions::set_col_width(
+        dimensions::set_col_width_from_pixels(
             &mut stores.storage,
             sheet_id,
             *col,

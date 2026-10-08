@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use compute_api::{CellAddress, CellRange, Sheet, mutation::CellInput};
+use compute_api::{CellRange, Sheet, mutation::CellInput};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use value_types::CellValue;
@@ -227,31 +227,21 @@ impl TableColumnRef {
             ));
         }
         let deleted_column = table.range.start_col + column.index;
-        // Remove the physical worksheet column first. The structural metadata
-        // pass then keeps the table alive and moves its range with the cells;
-        // doing the metadata contraction first would make a first-column
-        // delete look like the entire (already contracted) table was deleted.
+        // Keep rows outside the table unchanged. The partial shift leaves
+        // metadata alone; remove_column contracts the definition once.
         self.sheet()
             .structure()
-            .delete_columns(deleted_column, 1)
+            .delete_cells_with_shift(
+                table.range.start_row,
+                deleted_column,
+                table.range.end_row - table.range.start_row + 1,
+                1,
+                true,
+            )
             .map_err(engine)?;
         self.sheet()
             .tables()
             .remove_column(&table.name, column.index)
-            .map_err(engine)?;
-        // The table metadata API contracts the table definition but leaves
-        // worksheet cells in place. The structural delete above moved cells,
-        // formulas, and neighboring columns together; resize restores the
-        // intended range after the metadata contraction.
-        self.sheet()
-            .tables()
-            .resize(
-                &table.name,
-                table.range.start_row,
-                table.range.start_col,
-                table.range.end_row,
-                table.range.end_col - 1,
-            )
             .map_err(engine)?;
         Ok(())
     }
@@ -602,109 +592,24 @@ pub(crate) fn add_column(
     }
 
     let sheet = table_ref.sheet();
-    // A worksheet column insertion at the table's left edge is the only
-    // prepend path that lets the engine move formulas and neighboring cells
-    // with their identities intact. The table metadata is repaired below so
-    // the newly-created column remains at the original start position.
-    let old_header_values = if position == 0 && table.has_header_row {
-        Some(snapshot_range_inputs(
-            &sheet,
-            &TableCollectionRange {
-                start_row: table.range.start_row,
-                start_col: table.range.start_col,
-                end_row: table.range.start_row,
-                end_col: table.range.end_col,
-            },
-        )?)
-    } else {
-        None
-    };
-
-    // Reserve worksheet space before changing the table definition. Inserting
-    // at an interior position lets the engine adjust formulas and neighboring
-    // cells in one structural operation. Appending reserves a blank column at
-    // the right edge; prepending inserts at the table's left edge and repairs
-    // the metadata range after the table API adds its column definition.
-    let reserved_column = if position == 0 {
-        table.range.start_col
-    } else {
-        table.range.start_col + position as u32
-    };
+    // Shift only the table's row span. Partial shifts do not transform table
+    // metadata, so add_column expands the definition exactly once.
+    let reserved_column = table.range.start_col + position as u32;
     sheet
         .structure()
-        .insert_columns(reserved_column, 1)
+        .insert_cells_with_shift(
+            table.range.start_row,
+            reserved_column,
+            table.range.end_row - table.range.start_row + 1,
+            1,
+            true,
+        )
         .map_err(engine)?;
-
     sheet
         .tables()
         .add_column(&table.name, &column_name, position as u32)
         .map_err(engine)?;
 
-    if position == 0 {
-        let expanded_end = table.range.end_col.checked_add(1).ok_or_else(|| {
-            invalid("The added column would exceed the worksheet column limit".to_string())
-        })?;
-        // The left-edge worksheet insertion shifted the table to the right;
-        // put its start back while retaining the new column definition.
-        sheet
-            .tables()
-            .resize(
-                &table.name,
-                table.range.start_row,
-                table.range.start_col,
-                table.range.end_row,
-                expanded_end,
-            )
-            .map_err(engine)?;
-
-        if let Some(old_header_values) = old_header_values {
-            let shifted_start = table.range.start_col + 1;
-            let shifted_end = table.range.end_col.checked_add(1).ok_or_else(|| {
-                invalid("The added column would exceed the worksheet column limit".to_string())
-            })?;
-            sheet
-                .set_range_typed(
-                    a1_range(
-                        table.range.start_row,
-                        shifted_start,
-                        table.range.start_row,
-                        shifted_end,
-                    )
-                    .as_str(),
-                    &old_header_values,
-                )
-                .map_err(engine)?;
-            let new_header = vec![vec![Some(CellInput::Literal {
-                text: column_name.clone(),
-            })]];
-            sheet
-                .set_range_typed(
-                    a1_range(
-                        table.range.start_row,
-                        table.range.start_col,
-                        table.range.start_row,
-                        table.range.start_col,
-                    )
-                    .as_str(),
-                    &new_header,
-                )
-                .map_err(engine)?;
-        }
-    } else if position < table.columns.len() {
-        // The structural insert already grew the table range by one column;
-        // add_column grows it once more while adding metadata. Restore the
-        // intended width without changing its start position.
-        sheet
-            .tables()
-            .resize(
-                &table.name,
-                table.range.start_row,
-                table.range.start_col,
-                table.range.end_row,
-                table.range.end_col + 1,
-            )
-            .map_err(engine)?;
-    }
     if let Some(grid) = parsed_values.as_ref()
         && row_count > 0
     {
@@ -753,7 +658,13 @@ pub(crate) fn add_rows(
         // they are empty. If occupied cells exist below the table, preserve
         // them by shifting the used sheet region down before writing.
         if sheet_has_rows_at_or_below(&sheet, absolute)? {
-            insert_sheet_rows(&sheet, absolute, row_count, table.range.end_col)?;
+            insert_table_cells(
+                &sheet,
+                absolute,
+                row_count,
+                table.range.start_col,
+                table.range.end_col,
+            )?;
         }
         let grid = parsed_values.as_ref();
         if let Some(grid) = grid {
@@ -770,7 +681,13 @@ pub(crate) fn add_rows(
     }
 
     let insert_row = data_insert_row(&table, requested_index)?;
-    insert_sheet_rows(&sheet, insert_row, row_count, table.range.end_col)?;
+    insert_table_cells(
+        &sheet,
+        insert_row,
+        row_count,
+        table.range.start_col,
+        table.range.end_col,
+    )?;
     let new_end = table.range.end_row.checked_add(row_count).ok_or_else(|| {
         invalid("The added rows would exceed the worksheet row limit".to_string())
     })?;
@@ -898,10 +815,10 @@ fn delete_table_row(
     }
 
     let sheet = table_ref.sheet();
-    let column_count = sheet_shift_column_count(&sheet, table.range.end_col)?;
+    let column_count = table.range.end_col - table.range.start_col + 1;
     sheet
         .structure()
-        .delete_cells_with_shift(absolute_row, 0, 1, column_count, false)
+        .delete_cells_with_shift(absolute_row, table.range.start_col, 1, column_count, false)
         .map_err(engine)?;
 
     let new_end = table.range.end_row.checked_sub(1).ok_or_else(|| {
@@ -920,38 +837,20 @@ fn delete_table_row(
     Ok(())
 }
 
-/// Add worksheet rows by remapping the used cell region from `at` downward.
-///
-/// The range width includes the table and every currently used neighboring
-/// column. This preserves adjacent values/formulas while keeping table
-/// metadata under explicit control at the call site.
-fn insert_sheet_rows(
+/// Reserve space only within the table columns; adjacent cells keep their positions.
+/// Partial shifts leave table metadata under explicit control at the call site.
+fn insert_table_cells(
     sheet: &Sheet,
     at: u32,
     count: u32,
-    table_end_col: u32,
+    start_col: u32,
+    end_col: u32,
 ) -> Result<(), TableCollectionError> {
-    let column_count = sheet_shift_column_count(sheet, table_end_col)?;
     sheet
         .structure()
-        .insert_cells_with_shift(at, 0, count, column_count, false)
+        .insert_cells_with_shift(at, start_col, count, end_col - start_col + 1, false)
         .map_err(engine)?;
     Ok(())
-}
-
-fn sheet_shift_column_count(
-    sheet: &Sheet,
-    table_end_col: u32,
-) -> Result<u32, TableCollectionError> {
-    let table_width = table_end_col
-        .checked_add(1)
-        .ok_or_else(|| invalid("The table exceeds the worksheet column limit".to_string()))?;
-    let used_width = sheet
-        .get_data_bounds()
-        .map_err(engine)?
-        .and_then(|bounds| bounds.max_col.checked_add(1))
-        .unwrap_or(0);
-    Ok(table_width.max(used_width))
 }
 
 fn sheet_has_rows_at_or_below(sheet: &Sheet, row: u32) -> Result<bool, TableCollectionError> {
@@ -1181,33 +1080,6 @@ fn range_values(
             .map(|row| Value::Array(row.into_iter().map(cell_to_json).collect()))
             .collect(),
     ))
-}
-
-/// Snapshot a table range as typed cell inputs before a structural operation.
-///
-/// The prepend-column path inserts a worksheet column at the table's left
-/// edge.  Header cells are restored after the table metadata mutation, so a
-/// typed snapshot keeps literals, values, and formulas intact while the new
-/// first header is populated by the caller.
-fn snapshot_range_inputs(
-    sheet: &Sheet,
-    range: &TableCollectionRange,
-) -> Result<Vec<Vec<Option<CellInput>>>, TableCollectionError> {
-    let mut grid = Vec::new();
-    for row in range.start_row..=range.end_row {
-        let mut cells = Vec::new();
-        for col in range.start_col..=range.end_col {
-            let address = CellAddress::Position(row, col);
-            let input = if let Some(formula) = sheet.get_formula(address.clone()).map_err(engine)? {
-                CellInput::formula(&formula)
-            } else {
-                CellInput::from_cell_value(&sheet.get_cell_value(address).map_err(engine)?)
-            };
-            cells.push(Some(input));
-        }
-        grid.push(cells);
-    }
-    Ok(grid)
 }
 
 fn table_row_values(

@@ -26,8 +26,9 @@ impl ComputeEngine {
 
     pub fn from_snapshot_with_layout_metrics(
         snapshot: WorkbookSnapshot,
-        layout_metrics: domain_types::units::LayoutMetrics,
+        mut layout_metrics: domain_types::units::LayoutMetrics,
     ) -> Result<(Self, RecalcResult), ComputeError> {
+        layout_metrics.derive_imported_normal_font = false;
         construction::from_snapshot_with_layout_metrics(snapshot, layout_metrics)
     }
 

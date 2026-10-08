@@ -32,6 +32,15 @@ use crate::worksheets::{self, WorksheetError, WorksheetRef};
 #[derive(Debug, Deserialize)]
 #[serde(tag = "op")]
 enum Op {
+    #[serde(rename = "applicationSetMode")]
+    ApplicationSetMode { mode: String },
+    #[serde(rename = "applicationCalculate")]
+    ApplicationCalculate {
+        #[serde(rename = "calculationType")]
+        calculation_type: String,
+    },
+    #[serde(rename = "applicationLoad")]
+    ApplicationLoad { id: String, properties: Vec<String> },
     #[serde(rename = "getItem")]
     GetItem { id: String, name: String },
     #[serde(rename = "getWorksheetCollection")]
@@ -408,6 +417,13 @@ enum Op {
         #[serde(rename = "rangeId")]
         range_id: Option<String>,
         formula: Option<String>,
+    },
+    #[serde(rename = "getChart")]
+    GetChart {
+        id: String,
+        #[serde(rename = "worksheetId")]
+        worksheet_id: String,
+        key: String,
     },
     #[serde(rename = "addChart")]
     AddChart {
@@ -806,6 +822,64 @@ impl Host {
                 }
             };
             match op {
+                Op::ApplicationSetMode { mode } => {
+                    let mode = match mode.as_str() {
+                        "Manual" => "manual",
+                        "Automatic" => "auto",
+                        "AutomaticExceptTables" => "autoNoTable",
+                        _ => {
+                            return Err(BatchError {
+                                code: "InvalidArgument",
+                                message: format!("Unknown calculation mode: {mode}"),
+                            });
+                        }
+                    };
+                    let previous = self
+                        .workbook
+                        .settings()
+                        .runtime_calculation_mode()
+                        .map_err(engine_error)?;
+                    self.workbook
+                        .settings()
+                        .set_runtime_calculation_mode(mode)
+                        .map_err(write_error)?;
+                    if previous == "manual" && mode != "manual" {
+                        self.workbook.recalculate().map_err(write_error)?;
+                    }
+                }
+                Op::ApplicationCalculate { calculation_type } => {
+                    if calculation_type != "Full" {
+                        return Err(BatchError {
+                            code: "NotSupported",
+                            message: "Only Application.calculate(Full) is supported.".into(),
+                        });
+                    }
+                    self.workbook.recalculate().map_err(write_error)?;
+                }
+                Op::ApplicationLoad { id, properties } => {
+                    // Excel 16.0.20430.20146 reports the stored/opened mode even
+                    // after a runtime setter changes dependency scheduling.
+                    // Keep readback separate from the effective scheduler mode.
+                    for property in properties {
+                        if property != "calculationMode" {
+                            return Err(unsupported_load_property("Application", &property));
+                        }
+                        let mode = self
+                            .workbook
+                            .settings()
+                            .calculation_mode()
+                            .map_err(engine_error)?;
+                        let mode = match mode.as_str() {
+                            "manual" => "Manual",
+                            "autoNoTable" => "AutomaticExceptTables",
+                            _ => "Automatic",
+                        };
+                        loaded
+                            .entry(id.clone())
+                            .or_default()
+                            .insert(property, json!(mode));
+                    }
+                }
                 Op::GetItem { id, name } => {
                     let worksheet =
                         worksheets::get_item(&self.workbook, &name).map_err(worksheet_error)?;
@@ -2133,6 +2207,42 @@ impl Host {
                         })
                         .map_err(engine_error)?;
                 }
+                Op::GetChart {
+                    id,
+                    worksheet_id,
+                    key,
+                } => {
+                    let sheet = self
+                        .sheets
+                        .lock()
+                        .expect("sheets lock")
+                        .get(&worksheet_id)
+                        .ok_or_else(|| BatchError {
+                            code: "InvalidObjectPath",
+                            message: "Chart worksheet unavailable".into(),
+                        })?
+                        .sheet();
+                    let object = sheet
+                        .charts()
+                        .get_all()
+                        .map_err(engine_error)?
+                        .into_iter()
+                        .find(|object| object.common.id == key || object.common.name == key)
+                        .ok_or_else(|| BatchError {
+                            code: "ItemNotFound",
+                            message: format!("Chart '{key}' was not found"),
+                        })?;
+                    self.charts.lock().expect("charts lock").insert(
+                        id,
+                        ChartRef {
+                            sheet,
+                            chart_id: object.common.id,
+                            title: None,
+                            category_title: None,
+                            value_title: None,
+                        },
+                    );
+                }
                 Op::AddChart {
                     id,
                     worksheet_id,
@@ -2158,10 +2268,16 @@ impl Host {
                     let data_range =
                         unqualified_range_formula(&sheet_name, range_metadata(range)?.bounds);
                     let sheet = worksheet.sheet();
-                    let config = json!({
-                        "type": map_chart_type(&chart_type),
+                    let mapped_type = map_chart_type(&chart_type);
+                    let mut config = json!({
+                        "type": mapped_type,
                         "dataRange": data_range,
                     });
+                    // Match the explicit series-color policy of Excel-created column charts
+                    // instead of leaving category-versus-series behavior to application defaults.
+                    if mapped_type == "column" {
+                        config["varyByCategories"] = json!(false);
+                    }
                     let result = sheet.charts().create(&config).map_err(engine_error)?;
                     let chart_id = result
                         .data
@@ -2337,8 +2453,28 @@ impl Host {
                         .sheet
                         .set_range_typed(address, &grid)
                         .map_err(write_error)?;
+                    if matches!(write_property, WriteProperty::Values) {
+                        expand_tables_after_adjacent_values(&range.sheet, bounds, &grid)?;
+                    }
                 }
                 Op::Load { id, properties } => {
+                    if let Some(chart) = self.charts.lock().expect("charts lock").get(&id) {
+                        let props = loaded.entry(id).or_default();
+                        for property in &properties {
+                            let value = crate::chart_properties::get(
+                                &chart.sheet,
+                                &chart.chart_id,
+                                property,
+                            )
+                            .map_err(|message| BatchError {
+                                code: "InvalidArgument",
+                                message,
+                            })?;
+                            props.insert(property.clone(), value);
+                        }
+                        continue;
+                    }
+
                     if let Some(areas) = self.range_areas.lock().expect("range areas lock").get(&id)
                     {
                         let props = loaded.entry(id).or_default();
@@ -2604,6 +2740,38 @@ impl Host {
                                         },
                                     );
                                 }
+                                "hyperlink" => {
+                                    let address = range
+                                        .sheet
+                                        .hyperlinks()
+                                        .get(metadata.row_index, metadata.column_index)
+                                        .map_err(engine_error)?;
+                                    let mut hyperlink = serde_json::Map::new();
+                                    if let Some(address) = address {
+                                        let (address, document_reference) =
+                                            domain_types::domain::hyperlink::web_hyperlink_parts(
+                                                &address,
+                                            );
+                                        hyperlink.insert("address".to_string(), json!(address));
+                                        hyperlink.insert(
+                                            "documentReference".to_string(),
+                                            json!(document_reference),
+                                        );
+                                        hyperlink.insert(
+                                            "textToDisplay".to_string(),
+                                            json!(
+                                                range
+                                                    .sheet
+                                                    .get_display_value((
+                                                        metadata.row_index,
+                                                        metadata.column_index
+                                                    ))
+                                                    .map_err(engine_error)?
+                                            ),
+                                        );
+                                    }
+                                    props.insert(property.clone(), Value::Object(hyperlink));
+                                }
                                 "numberFormat" | "text" | "valueTypes" => {
                                     props.extend(if unbounded {
                                         HashMap::from([(property.clone(), Value::Null)])
@@ -2771,6 +2939,42 @@ impl Host {
             code: "InvalidObjectPath",
             message: "The chart object is not available.".to_string(),
         })?;
+        if matches!(
+            property,
+            "name"
+                | "left"
+                | "top"
+                | "width"
+                | "height"
+                | "legend.visible"
+                | "legend.position"
+                | "setPosition"
+        ) {
+            let mut value = value.clone();
+            if property == "setPosition" {
+                for key in ["start", "end"] {
+                    if let Some(range_id) = value[key]["rangeId"].as_str() {
+                        let ranges = self.ranges.lock().expect("ranges lock");
+                        let range = ranges.get(range_id).ok_or_else(|| BatchError {
+                            code: "InvalidObjectPath",
+                            message: "Position range is unavailable".into(),
+                        })?;
+                        if range.sheet.id() != chart.sheet.id() {
+                            return Err(BatchError {
+                                code: "InvalidArgument",
+                                message: "Position range must belong to the chart worksheet".into(),
+                            });
+                        }
+                        value[key] = json!({"address": range.address});
+                    }
+                }
+            }
+            return crate::chart_properties::set(&chart.sheet, &chart.chart_id, property, &value)
+                .map_err(|message| BatchError {
+                    code: "InvalidArgument",
+                    message,
+                });
+        }
         let text = match value {
             Value::String(s) => s.clone(),
             other => other.to_string(),
@@ -2779,7 +2983,7 @@ impl Host {
             "title.text" => chart.title = Some(text),
             "axes.categoryAxis.title.text" => chart.category_title = Some(text),
             "axes.valueAxis.title.text" => chart.value_title = Some(text),
-            "title.visible" | "legend.visible" | "legend.position" => return Ok(()),
+            "title.visible" => return Ok(()),
             other => {
                 return Err(BatchError {
                     code: "InvalidArgument",
@@ -3363,6 +3567,56 @@ fn has_formula_intent(value: &str, property: WriteProperty) -> bool {
         // values and retain their JavaScript string type.
         WriteProperty::Formulas => value.starts_with('='),
     }
+}
+
+/// Grow a table for populated rows written immediately below its columns.
+/// Keep this host-input policy separate from low-level engine cell writes.
+fn expand_tables_after_adjacent_values(
+    sheet: &Sheet,
+    bounds: (u32, u32, u32, u32),
+    grid: &[Vec<Option<CellInput>>],
+) -> Result<(), BatchError> {
+    let (sr, sc, er, ec) = bounds;
+    if !grid.iter().all(|row| {
+        row.iter()
+            .any(|input| matches!(input, Some(value) if !matches!(value, CellInput::Clear)))
+    }) {
+        return Ok(());
+    }
+    let tables = sheet.tables().get_all().map_err(engine_error)?;
+    for table in &tables {
+        if !table.auto_expand
+            || table.has_totals_row
+            || table.range.end_row().checked_add(1) != Some(sr)
+            || sc < table.range.start_col()
+            || ec > table.range.end_col()
+        {
+            continue;
+        }
+        // A valid cell write must not become a failed resize after mutation
+        // when the adjacent cells belong to another table.
+        if tables.iter().any(|other| {
+            other.id != table.id
+                && other.range.start_row() <= er
+                && other.range.end_row() >= table.range.start_row()
+                && other.range.start_col() <= table.range.end_col()
+                && other.range.end_col() >= table.range.start_col()
+        }) {
+            continue;
+        }
+        // Reuse normal resize validation and dependency refresh.
+        crate::tables::TableRef::get_item(sheet.clone(), &table.name)
+            .and_then(|table_ref| {
+                table_ref.resize_bounds(
+                    table.range.start_row(),
+                    table.range.start_col(),
+                    er,
+                    table.range.end_col(),
+                )
+            })
+            .map_err(table_error)?;
+    }
+    Ok(())
 }
 
 fn range_values_json(sheet: &Sheet, bounds: (u32, u32, u32, u32)) -> Result<Value, BatchError> {

@@ -26,6 +26,8 @@ pub struct CellStore {
     pub(crate) evaluated_metadata_revision: u64,
     /// Workbook date system supplied by the engine's workbook settings store.
     pub(crate) date1904: bool,
+    /// Runtime input identity for CELL("filename"); never persisted in XLSX.
+    pub(crate) source_file_prefix: Option<String>,
     pub(crate) history: crate::storage::engine::history::HistoryCapture,
     /// Runtime-only code page selected for the legacy CHAR/CODE functions.
     ///
@@ -237,6 +239,7 @@ impl CellStore {
             cell_metadata_provider: None,
             evaluated_metadata_revision: 0,
             date1904: false,
+            source_file_prefix: None,
             history: Default::default(),
             char_code_page: compute_functions::DEFAULT_CHAR_CODE_PAGE,
             id_alloc: std::sync::Arc::new(cell_types::IdAllocator::new()),
@@ -862,6 +865,10 @@ impl DataSource for CellStore {
 // ---------------------------------------------------------------------------
 
 impl PositionResolver for CellStore {
+    fn is_nonspatial(&self, cell_id: &CellId) -> bool {
+        self.variables.is_variable(cell_id)
+    }
+
     fn resolve(&self, cell_id: &CellId) -> Option<CellPosition> {
         let sheet = self.sheet_for_cell(cell_id)?;
         let sheet_store = self.get_sheet(&sheet)?;
@@ -877,6 +884,10 @@ impl PositionResolver for CellStore {
 /// Reference impl — allows `&CellStore` to be used as a `PositionResolver`
 /// (e.g., as the base resolver in `WithOverrides<&CellStore>`).
 impl PositionResolver for &CellStore {
+    fn is_nonspatial(&self, cell_id: &CellId) -> bool {
+        <CellStore as PositionResolver>::is_nonspatial(self, cell_id)
+    }
+
     #[inline]
     fn resolve(&self, cell_id: &CellId) -> Option<CellPosition> {
         <CellStore as PositionResolver>::resolve(self, cell_id)

@@ -343,6 +343,7 @@
   function RequestContext() {
     ClientRequestContext.call(this);
     this.workbook = new Workbook(this);
+    this.application = new Application(this);
   }
   RequestContext.prototype = Object.create(ClientRequestContext.prototype);
   RequestContext.prototype.constructor = RequestContext;
@@ -591,6 +592,29 @@
     }
     return collection;
   }
+
+  function Application(context) {
+    ClientObject.call(this, context);
+  }
+  Application.prototype = Object.create(ClientObject.prototype);
+  Application.prototype.constructor = Application;
+  Application.prototype.load = function (props) {
+    this.context._queue.push({ op: "applicationLoad", id: this._id,
+      properties: normalizeLoad(props, ["calculationMode"]) });
+    return this;
+  };
+  Object.defineProperty(Application.prototype, "calculationMode", {
+    get: function () {
+      if (!this._loaded.calculationMode) throw propertyNotLoaded("calculationMode");
+      return this._calculationMode;
+    },
+    set: function (value) {
+      this.context._queue.push({ op: "applicationSetMode", mode: String(value) });
+    }
+  });
+  Application.prototype.calculate = function (calculationType) {
+    this.context._queue.push({ op: "applicationCalculate", calculationType: String(calculationType) });
+  };
 
   function Workbook(context) {
     ClientObject.call(this, context);
@@ -882,6 +906,12 @@
     return chart;
   };
 
+  ChartCollection.prototype.getItem = function (key) {
+    var chart = new Chart(this.context);
+    this.context._queue.push({op:"getChart",id:chart._id,worksheetId:this._worksheet._id,key:String(key)});
+    return chart;
+  };
+
   function Chart(context) {
     ClientObject.call(this, context);
     this.title = new ChartTitle(context, this._id);
@@ -890,6 +920,27 @@
   }
   Chart.prototype = Object.create(ClientObject.prototype);
   Chart.prototype.constructor = Chart;
+
+  ["name", "left", "top", "width", "height"].forEach(function (name) {
+    Object.defineProperty(Chart.prototype, name, {
+      get: function () {
+        if (!this._loaded[name]) throw propertyNotLoaded(name);
+        return this["_" + name];
+      },
+      set: function (value) {
+        this.context._queue.push({op:"set", id:this._id, property:name, value:value});
+      },
+    });
+  });
+  Chart.prototype.setPosition = function (start, end) {
+    function endpoint(value) {
+      if (typeof value === "string") return {address:value};
+      if (value instanceof Range) return {rangeId:value._id};
+      throw new Error("Chart.setPosition requires a cell address or Range");
+    }
+    this.context._queue.push({op:"set",id:this._id,property:"setPosition",
+      value:{start:endpoint(start),end:end == null ? null : endpoint(end)}});
+  };
 
   function ChartTitle(context, chartId) {
     this.context = context;

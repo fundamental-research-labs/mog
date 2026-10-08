@@ -73,6 +73,12 @@ impl PureFunction for FnBetaDist {
         let scaled = (x - a) / (b - a);
         let dist = try_dist!(Beta::new(alpha, beta_param), self.name());
         if cumulative {
+            // Equal shapes give a density symmetric about the midpoint, so
+            // exactly half its probability lies below it. Avoid numerical
+            // integration error in this identity; validation above still runs.
+            if alpha == beta_param && scaled == 0.5 {
+                return CellValue::number(0.5);
+            }
             CellValue::number(dist.cdf(scaled))
         } else {
             CellValue::number(dist.pdf(scaled) / (b - a))
@@ -140,6 +146,10 @@ impl PureFunction for FnBetaDistLegacy {
         }
         let scaled = (x - a) / (b - a);
         let dist = try_dist!(Beta::new(alpha, beta_param), self.name());
+        // As in BETA.DIST, reflection about the midpoint gives equal halves.
+        if alpha == beta_param && scaled == 0.5 {
+            return CellValue::number(0.5);
+        }
         CellValue::number(dist.cdf(scaled))
     }
 }

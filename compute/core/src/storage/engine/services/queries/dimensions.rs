@@ -162,6 +162,10 @@ pub(in crate::storage::engine) fn get_row_height_query(
     sheet_id: &SheetId,
     row: u32,
 ) -> Pixels {
+    if let Some(layout) = stores.pixel_layout(sheet_id) {
+        return layout.get_row_height(row as usize);
+    }
+
     let height_pt = sheet_dimensions::get_row_height(
         &stores.storage,
         sheet_id,
@@ -182,6 +186,10 @@ pub(in crate::storage::engine) fn get_col_width_query(
     sheet_id: &SheetId,
     col: u32,
 ) -> Pixels {
+    if let Some(layout) = stores.pixel_layout(sheet_id) {
+        return layout.get_col_width(col as usize);
+    }
+
     let width_cw = sheet_dimensions::get_col_width(
         &stores.storage,
         sheet_id,
@@ -191,7 +199,7 @@ pub(in crate::storage::engine) fn get_col_width_query(
     if width_cw.0 == 0.0 {
         Pixels(0.0)
     } else {
-        domain_types::units::char_width_to_pixels(width_cw, stores.layout_metrics.column_width_mdw)
+        stores.layout_metrics.column_width_to_pixels(width_cw)
     }
 }
 
@@ -284,7 +292,6 @@ pub(in crate::storage::engine) fn get_col_widths_batch(
     start_col: u32,
     end_col: u32,
 ) -> Vec<(u32, Pixels)> {
-    let mdw = stores.layout_metrics.column_width_mdw;
     (start_col..=end_col)
         .map(|col| {
             let cw = sheet_dimensions::get_col_width(
@@ -298,7 +305,7 @@ pub(in crate::storage::engine) fn get_col_widths_batch(
                 if cw.0 == 0.0 {
                     Pixels(0.0)
                 } else {
-                    domain_types::units::char_width_to_pixels(cw, mdw)
+                    stores.layout_metrics.column_width_to_pixels(cw)
                 },
             )
         })

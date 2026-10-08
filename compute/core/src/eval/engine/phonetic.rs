@@ -24,8 +24,9 @@ use value_types::{CellError, CellValue};
 ///
 /// Cell errors propagate before metadata lookup. A run record is usable only
 /// while its `plain_text` still equals the current value, matching the
-/// freshness guard used by render/export. Missing, stale, and no-run records
-/// preserve the current value through the same coercion as `FnPhonetic`.
+/// freshness guard used by render/export. A text or blank reference without phonetic
+/// metadata returns #N/A. Stale and no-run records retain their existing
+/// fallback until their separate metadata contracts are established.
 /// Runs are concatenated in their stored XML order; `start_index` and
 /// `end_index` describe their base-text spans and do not define a sort order.
 #[must_use]
@@ -43,6 +44,11 @@ pub(crate) fn extract_phonetic_reference(
     };
 
     let Some(rich_string) = rich_string else {
+        // Native Excel full recalculation of an unannotated text reference
+        // returns #N/A; echoing the plain text invents a phonetic reading.
+        if matches!(current_value, CellValue::Text(_) | CellValue::Null) {
+            return CellValue::Error(CellError::Na, None);
+        }
         return CellValue::Text(current_text.into());
     };
 
@@ -642,12 +648,12 @@ mod tests {
         );
         assert_eq!(
             evaluate_production(&phonetic(intersection), &cell_store, sheet),
-            CellValue::Text("大阪".into())
+            CellValue::Error(CellError::Na, None)
         );
     }
 
     #[test]
-    fn production_dispatch_rejects_union_and_falls_back_for_missing_or_stale_metadata() {
+    fn production_dispatch_rejects_union_and_unannotated_text_but_retains_stale_fallback() {
         let (cell_store, sheet) = production_fixture(
             CellValue::Text("東京".into()),
             [((0, 0), rich("東京", Vec::new()))],
@@ -670,7 +676,7 @@ mod tests {
         );
         assert_eq!(
             evaluate_production(&phonetic(cell_reference(sheet, 0, 1)), &cell_store, sheet),
-            CellValue::Text("大阪".into())
+            CellValue::Error(CellError::Na, None)
         );
 
         let (stale_cell_store, stale_sheet) = production_fixture(
@@ -744,11 +750,19 @@ mod tests {
     }
 
     #[test]
-    fn missing_record_uses_existing_text_fallback() {
+    fn unannotated_text_reference_returns_na() {
         let value = CellValue::Text("foo bar baz qux".into());
         assert_eq!(
             extract_phonetic_reference(&value, None),
-            CellValue::Text("foo bar baz qux".into())
+            CellValue::Error(CellError::Na, None)
+        );
+    }
+
+    #[test]
+    fn unannotated_blank_reference_returns_na() {
+        assert_eq!(
+            extract_phonetic_reference(&CellValue::Null, None),
+            CellValue::Error(CellError::Na, None)
         );
     }
 

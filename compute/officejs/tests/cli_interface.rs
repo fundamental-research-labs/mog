@@ -879,3 +879,43 @@ fn version_has_no_workbook_side_effects() {
     assert_eq!(f.ok(&["--version", "-o", "unused.xlsx"]), expected);
     assert_eq!(fs::read_dir(f.path()).unwrap().count(), 0);
 }
+
+#[test]
+fn live_legacy_worker_receives_no_request_before_policy_rejection() {
+    use std::io::Read;
+    let f = Fixture::new();
+    f.ok(&["--close-all"]);
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let id = uuid::Uuid::new_v4().simple().to_string();
+    let path = f.path().join("sessions").join(format!("{id}.json"));
+    fs::write(
+        &path,
+        serde_json::to_vec(&serde_json::json!({"port":port,"token":"legacy-test"})).unwrap(),
+    )
+    .unwrap();
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
+        let mut received = Vec::new();
+        stream.read_to_end(&mut received).unwrap();
+        received
+    });
+    f.fails(
+        &[
+            "-s",
+            &id,
+            "--close",
+            "-e",
+            WRITE,
+            "-o",
+            "must-not-save.xlsx",
+        ],
+        "restart",
+    );
+    assert!(server.join().unwrap().is_empty());
+    assert!(path.exists());
+    assert!(!f.path().join("must-not-save.xlsx").exists());
+}

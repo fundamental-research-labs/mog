@@ -155,7 +155,7 @@ fn apply_arith(op: ArithOp, a: f64, b: f64) -> f64 {
         }
         ArithOp::Mul => a * b,
         ArithOp::Div => a / b,
-        ArithOp::Pow => a.powf(b),
+        ArithOp::Pow => compute_functions::helpers::power::real_power(a, b),
     }
 }
 
@@ -183,5 +183,37 @@ fn apply_cmp(cmp: CmpOp, a: f64, b: f64) -> bool {
         CmpOp::Le => a <= b,
         CmpOp::Gt => a > b,
         CmpOp::Ge => a >= b,
+    }
+}
+
+#[cfg(test)]
+mod power_regression_tests {
+    use super::*;
+
+    #[test]
+    fn vectorized_integer_power_uses_native_negative_rounding() {
+        // Enter through the vector executor, so this fails if its Pow dispatch
+        // bypasses the shared helper even when scalar POWER tests still pass.
+        for (base, exponent, expected) in [
+            (-10.0, -307.0, -9.999999999999995e-308),
+            (-2.0, 3.0, -8.0),
+            (10.0, -307.0, 1.0000000000000001e-307),
+        ] {
+            let group = SharedFormulaGroup {
+                sheet: SheetId::from_raw(1),
+                col: 0,
+                start_row: 5,
+                end_row: 9,
+                pattern: VecOp::BinOp(
+                    Box::new(VecOp::Const(base.into())),
+                    ArithOp::Pow,
+                    Box::new(VecOp::Const(exponent.into())),
+                ),
+                cell_ids: Vec::new(),
+                input_columns: Default::default(),
+            };
+            let output = execute_group(&group, |_, _| None).unwrap();
+            assert_eq!(output, vec![expected; 4], "{base}^{exponent}");
+        }
     }
 }

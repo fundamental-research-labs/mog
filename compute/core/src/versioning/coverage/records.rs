@@ -54,6 +54,8 @@ pub(super) fn semantic_coverage_records(engine: &ComputeEngine) -> Vec<SemanticC
         INVENTORY,
     );
     native_fields!(&mut records, &*engine.storage().metadata, WorkbookMetadata, Workbook, "/workbook/metadata/";
+        imported_calculation_features => ("workbook-metadata", DERIVED),
+        imported_formula_caches_complete => ("workbook-metadata", DERIVED),
         external_links => ("external-data", OPAQUE),
         scenarios => ("workbook-metadata", UNSUPPORTED),
         custom_cell_styles => ("workbook-metadata", UNSUPPORTED),

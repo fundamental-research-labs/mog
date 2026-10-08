@@ -3,8 +3,7 @@ use crate::storage::WorkbookStorage;
 use cell_types::SheetId;
 use domain_types::domain::sheet::{SheetProtectionOptions, SheetSettings};
 use domain_types::units::{
-    CharWidth, LayoutMetrics, Pixels, Points, pixels_to_char_width, pixels_to_points,
-    points_to_pixels, resolve_default_column_width,
+    CharWidth, LayoutMetrics, Pixels, Points, pixels_to_points, resolve_default_column_width,
 };
 
 pub const SHEET_SETTINGS_KEYS: &[&str] = &[
@@ -65,10 +64,12 @@ pub(crate) fn get_sheet_settings_with_layout_metrics(
             .as_ref()
             .and_then(|protection| protection.password_hash.clone()),
         protection_options: meta.protection.as_ref().map(SheetProtectionOptions::from),
-        default_row_height: points_to_pixels(Points(
-            meta.format.default_row_height.unwrap_or(15.0),
-        ))
-        .0,
+        default_row_height: layout_metrics
+            .effective_row_height(
+                meta.format.default_row_height.map(Points),
+                meta.format.custom_height,
+            )
+            .0,
         default_col_width: resolve_default_column_width(
             meta.format.default_col_width.map(CharWidth),
             meta.format.base_col_width,
@@ -151,6 +152,11 @@ pub(crate) fn set_sheet_setting_with_layout_metrics(
         *sheet_id,
         format.default_col_width
     );
+    crate::storage::engine::history::metadata::capture_sheet_field!(
+        storage,
+        *sheet_id,
+        format.custom_height
+    );
     crate::storage::engine::history::metadata::capture_sheet_field!(storage, *sheet_id, protection);
     let Some(meta) = storage.sheet_metadata.get_mut(sheet_id) else {
         return;
@@ -198,6 +204,7 @@ pub(crate) fn set_sheet_setting_with_layout_metrics(
                 && value.is_finite()
             {
                 meta.format.default_row_height = Some(pixels_to_points(Pixels(value)).0);
+                meta.format.custom_height = true;
             }
         }
         "defaultColWidth" => {
@@ -205,7 +212,7 @@ pub(crate) fn set_sheet_setting_with_layout_metrics(
                 && value.is_finite()
             {
                 meta.format.default_col_width =
-                    Some(pixels_to_char_width(Pixels(value), layout_metrics.column_width_mdw).0);
+                    Some(layout_metrics.pixels_to_column_width(Pixels(value)).0);
             }
         }
         "protectionPasswordHash" => {

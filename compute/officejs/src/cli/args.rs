@@ -7,7 +7,8 @@ pub const HELP: &str = "Usage: mog [OPTIONS]
   -o, --output <file.xlsx>  Save here (default: input file, or workbook.xlsx)
   -e, --eval <source>       Run inline JavaScript
   -f, --file <script.js>    Run a JavaScript file
-  -r, --recalculate         Evaluate formulas (automatic after a script)
+  -r, --recalculate         Evaluate formulas, including in manual mode
+      --preserve-results   Set manual mode and disable calculation on save
   -s, --session [ID]        Start a background session, or use an existing one
                            Keep workbook changes in memory until closed
       --close              Save and end the session selected with -s ID
@@ -25,6 +26,7 @@ pub struct Args {
     pub script: Option<PathBuf>,
     pub session: Option<Option<String>>,
     pub recalculate: bool,
+    pub preserve_results: bool,
     pub close: bool,
     pub close_all: bool,
     pub discard: bool,
@@ -69,6 +71,7 @@ impl Args {
                     set(&mut result.session, id, flag)?;
                 }
                 "-r" | "--recalculate" if inline.is_none() => result.recalculate = true,
+                "--preserve-results" if inline.is_none() => result.preserve_results = true,
                 "--close" if inline.is_none() => result.close = true,
                 "--close-all" if inline.is_none() => result.close_all = true,
                 "--discard" if inline.is_none() => result.discard = true,
@@ -84,6 +87,9 @@ impl Args {
                     .into());
                 }
             }
+        }
+        if result.preserve_results && result.recalculate {
+            return Err("--preserve-results conflicts with --recalculate".into());
         }
         if result.eval.is_some() && result.script.is_some() {
             return Err("use either --eval or --file".into());
@@ -103,7 +109,8 @@ impl Args {
                 || result.output.is_some()
                 || result.eval.is_some()
                 || result.script.is_some()
-                || result.recalculate)
+                || result.recalculate
+                || result.preserve_results)
         {
             return Err("--close-all can only be combined with --discard".into());
         }
@@ -112,7 +119,8 @@ impl Args {
                 || result.output.is_some()
                 || result.eval.is_some()
                 || result.script.is_some()
-                || result.recalculate)
+                || result.recalculate
+                || result.preserve_results)
         {
             return Err("--discard requires --close or --close-all, without script, output, or recalculation".into());
         }

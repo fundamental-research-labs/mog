@@ -309,3 +309,22 @@ fn explicit_default_col_width_wins_over_base_and_missing_values_use_profile_fall
         }
     }
 }
+
+#[test]
+fn explicitly_supplied_default_profile_is_not_replaced_by_import_font() {
+    let profile = domain_types::units::LayoutMetrics::default();
+    let expected = domain_types::units::char_width_to_pixels(
+        domain_types::units::CharWidth(10.0),
+        profile.column_width_mdw,
+    )
+    .0;
+    let (mut engine, _) =
+        ComputeEngine::from_snapshot_with_layout_metrics(WorkbookSnapshot::default(), profile)
+            .unwrap();
+    for _ in 0..2 {
+        engine
+            .import_from_xlsx_bytes_no_recalc(&base_only_xlsx())
+            .unwrap();
+        assert_layout_and_viewport_width(&engine, expected);
+    }
+}

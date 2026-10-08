@@ -93,7 +93,7 @@ fn aggregate_sources_preserve_inline_boolean_and_omitted_argument_coercion() {
         ("MAX(A1:A2)", 0.0),
         ("COUNT(A1:A2)", 0.0),
         ("SUM(TRUE,2)", 3.0),
-        ("SUM({TRUE,2})", 3.0),
+        ("SUM({TRUE,2})", 2.0),
         ("COUNT(TRUE,2)", 2.0),
         ("COUNT({TRUE,2})", 1.0),
         ("AVERAGE(2,)", 1.0),

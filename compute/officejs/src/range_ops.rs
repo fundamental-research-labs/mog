@@ -1,5 +1,7 @@
 //! Range structure and layout mutations that are not core values/formulas.
 
+use std::borrow::Cow;
+
 use domain_types::domain::copy::CopyType;
 use serde_json::{Value, json};
 
@@ -124,17 +126,28 @@ fn insert(operation: &Value, context: &HostDispatchContext<'_>) -> Result<(), Ba
         .and_then(Value::as_str)
         .unwrap_or("Down");
     let address = parsed(&range)?;
-    let (start_row, start_col, end_row, end_col) = address.bounds();
+    let (start_row, start_col, _, _) = address.bounds();
     let structure = range.sheet().structure();
     match shift {
-        "Down" | "down" => {
+        "Down" | "down" if address.is_entire_row() => {
             structure
                 .insert_rows(start_row, address.row_count())
                 .map_err(engine)?;
         }
-        "Right" | "right" => {
+        "Right" | "right" if address.is_entire_column() => {
             structure
                 .insert_columns(start_col, address.column_count())
+                .map_err(engine)?;
+        }
+        "Down" | "down" | "Right" | "right" => {
+            structure
+                .insert_cells_with_shift(
+                    start_row,
+                    start_col,
+                    address.row_count(),
+                    address.column_count(),
+                    matches!(shift, "Right" | "right"),
+                )
                 .map_err(engine)?;
         }
         other => {
@@ -143,7 +156,6 @@ fn insert(operation: &Value, context: &HostDispatchContext<'_>) -> Result<(), Ba
             )));
         }
     }
-    let _ = (end_row, end_col);
     Ok(())
 }
 
@@ -208,7 +220,7 @@ fn copy_from(operation: &Value, context: &HostDispatchContext<'_>) -> Result<(),
         return Err(invalid("Range.copyFrom requires a source range"));
     };
     let (src_sr, src_sc, src_er, src_ec) = bounds(&source)?;
-    let (dst_sr, dst_sc, _, _) = bounds(&dest)?;
+    let (dst_sr, dst_sc, dst_er, dst_ec) = bounds(&dest)?;
     let copy_type = match operation
         .get("copyType")
         .and_then(Value::as_str)
@@ -220,10 +232,28 @@ fn copy_from(operation: &Value, context: &HostDispatchContext<'_>) -> Result<(),
         "Formats" | "formats" => CopyType::Formats,
         other => return Err(invalid(format!("Unsupported RangeCopyType '{other}'"))),
     };
+    let transpose = operation
+        .get("transpose")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let (height, width) = if transpose {
+        (src_ec - src_sc + 1, src_er - src_sr + 1)
+    } else {
+        (src_er - src_sr + 1, src_ec - src_sc + 1)
+    };
+    let rows = (dst_er - dst_sr + 1).max(height);
+    let cols = (dst_ec - dst_sc + 1).max(width);
+    // Preserve the existing single-copy behavior for nonmultiple extents;
+    // this change only adds the documented exact-multiple replication.
+    let (row_tiles, col_tiles) = if rows % height == 0 && cols % width == 0 {
+        (rows / height, cols / width)
+    } else {
+        (1, 1)
+    };
     source
         .sheet()
         .structure()
-        .copy_range(
+        .copy_range_tiled(
             src_sr,
             src_sc,
             src_er,
@@ -236,10 +266,9 @@ fn copy_from(operation: &Value, context: &HostDispatchContext<'_>) -> Result<(),
                 .get("skipBlanks")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
-            operation
-                .get("transpose")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
+            transpose,
+            row_tiles,
+            col_tiles,
         )
         .map_err(engine)?;
     Ok(())
@@ -323,6 +352,43 @@ fn named_style_patch(name: &str) -> Result<Value, BatchError> {
     })
 }
 
+// Native Excel separates URL fragments into documentReference, folds the
+// scheme/host case and supplies an empty path for HTTP(S) and FTP addresses.
+// Other schemes and relative/document links retain their existing behavior.
+fn normalize_web_hyperlink<'a>(address: &'a str, document_reference: Option<&str>) -> Cow<'a, str> {
+    let (base, fragment) = domain_types::domain::hyperlink::web_hyperlink_parts(address);
+    let Some((scheme, rest)) = base.split_once("://") else {
+        return Cow::Borrowed(address);
+    };
+    if !["http", "https", "ftp"]
+        .iter()
+        .any(|s| scheme.eq_ignore_ascii_case(s))
+    {
+        return Cow::Borrowed(address);
+    }
+    let authority_end = rest.find(['/', '?']).unwrap_or(rest.len());
+    let authority = &rest[..authority_end];
+    let suffix = &rest[authority_end..];
+    let host_start = authority.rfind('@').map_or(0, |i| i + 1);
+    let (userinfo, host_port) = authority.split_at(host_start);
+    if host_port.is_empty() || authority.chars().any(|c| c.is_whitespace() || c == '\\') {
+        return Cow::Borrowed(address);
+    }
+    let path = if suffix.starts_with('/') { "" } else { "/" };
+    let mut target = format!(
+        "{}://{userinfo}{}{path}{suffix}",
+        scheme.to_ascii_lowercase(),
+        host_port.to_ascii_lowercase()
+    );
+    // Native Excel uses a nonempty explicit reference in preference to the
+    // address fragment; an empty explicit reference does not erase a fragment.
+    if let Some(reference) = document_reference.filter(|r| !r.is_empty()).or(fragment) {
+        target.push('#');
+        target.push_str(reference);
+    }
+    Cow::Owned(target)
+}
+
 fn set_hyperlink(range: &RangeRef, value: &Value) -> Result<(), BatchError> {
     let object = value
         .as_object()
@@ -331,6 +397,7 @@ fn set_hyperlink(range: &RangeRef, value: &Value) -> Result<(), BatchError> {
         .get("address")
         .and_then(Value::as_str)
         .ok_or_else(|| invalid("Range.hyperlink.address must be a string"))?;
+    let url = normalize_web_hyperlink(url, object.get("documentReference").and_then(Value::as_str));
     let (start_row, start_col, end_row, end_col) = bounds(range)?;
     if let Some(display) = object.get("textToDisplay").and_then(Value::as_str) {
         range
@@ -348,7 +415,7 @@ fn set_hyperlink(range: &RangeRef, value: &Value) -> Result<(), BatchError> {
             range
                 .sheet()
                 .hyperlinks()
-                .set(row, col, url)
+                .set(row, col, url.as_ref())
                 .map_err(engine)?;
         }
     }

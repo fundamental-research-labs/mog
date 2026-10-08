@@ -1,6 +1,6 @@
 use cell_types::{CellId, SheetId};
 use domain_types::domain::hyperlink::{
-    Hyperlink, HyperlinkTargetKind, hyperlink_target_kind_for_target,
+    Hyperlink, HyperlinkTargetKind, hyperlink_target_kind_for_target, web_hyperlink_parts,
 };
 
 use super::StoredHyperlink;
@@ -21,7 +21,11 @@ pub fn set_hyperlink(
     let kind = hyperlink_target_kind_for_target(url);
     let data = Hyperlink {
         target: (kind == HyperlinkTargetKind::Relationship).then(|| url.to_owned()),
-        location: (kind == HyperlinkTargetKind::InlineLocation).then(|| url.to_owned()),
+        location: if kind == HyperlinkTargetKind::InlineLocation {
+            Some(url.to_owned())
+        } else {
+            web_hyperlink_parts(url).1.map(str::to_owned)
+        },
         target_mode: (kind == HyperlinkTargetKind::Relationship && !url.starts_with('#'))
             .then(|| "External".to_owned()),
         target_kind: Some(kind),

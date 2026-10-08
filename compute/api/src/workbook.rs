@@ -53,7 +53,6 @@ impl Workbook {
 
         let dispatch = Dispatch::spawn(engine)?;
 
-
         Ok((Workbook { dispatch }, recalc))
     }
 
@@ -85,7 +84,6 @@ impl Workbook {
 
         let dispatch = Dispatch::spawn(engine)?;
 
-
         Ok((Workbook { dispatch }, recalc))
     }
 
@@ -103,13 +101,16 @@ impl Workbook {
         Ok((Workbook { dispatch }, recalc))
     }
 
-    /// Load a workbook from an xlsx file on disk, preserving imported formula caches.
+    /// Refresh volatile formulas and their dependents in a compatible, unedited
+    /// XLSX import. Returns false when the caller must perform a full calculation.
+    /// Import caches remain pending for any later explicit full calculation.
+    pub fn recalculate_compatible_import(&self) -> Result<bool, ComputeApiError> {
+        self.dispatch
+            .call_engine(|engine| engine.recalculate_compatible_import())
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
 
-    /// Evaluate formulas using the current workbook's calculation settings.
-    ///
-    /// An imported XLSX has pending calculation even when it contains cached
-    /// results. Volatile formulas use the current execution environment; their
-    /// results are not expected to equal a previously saved workbook's caches.
+    /// Evaluate all formulas using the current workbook's calculation settings.
     pub fn recalculate(&self) -> Result<RecalcResult, ComputeApiError> {
         self.dispatch
             .call_engine(|e| e.recalculate())

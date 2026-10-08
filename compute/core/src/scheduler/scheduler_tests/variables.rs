@@ -214,3 +214,62 @@ fn test_variable_scope_shadowing_in_dag() {
     assert!(core.ast_cache.contains_key(&id_wb));
     assert!(core.ast_cache.contains_key(&id_sh));
 }
+
+#[test]
+fn unused_volatile_name_does_not_dirty_unrelated_ranges() {
+    use formula_types::{NamedRangeDef, Scope};
+    let mut snapshot = basic_snapshot();
+    snapshot.named_ranges.push(NamedRangeDef::from_expression(
+        "unused_graph".into(),
+        Scope::Workbook,
+        "OFFSET(#REF!,0,0,COUNTA(#REF!)-1)".into(),
+    ));
+    snapshot.sheets[0].cells.push(CellData {
+        cell_id: "00000000-0000-0000-0000-000000000013".into(),
+        row: 0,
+        col: 3,
+        value: CellValue::number(123.0),
+        formula: Some("=SUM(A1:B1)".into()),
+        identity_formula: None,
+        array_ref: None,
+    });
+    let mut core = ComputeCore::new();
+    let mut store = CellStore::new();
+    core.init_from_snapshot(&mut store, snapshot).unwrap();
+    let affected = core.graph.affected_cells(&[], &store).into_value();
+    assert!(
+        !affected.contains(&cid(0x13)),
+        "unused volatile name must not sweep unrelated ranges"
+    );
+}
+
+#[test]
+fn registered_volatile_name_keeps_explicit_worksheet_dependents() {
+    use crate::cells::variable_store::VariableStore;
+    use compute_graph::positions::PositionResolver;
+    use formula_types::{NamedRangeDef, Scope};
+    let mut snapshot = basic_snapshot();
+    snapshot.named_ranges.push(NamedRangeDef::from_expression(
+        "live_name".into(),
+        Scope::Workbook,
+        "OFFSET(A1,0,0)".into(),
+    ));
+    snapshot.sheets[0].cells.push(CellData {
+        cell_id: "00000000-0000-0000-0000-000000000013".into(),
+        row: 0,
+        col: 3,
+        value: CellValue::number(123.0),
+        formula: Some("=live_name+1".into()),
+        identity_formula: None,
+        array_ref: None,
+    });
+    let mut core = ComputeCore::new();
+    let mut store = CellStore::new();
+    core.init_from_snapshot(&mut store, snapshot).unwrap();
+    let name_id = VariableStore::synthetic_cell_id(&Scope::Workbook, "live_name");
+    assert!(store.is_nonspatial(&name_id));
+    assert!((&store).is_nonspatial(&name_id));
+    assert!(!store.is_nonspatial(&cid(123456)));
+    let affected = core.graph.affected_cells(&[], &store).into_value();
+    assert!(affected.contains(&cid(0x13)));
+}

@@ -21,6 +21,8 @@ const MAX_MESSAGE: u64 = 16 * 1024 * 1024;
 struct Record {
     port: u16,
     token: String,
+    #[serde(default)]
+    preserve_results: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -179,6 +181,7 @@ pub(super) fn worker() -> Result<()> {
         let record = Record {
             port: listener.local_addr()?.port(),
             token: Uuid::new_v4().to_string(),
+            preserve_results: true,
         };
         let path = record_path(&id)?;
         let mut file = tempfile::NamedTempFile::new_in(path.parent().unwrap())?;
@@ -259,6 +262,11 @@ pub(super) fn execute(id: &str, request: &Request) -> Result<String> {
             return Err(format!("session {id} is unavailable: {error}").into());
         }
     };
+    // Probe liveness first so dead registrations retain normal cleanup. A live
+    // unsupported worker receives no request bytes before this guard returns.
+    if !request.discard && !record.preserve_results {
+        return Err("session does not support current calculation-mode policy; restart it with the current mog binary".into());
+    }
     stream.set_write_timeout(Some(IO_TIMEOUT))?;
     // Scripts and large exports can take arbitrarily long; do not time them out
     // and leave the caller unsure whether an operation completed.

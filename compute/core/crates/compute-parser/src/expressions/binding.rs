@@ -15,16 +15,19 @@ pub(super) const fn infix_bp(op: BinOp) -> (u8, u8) {
         BinOp::Concat => (4, 5),
         BinOp::Add | BinOp::Sub => (6, 7),
         BinOp::Mul | BinOp::Div => (8, 9),
-        BinOp::Pow => (11, 10),
+        BinOp::Pow => (11, 12),
         BinOp::Intersect => (15, 16),
     }
 }
 
-/// Prefix unary operators (+, -, @) bind tighter than multiplication/division
+/// Unary plus and implicit intersection (+, @) bind tighter than multiplication/division
 /// but looser than exponentiation.
 pub(super) const PREFIX_BP: u8 = 10;
 
-/// Postfix operators (%, call) bind tightest among normal operators.
+/// Negation binds before exponentiation and percent in Excel.
+pub(super) const NEGATION_BP: u8 = 15;
+
+/// Postfix operators (%, call) bind above power and below negation.
 pub(super) const POSTFIX_BP: u8 = 14;
 
 /// Expression-level range operator `:` — tighter than intersection.

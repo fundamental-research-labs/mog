@@ -288,6 +288,21 @@ pub(in crate::storage::engine) fn resize_table(
     resized.range =
         cell_types::SheetRange::new(new_start_row, new_start_col, new_end_row, new_end_col);
 
+    // Imported AutoFilter bounds are preserved independently of the table range.
+    // Keep an existing filter shell attached to the resized header/data region;
+    // criteria and other imported metadata remain unchanged.
+    if resized.has_header_row && resized.auto_filter_ref.is_some() {
+        let filter_end_row = if resized.has_totals_row && new_end_row > new_start_row {
+            new_end_row - 1
+        } else {
+            new_end_row
+        };
+        resized.auto_filter_ref = Some(
+            cell_types::SheetRange::new(new_start_row, new_start_col, filter_end_row, new_end_col)
+                .to_string(),
+        );
+    }
+
     // If columns expanded, add new column definitions from header row values.
     let new_col_count = (new_end_col - new_start_col + 1) as usize;
     while resized.columns.len() < new_col_count {
@@ -335,7 +350,13 @@ pub(in crate::storage::engine) fn resize_table(
         new_end_col,
     );
 
-    Ok(MutationResult::empty())
+    // Explicit structured references outside the resized range also depend
+    // on the table bounds. Refresh their dependency edges and live values.
+    Ok(MutationResult::from_recalc(
+        stores
+            .compute
+            .structure_change_with_formula_refresh(cell_store, None, &[])?,
+    ))
 }
 
 /// Toggle the totals row on/off for a table.

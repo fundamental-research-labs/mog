@@ -977,3 +977,33 @@ fn test_structured_ref_under_selective_context_skips_cell_expansion() {
         "selective structured refs should not expand to individual cell deps"
     );
 }
+
+#[test]
+fn test_areas_static_union_has_no_value_dependencies() {
+    let sheet = make_sheet_id(1);
+    let ast = ASTNode::Function {
+        name: "AREAS".into(),
+        args: vec![ASTNode::Paren(Box::new(ASTNode::Union {
+            ranges: vec![
+                range_ref_node(sheet, 0, 0, 9, 0),
+                cell_ref_node(sheet, 0, 1),
+            ],
+        }))],
+    };
+    assert!(deps_from_ast(&ast, &sheet).is_empty());
+}
+
+#[test]
+fn test_areas_dynamic_union_retains_value_dependencies() {
+    let sheet = make_sheet_id(1);
+    let ast = ASTNode::Function {
+        name: "AREAS".into(),
+        args: vec![ASTNode::Union {
+            ranges: vec![
+                range_ref_node(sheet, 0, 0, 9, 0),
+                ASTNode::Identifier("DynamicName".into()),
+            ],
+        }],
+    };
+    assert!(!deps_from_ast(&ast, &sheet).is_empty());
+}

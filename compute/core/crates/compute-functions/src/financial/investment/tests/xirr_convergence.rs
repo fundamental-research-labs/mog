@@ -46,7 +46,9 @@ fn xirr_is_scale_invariant_for_tiny_and_large_cash_flows() {
         let values = CellValue::from_rows(vec![vec![num(-magnitude), num(2.0 * magnitude)]]);
         match FnXirr.call(&[values, dates.clone()]) {
             CellValue::Number(rate) => {
-                assert!((rate.get() - 1.0).abs() < 1e-10, "XIRR = {}", rate.get());
+                // Native one-year, default-guess midpoint (rather than the
+                // exact mathematical root), invariant under cash-flow scaling.
+                assert_eq!(rate.get().to_bits(), 0.9999999880790711_f64.to_bits());
             }
             other => panic!("Expected numeric XIRR at scale {magnitude}, got {other:?}"),
         }
@@ -58,7 +60,9 @@ fn xirr_one_year_root_from_nonzero_serial_dates() {
     let vals = CellValue::from_rows(vec![vec![num(-1000.0), num(1100.0)]]);
     let dates = CellValue::from_rows(vec![vec![num(100.0), num(465.0)]]);
     match FnXirr.call(&[vals, dates, num(0.1)]) {
-        CellValue::Number(rate) => assert!((rate.get() - 0.1).abs() < 1e-10),
+        CellValue::Number(rate) => {
+            assert_eq!(rate.get().to_bits(), 0.09999999403953552_f64.to_bits())
+        }
         other => panic!("Expected XIRR near 10%, got {other:?}"),
     }
 }

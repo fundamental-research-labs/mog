@@ -276,6 +276,45 @@ impl ComputeEngine {
         })
     }
 
+    /// Repeat a frozen source range across a destination grid.
+    #[bridge::write]
+    #[allow(clippy::too_many_arguments)]
+    pub fn copy_range_tiled(
+        &mut self,
+        source_sheet_id: &SheetId,
+        src_start_row: u32,
+        src_start_col: u32,
+        src_end_row: u32,
+        src_end_col: u32,
+        target_sheet_id: &SheetId,
+        target_row: u32,
+        target_col: u32,
+        copy_type: domain_types::domain::copy::CopyType,
+        skip_blanks: bool,
+        transpose: bool,
+        row_tiles: u32,
+        col_tiles: u32,
+    ) -> Result<MutationResult, ComputeError> {
+        self.with_history(|engine| {
+            range_ops::copy_range_tiled(
+                engine,
+                source_sheet_id,
+                src_start_row,
+                src_start_col,
+                src_end_row,
+                src_end_col,
+                target_sheet_id,
+                target_row,
+                target_col,
+                copy_type,
+                skip_blanks,
+                transpose,
+                row_tiles,
+                col_tiles,
+            )
+        })
+    }
+
     // -------------------------------------------------------------------
     // Grouping
     // -------------------------------------------------------------------

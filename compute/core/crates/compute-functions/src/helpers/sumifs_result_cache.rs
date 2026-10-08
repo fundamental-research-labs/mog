@@ -106,7 +106,7 @@ impl SumifsResultMap {
                     let Ok(text) = val.coerce_to_string() else {
                         continue 'rows;
                     };
-                    NormalizedKey::Text(text.to_ascii_lowercase())
+                    NormalizedKey::Text(text.to_lowercase())
                 } else {
                     NormalizedKey::from_cell_value(val)
                 };
@@ -335,7 +335,7 @@ impl SumifsCacheKey {
         }
     }
 
-    /// Match plain text via string coercion and ASCII case folding, preserving
+    /// Match plain text via string coercion and Unicode lowercase folding, preserving
     /// SUMIF predicate semantics and separating these maps from normalized keys.
     /// Column versions also prevent reuse after a dependent formula changes
     /// a source column within the same recalculation epoch.
@@ -725,7 +725,7 @@ mod tests {
                 &[&counted],
                 &sums,
                 categories.len(),
-                &[NormalizedKey::Text(needle.to_ascii_lowercase())],
+                &[NormalizedKey::Text(needle.to_lowercase())],
             );
             let actual = match result {
                 Ok(sum) => num(sum),

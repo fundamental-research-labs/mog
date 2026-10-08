@@ -3,7 +3,7 @@ use super::*;
 use crate::identity::GridIndex;
 use crate::snapshot::*;
 use crate::storage::{properties, sheet};
-use domain_types::units::{LayoutMetrics, char_width_to_pixels, points_to_pixels};
+use domain_types::units::{LayoutMetrics, points_to_pixels};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 #[derive(Debug, Default)]
@@ -220,7 +220,7 @@ pub(crate) fn emit_events(
                         sheet::dimensions::get_sheet_default_col_width(storage, &sid)
                     });
                     let size = value_types::FiniteF64::new(
-                        char_width_to_pixels(width, metrics.column_width_mdw).0,
+                        metrics.column_width_to_pixels(width).0,
                     );
                     effects.format_rects.push((sid, 0, index, u32::MAX, index));
                     effects.result.dimension_changes.push(DimensionChange {

@@ -190,6 +190,12 @@ impl CellStore {
                 s.identity_cols = s.identity_cols.saturating_sub(*count);
             }
             StructureChange::RemapPositions { updates } => {
+                // Remaps can extend compact imported axes. Install the grown
+                // shared axes before registering destination cell identities.
+                if let Some((rows, cols)) = &axes {
+                    s.row_axis = rows.clone();
+                    s.col_axis = cols.clone();
+                }
                 for (cell_id, _, _) in updates {
                     s.remove_cell_identity(cell_id);
                 }

@@ -6,7 +6,19 @@ use value_types::{CellError, CellValue};
 use crate::helpers::coercion::check_error;
 use crate::{FunctionRegistry, PureFunction};
 
-one_num_fn!(FnSinh, "SINH", |n: f64| n.sinh());
+// expm1 avoids cancellation near zero. The same identity also reproduces
+// native Excel's measured SINH rounding without changing its real domain.
+fn sinh_from_expm1(n: f64) -> f64 {
+    let t = n.abs().exp_m1();
+    if t.is_finite() {
+        (0.5 * (t + t / (t + 1.0))).copysign(n)
+    } else {
+        // sinh remains finite slightly beyond exp's overflow threshold.
+        n.sinh()
+    }
+}
+
+one_num_fn!(FnSinh, "SINH", |n: f64| sinh_from_expm1(n));
 one_num_fn!(FnCosh, "COSH", |n: f64| n.cosh());
 one_num_fn!(FnTanh, "TANH", |n: f64| n.tanh());
 one_num_fn!(FnAsinh, "ASINH", |n: f64| n.asinh());

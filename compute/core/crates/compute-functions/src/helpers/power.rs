@@ -19,10 +19,11 @@ pub fn normalize_power_result(result: f64) -> f64 {
     normalize_formula_result(result)
 }
 
-/// Evaluate negative bases with exact integer exponents by repeated squaring.
-/// Native Excel uses this rounding path for negative integer powers. Keep the
-/// positive-base and fractional-exponent paths unchanged. The bounded integer
-/// conversion also avoids narrowing large exponents to i32.
+/// Real-power evaluation paths matched by native Excel numeric controls.
+/// Negative integer powers use repeated squaring. Positive bases use an exact
+/// square-root path for half powers and exp/log for other fractional powers;
+/// negative exponents take the reciprocal after evaluating the positive power.
+/// The bounded integer conversion avoids narrowing large exponents to i32.
 #[inline]
 pub fn real_power(base: f64, exponent: f64) -> f64 {
     if base < 0.0
@@ -42,10 +43,20 @@ pub fn real_power(base: f64, exponent: f64) -> f64 {
                 factor *= factor;
             }
         }
-        if exponent < 0.0 {
-            1.0 / result
+        if exponent < 0.0 { 1.0 / result } else { result }
+    } else if base > 0.0 && exponent.is_finite() {
+        let magnitude = exponent.abs();
+        let positive = if magnitude == 0.5 {
+            base.sqrt()
+        } else if magnitude == magnitude.trunc() {
+            base.powf(magnitude)
         } else {
-            result
+            (magnitude * base.ln()).exp()
+        };
+        if exponent < 0.0 {
+            1.0 / positive
+        } else {
+            positive
         }
     } else {
         base.powf(exponent)

@@ -250,3 +250,28 @@ fn test_sqrtpi() {
     // mathematical square root would fit in a floating-point number.
     assert_eq!(FnSqrtPi.call(&[num(6e307)]), err(CellError::Num));
 }
+
+#[test]
+fn test_positive_power_native_fractional_and_reciprocal_controls() {
+    // Fresh Excel 16.0.20430 Full calculation, not inferred from formatted text.
+    for (base, exponent, expected) in [
+        (10.0, -307.0, 1.0000000000000001e-307),
+        (10.0, 307.0, 1e307),
+        (42.5, 42.5, 1.6089017613873198e69),
+        (42.5, -42.5, 6.215419884541132e-70),
+        (2.0, 0.5, 1.4142135623730951),
+        (2.0, -0.5, 0.7071067811865475),
+        (1.1, 3.5, 1.395964576914472),
+        (1.1, -3.5, 0.7163505554061549),
+        (0.5, 2.5, 0.1767766952966369),
+        (0.5, -2.5, 5.65685424949238),
+        (3.0, 2.0, 9.0),
+        (3.0, -2.0, 0.1111111111111111),
+    ] {
+        assert_eq!(
+            FnPower.call(&[num(base), num(exponent)]),
+            num(expected),
+            "POWER({base},{exponent})"
+        );
+    }
+}

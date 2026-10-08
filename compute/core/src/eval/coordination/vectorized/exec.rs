@@ -197,7 +197,7 @@ mod power_regression_tests {
         for (base, exponent, expected) in [
             (-10.0, -307.0, -9.999999999999995e-308),
             (-2.0, 3.0, -8.0),
-            (10.0, -307.0, 10.0_f64.powf(-307.0)),
+            (10.0, -307.0, 1.0000000000000001e-307),
         ] {
             let group = SharedFormulaGroup {
                 sheet: SheetId::from_raw(1),

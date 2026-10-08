@@ -83,7 +83,13 @@ jobs:
       - name: Test Calipers CLI adapter
         run: go test scripts/calipers-mog/main.go scripts/calipers-mog/main_test.go
 
+      - name: Test strict Calipers verification wrapper
+        run: |
+          (cd vendor/calipers && go build -o "${{ github.workspace }}/target-native/calipers" ./cmd/calipers)
+          CALIPERS_BIN="${{ github.workspace }}/target-native/calipers" python3 -m unittest discover -s scripts/calipers-verify -p 'test_*.py'
+
       - name: Verify XLSX roundtrip cases
         env:
           MOG_BIN: ${{ github.workspace }}/target-native/release/mog
+          CALIPERS_BIN: ${{ github.workspace }}/target-native/calipers
         run: ./run-calipers-verify.sh

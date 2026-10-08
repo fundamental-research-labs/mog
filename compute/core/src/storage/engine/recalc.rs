@@ -33,6 +33,51 @@ impl ComputeEngine {
             .map_or(0, |provider| provider.revision());
     }
 
+    /// Ordinary open/save of an unedited import with a tested calculation profile.
+    /// Returns false when a full calculation is required. Does not clear dirty
+    /// state: an explicit full calculation must still evaluate imported caches.
+    pub fn recalculate_compatible_import(&mut self) -> Result<bool, ComputeError> {
+        // Excel ordinary-open controls preserve caches for this complete profile
+        // (including additional unknown names), but not RD-only or missing RD.
+        // Untested subsets fall back to full calculation; this is not a claim
+        // that each feature independently requires recalculation.
+        const REQUIRED: &[&str] = &[
+            "microsoft.com:RD",
+            "microsoft.com:Single",
+            "microsoft.com:FV",
+            "microsoft.com:CNMTM",
+            "microsoft.com:LET_WF",
+            "microsoft.com:LAMBDA_WF",
+            "microsoft.com:ARRAYTEXT_WF",
+        ];
+        let settings = self.get_calculation_settings();
+        let meta = &self.stores.storage.metadata;
+        if !self.stores.compute.imported_cache_reuse
+            || self.stores.compute.is_manual_calculation()
+            || settings.full_calc_on_load
+            || settings.force_full_calc
+            || !self.import_report.force_recalc_cells.is_empty()
+            || !meta.imported_formula_caches_complete
+            || !meta
+                .imported_calculation_features
+                .as_ref()
+                .is_some_and(|names| REQUIRED.iter().all(|n| names.iter().any(|v| v == n)))
+            || self.stores.storage.sheet_metadata.values().any(|s| {
+                s.calc_properties
+                    .as_ref()
+                    .is_some_and(|p| p.full_calc_on_load)
+            })
+        {
+            return Ok(false);
+        }
+        // The dependency graph includes volatile cells even with no edited seeds.
+        // Only their dependent closure is evaluated; unrelated imported caches stay.
+        self.stores.compute.recalc(&mut self.cell_store, &[])?;
+        self.sync_imported_array_cache_invalidations();
+        self.init_cf_caches();
+        Ok(true)
+    }
+
     /// Perform a full recalculation of all formula cells using the existing
     /// dependency graph and AST caches. Does NOT rebuild the ComputeCore.
     ///
@@ -43,6 +88,7 @@ impl ComputeEngine {
     /// Short-circuits to an empty result when no mutation has occurred since
     /// the last successful full recalc — idempotent `wb.calculate()` is O(1).
     pub fn recalculate(&mut self) -> Result<crate::snapshot::RecalcResult, ComputeError> {
+        self.stores.compute.imported_cache_reuse = false;
         self.without_history(|engine| {
             // Audited 2026-04-22: no non-mutation invalidation sources for
             // init_cf_caches or materialize_all_pivots — safe to skip when

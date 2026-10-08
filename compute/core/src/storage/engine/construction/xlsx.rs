@@ -1,6 +1,6 @@
 use super::*;
-mod stream;
 mod layout_profile;
+mod stream;
 use stream::NativeCellSink;
 
 /// Construct a `ComputeEngine` from raw XLSX bytes without recalculation.
@@ -30,7 +30,7 @@ fn from_xlsx_bytes_with_layout(
 ) -> Result<(ComputeEngine, RecalcResult), ComputeError> {
     let mut on_chunk = on_chunk;
     let (
-        storage,
+        mut storage,
         workbook_snap,
         import_report,
         imported_formats,
@@ -38,6 +38,36 @@ fn from_xlsx_bytes_with_layout(
         formula_cells,
         stats,
     ) = parse_and_hydrate_xlsx(xlsx_data, &mut on_chunk)?;
+
+    // Raw workbook children inherit the workbook's namespace declarations.
+    let mut retained = String::from("<workbook");
+    for ns in &storage.metadata.root_namespaces.declarations {
+        let key = ns
+            .prefix
+            .as_ref()
+            .map_or("xmlns".to_owned(), |p| format!("xmlns:{p}"));
+        retained.push_str(&format!(
+            " {key}=\"{}\"",
+            ns.uri
+                .replace('&', "&amp;")
+                .replace('"', "&quot;")
+                .replace('<', "&lt;")
+        ));
+    }
+    retained.push('>');
+    if let Some(package) = &storage.metadata.package_fidelity {
+        for child in &package.workbook_xml_fidelity.raw_children {
+            retained.push_str(&String::from_utf8_lossy(&child.xml));
+        }
+    }
+    retained.push_str("</workbook>");
+    storage.metadata.imported_calculation_features =
+        xlsx_parser::domain::workbook::read::parse_calculation_features(retained.as_bytes());
+    storage.metadata.imported_formula_caches_complete = formula_cells.iter().all(|(id, _, _)| {
+        cell_store
+            .get_cell_value(id)
+            .is_some_and(|v| !matches!(v, value_types::CellValue::Null))
+    });
 
     let layout_metrics = layout_profile::resolve(&storage, layout_metrics);
 
@@ -82,6 +112,7 @@ fn from_xlsx_bytes_with_layout(
         domain_types::ImportPhase::FullHydration,
     );
 
+    engine.stores.compute.imported_cache_reuse = true;
     Ok((engine, recalc_result))
 }
 

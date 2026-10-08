@@ -222,6 +222,7 @@ pub struct ComputeCore {
     /// True when a mutation has occurred since the last successful full recalc.
     /// Checked by `Engine::recalculate_with_options` to short-circuit idempotent calls.
     pub(crate) dirty_since_last_recalc: bool,
+    pub(crate) imported_cache_reuse: bool,
     /// Dirty seeds accumulated while in manual calculation mode.
     pending_manual_dirty_cells: FxHashSet<CellId>,
     /// Tracks which cell is blocking each spill-formula cell (blocker → source).
@@ -271,6 +272,7 @@ impl ComputeCore {
             in_data_table_eval: false,
             // Initial state requires a recalc because formula cells start as Null.
             dirty_since_last_recalc: true,
+            imported_cache_reuse: false,
             pending_manual_dirty_cells: FxHashSet::default(),
             spill_blockers: FxHashMap::default(),
             deferred_formula_cells: None,
@@ -287,6 +289,7 @@ impl ComputeCore {
     /// edits that invalidate cached recalc output.
     pub(crate) fn mark_dirty(&mut self) {
         self.dirty_since_last_recalc = true;
+        self.imported_cache_reuse = false;
     }
 
     pub(crate) fn formula_text_provider(&self) -> FormulaTextProvider<'_> {

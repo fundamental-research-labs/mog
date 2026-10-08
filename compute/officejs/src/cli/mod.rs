@@ -100,6 +100,7 @@ struct Request {
 }
 
 struct State {
+    reuse_imported_caches: bool,
     workbook: Workbook,
     output: Option<PathBuf>,
     directory: PathBuf,
@@ -121,11 +122,17 @@ impl State {
         if config.request.preserve_results {
             preserve_results(&workbook)?;
         }
-        if workbook.settings().calculation_mode()? != "manual" {
+        let reuse_imported_caches = config.input.is_some()
+            && !config.request.recalculate
+            && config.request.source.is_none()
+            && !config.request.preserve_results
+            && workbook.recalculate_compatible_import()?;
+        if !reuse_imported_caches && workbook.settings().calculation_mode()? != "manual" {
             workbook.recalculate()?;
         }
         stage.complete();
         Ok(Self {
+            reuse_imported_caches,
             workbook,
             output: config
                 .request
@@ -145,6 +152,9 @@ impl State {
         }
         if request.preserve_results {
             preserve_results(&self.workbook)?;
+        }
+        if request.source.is_some() || request.recalculate || request.preserve_results {
+            self.reuse_imported_caches = false;
         }
         let output = if let Some(source) = &request.source {
             let output = mog::run_office_js_with_workbook(&self.workbook, source)?;
@@ -182,7 +192,9 @@ impl State {
             .unwrap_or_default()
             .calc_on_save
         {
-            self.workbook.recalculate()?;
+            if !self.reuse_imported_caches || !self.workbook.recalculate_compatible_import()? {
+                self.workbook.recalculate()?;
+            }
         }
         let (path, publication) = if let Some(path) = &self.output {
             // Follow an existing symlink just as loading the input does.
@@ -264,6 +276,26 @@ mod tests {
     }
 
     #[test]
+    fn script_edits_disable_import_cache_reuse() {
+        let mut state = State {
+            reuse_imported_caches: true,
+            workbook: Workbook::blank().unwrap().0,
+            output: None,
+            directory: PathBuf::new(),
+        };
+        state.apply(&Request {
+            source: Some("await Excel.run(async context => { const sheet = context.workbook.worksheets.add('Edited'); sheet.getRange('A1').values = [[3]]; sheet.getRange('B1').formulas = [['=A1*2']]; await context.sync(); });".into()),
+            ..Request::default()
+        }).unwrap();
+        assert!(!state.reuse_imported_caches);
+        let value = state.apply(&Request {
+            source: Some("return await Excel.run(async context => { const range = context.workbook.worksheets.getItem('Edited').getRange('B1'); range.load('values'); await context.sync(); return range.values; });".into()),
+            ..Request::default()
+        }).unwrap();
+        assert_eq!(value, "[[6]]");
+    }
+
+    #[test]
     fn contradictory_worker_request_fails_before_script_execution() {
         let request = Request {
             source: Some("throw new Error('script executed');".into()),
@@ -272,6 +304,7 @@ mod tests {
             ..Request::default()
         };
         let mut state = State {
+            reuse_imported_caches: false,
             workbook: Workbook::blank().unwrap().0,
             output: None,
             directory: PathBuf::new(),

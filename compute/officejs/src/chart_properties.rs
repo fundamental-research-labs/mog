@@ -91,7 +91,7 @@ pub(crate) fn set(sheet: &Sheet, id: &str, property: &str, value: &Value) -> Res
         "legend.visible" | "legend.position" => {
             let mut legend = current["legend"].clone();
             if !legend.is_object() {
-                legend = json!({"show":true,"visible":true,"position":"right"});
+                legend = json!({"show":true,"visible":true,"position":"right","overlay":false});
             }
             if property == "legend.visible" {
                 let visible = value

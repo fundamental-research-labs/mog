@@ -2268,10 +2268,16 @@ impl Host {
                     let data_range =
                         unqualified_range_formula(&sheet_name, range_metadata(range)?.bounds);
                     let sheet = worksheet.sheet();
-                    let config = json!({
-                        "type": map_chart_type(&chart_type),
+                    let mapped_type = map_chart_type(&chart_type);
+                    let mut config = json!({
+                        "type": mapped_type,
                         "dataRange": data_range,
                     });
+                    // Match the explicit series-color policy of Excel-created column charts
+                    // instead of leaving category-versus-series behavior to application defaults.
+                    if mapped_type == "column" {
+                        config["varyByCategories"] = json!(false);
+                    }
                     let result = sheet.charts().create(&config).map_err(engine_error)?;
                     let chart_id = result
                         .data

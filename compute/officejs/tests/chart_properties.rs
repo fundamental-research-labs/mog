@@ -7,10 +7,24 @@ fn part(w: &Workbook, path: &str) -> String {
     String::from_utf8(z.read_file(path).unwrap()).unwrap()
 }
 fn assert_sales_series_cache(xml: &str) {
-    use xlsx_parser::domain::charts::{CatDataSource, Chart, NumDataSource};
+    use xlsx_parser::domain::charts::{CatDataSource, Chart, NumDataSource, SeriesTextSource};
     let chart = Chart::parse(xml.as_bytes());
     assert_eq!(chart.series.len(), 1, "Expected exactly one Sales series");
     let series = &chart.series[0];
+    let Some(SeriesTextSource::StrRef(name)) = series.tx.as_ref() else {
+        panic!("Series name reference")
+    };
+    let name_cache = name.str_cache.as_ref().expect("Series name cache");
+    assert_eq!(name_cache.pt_count, Some(1));
+    assert_eq!(
+        name_cache
+            .pts
+            .iter()
+            .map(|point| (point.idx, point.v.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(0, "Sales")]
+    );
+
     let values = match series.val.as_ref().expect("Series value source") {
         NumDataSource::Ref(reference) => reference.num_cache.as_ref().expect("Numeric cache"),
         other => panic!("Expected worksheet numeric reference, got {other:?}"),
@@ -195,4 +209,83 @@ fn size_only_change_keeps_positioned_start_cell() {
     );
     assert!(drawing.contains("cx=\"6096000\""), "{drawing}");
     assert!(!drawing.contains("absoluteAnchor"));
+}
+
+#[test]
+fn frozen_column_charts_use_series_legend_without_overlay() {
+    use xlsx_parser::domain::charts::{Chart, ChartTypeConfig};
+    for script in [
+        include_str!("fixtures/issue440_sized.js"),
+        include_str!("fixtures/issue440_position.js"),
+    ] {
+        let (w, _) =
+            Workbook::from_xlsx_bytes(include_bytes!("fixtures/issue440_input.xlsx")).unwrap();
+        run_office_js_with_workbook(&w, script).unwrap();
+        for w in [
+            w.clone(),
+            Workbook::from_xlsx_bytes(&w.to_xlsx_bytes().unwrap())
+                .unwrap()
+                .0,
+        ] {
+            let xml = part(&w, "xl/charts/chart1.xml");
+            let chart = Chart::parse(xml.as_bytes());
+            let Some(ChartTypeConfig::Bar(config)) = chart.chart_type_config else {
+                panic!("column chart")
+            };
+            assert_eq!(
+                config.vary_colors,
+                Some(false),
+                "Single Sales series must not use category legend entries"
+            );
+            assert_eq!(
+                chart.legend.unwrap().overlay,
+                Some(false),
+                "Reserve space for the bottom legend"
+            );
+            assert_sales_series_cache(&xml);
+        }
+    }
+}
+
+#[test]
+fn authored_column_defaults_do_not_replace_imported_or_pie_settings() {
+    use xlsx_parser::domain::charts::{Chart, ChartTypeConfig};
+    for chart_type in ["ColumnClustered", "Pie", "Doughnut"] {
+        let (w, _) = Workbook::blank().unwrap();
+        let script = format!(
+            "await Excel.run(async c=>{{const s=c.workbook.worksheets.getItem('Sheet1');s.getRange('A1:C3').values=[['Category','Sales','Cost'],['A',15,5],['B',20,8]];const ch=s.charts.add('{chart_type}',s.getRange('A1:C3'),'Columns');ch.legend.visible=true;await c.sync();}});"
+        );
+        run_office_js_with_workbook(&w, &script).unwrap();
+        let chart = Chart::parse(part(&w, "xl/charts/chart1.xml").as_bytes());
+        match chart.chart_type_config.unwrap() {
+            ChartTypeConfig::Bar(config) => {
+                assert_eq!(config.vary_colors, Some(false));
+                assert_eq!(chart.series.len(), 2);
+            }
+            ChartTypeConfig::Pie(config) => assert_eq!(config.vary_colors, Some(true)),
+            ChartTypeConfig::Doughnut(config) => assert_eq!(config.vary_colors, Some(true)),
+            other => panic!("unexpected config: {other:?}"),
+        }
+        if chart_type == "ColumnClustered" {
+            let sheet = w.sheet_by_name("Sheet1").unwrap();
+            let object = sheet.charts().get_all().unwrap().remove(0);
+            let mut legend = serde_json::to_value(&object).unwrap()["legend"].clone();
+            legend["overlay"] = json!(true);
+            sheet
+                .charts()
+                .update(
+                    &object.common.id,
+                    &json!({"varyByCategories":true,"legend":legend}),
+                )
+                .unwrap();
+            let (reloaded, _) = Workbook::from_xlsx_bytes(&w.to_xlsx_bytes().unwrap()).unwrap();
+            run_office_js_with_workbook(&reloaded,"await Excel.run(async c=>{const ch=c.workbook.worksheets.getItem('Sheet1').charts.getItem('Chart 1');ch.legend.position='Bottom';await c.sync();});").unwrap();
+            let chart = Chart::parse(part(&reloaded, "xl/charts/chart1.xml").as_bytes());
+            let Some(ChartTypeConfig::Bar(config)) = chart.chart_type_config else {
+                panic!("column chart")
+            };
+            assert_eq!(config.vary_colors, Some(true));
+            assert_eq!(chart.legend.unwrap().overlay, Some(true));
+        }
+    }
 }

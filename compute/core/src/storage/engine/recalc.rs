@@ -137,6 +137,7 @@ impl ComputeEngine {
             let snapshot =
                 construction::build_workbook_snapshot(&engine.stores, &engine.cell_store);
             let char_code_page = engine.cell_store.char_code_page;
+            let source_file_prefix = engine.cell_store.source_file_prefix.clone();
             let mut rebuilt_store = construction::build_finalized_store_from_snapshot(
                 &engine.stores.storage,
                 &snapshot,
@@ -144,6 +145,7 @@ impl ComputeEngine {
                 engine.stores.layout_metrics,
             )?;
             rebuilt_store.char_code_page = char_code_page;
+            rebuilt_store.source_file_prefix = source_file_prefix;
             let runtime_mode = engine.stores.compute.runtime_calc_mode_override();
             engine.stores.compute = ComputeCore::new();
             if let Some(mode) = runtime_mode {

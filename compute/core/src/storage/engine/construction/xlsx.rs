@@ -99,7 +99,21 @@ pub(in crate::storage::engine) fn from_xlsx_path(
     let mapped = unsafe { MmapXlsxFile::open(path) }.map_err(|e| ComputeError::Deserialize {
         message: format!("mmap {path}: {e}"),
     })?;
-    from_xlsx_bytes(mapped.as_slice())
+    let (mut engine, recalc) = from_xlsx_bytes(mapped.as_slice())?;
+    // Keep the input identity across exports to other paths. Export is not an
+    // interactive SaveAs and must not change already calculated CELL values.
+    let absolute = std::path::absolute(path).map_err(|e| ComputeError::Deserialize {
+        message: format!("absolute input path {path}: {e}"),
+    })?;
+    let filename = absolute.file_name().and_then(|s| s.to_str()).ok_or_else(|| ComputeError::Deserialize {
+        message: "input filename must be UTF-8".into(),
+    })?;
+    let parent = absolute.parent().and_then(|s| s.to_str()).ok_or_else(|| ComputeError::Deserialize {
+        message: "input directory must be UTF-8".into(),
+    })?;
+    let separator = if parent.ends_with(std::path::MAIN_SEPARATOR) { "" } else { std::path::MAIN_SEPARATOR_STR };
+    engine.cell_store.source_file_prefix = Some(format!("{parent}{separator}[{filename}]"));
+    Ok((engine, recalc))
 }
 
 /// Import from raw XLSX bytes into an existing engine, with or without recalc.

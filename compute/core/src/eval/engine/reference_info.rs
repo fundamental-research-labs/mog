@@ -95,7 +95,7 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
                 // Byte-based imports have no saved filesystem identity. Excel
                 // uses empty text for an unsaved workbook, never a guessed path.
                 if info_str == "filename" {
-                    return Ok(CellValue::Text("".into()));
+                    return Ok(CellValue::Text(self.meta.cell_filename(&sheet).unwrap_or_default().into()));
                 }
                 let Some(metadata) = self.meta.cell_reference_metadata(&sheet, row, col) else {
                     return Ok(CellValue::Error(CellError::Na, None));

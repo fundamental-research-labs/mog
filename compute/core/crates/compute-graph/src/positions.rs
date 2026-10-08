@@ -45,6 +45,13 @@ pub struct CellPosition {
 pub trait PositionResolver {
     /// Resolve a cell's position. Returns `None` if the cell has no known position.
     fn resolve(&self, cell_id: &CellId) -> Option<CellPosition>;
+
+    /// True only for registered symbolic nodes which cannot occupy a worksheet
+    /// position. Unknown worksheet cells must retain the default conservative
+    /// behavior. Explicit dependency edges still apply to nonspatial nodes.
+    fn is_nonspatial(&self, _cell_id: &CellId) -> bool {
+        false
+    }
 }
 
 /// Blanket implementation: any closure matching the signature is a [`PositionResolver`].
@@ -109,6 +116,10 @@ impl<P: PositionResolver> WithOverrides<P> {
 }
 
 impl<P: PositionResolver> PositionResolver for WithOverrides<P> {
+    fn is_nonspatial(&self, cell_id: &CellId) -> bool {
+        !self.overrides.contains_key(cell_id) && self.base.is_nonspatial(cell_id)
+    }
+
     #[inline]
     fn resolve(&self, cell_id: &CellId) -> Option<CellPosition> {
         self.overrides
@@ -157,9 +168,13 @@ impl<'a, R: PositionResolver + ?Sized> TrackedResolver<'a, R> {
 }
 
 impl<R: PositionResolver + ?Sized> PositionResolver for TrackedResolver<'_, R> {
+    fn is_nonspatial(&self, cell_id: &CellId) -> bool {
+        self.inner.is_nonspatial(cell_id)
+    }
+
     fn resolve(&self, cell_id: &CellId) -> Option<CellPosition> {
         let result = self.inner.resolve(cell_id);
-        if result.is_none() {
+        if result.is_none() && !self.inner.is_nonspatial(cell_id) {
             self.had_miss.set(true);
         }
         result

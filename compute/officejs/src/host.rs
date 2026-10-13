@@ -2660,6 +2660,21 @@ impl Host {
                         let metadata = range_metadata(&range)?;
                         let unbounded = range_has_unbounded_dimension(&range)?;
                         for property in &properties {
+                            if !unbounded
+                                && matches!(
+                                    property.as_str(),
+                                    "values" | "formulas" | "text" | "numberFormat" | "valueTypes"
+                                )
+                                && u64::from(metadata.row_count) * u64::from(metadata.column_count)
+                                    > 1_000_000
+                            {
+                                return Err(BatchError {
+                                    code: "RequestPayloadSizeLimitExceeded",
+                                    message: format!(
+                                        "Range.{property} exceeds the 1,000,000-cell load limit; read smaller ranges or use getUsedRange(true)."
+                                    ),
+                                });
+                            }
                             match property.as_str() {
                                 "isNullObject" => {
                                     props.insert(property.clone(), Value::Bool(false));

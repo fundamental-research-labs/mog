@@ -429,19 +429,7 @@ impl super::ComputeCore {
                 // 3f: Build evaluator closure — mutate-recalc-restore approach.
                 // The closure mutates the cell store directly instead of using OverrideContext.
 
-                let mut eval_count = 0u32;
                 let mut evaluate = |overrides: &FxHashMap<CellId, CellValue>| -> CellValue {
-                    eval_count += 1;
-                    if eval_count <= 3 {
-                        eprintln!(
-                            "[DT-EVAL] eval #{}, overrides: {:?}",
-                            eval_count,
-                            overrides
-                                .iter()
-                                .map(|(k, v)| format!("{:?}={:?}", k, v))
-                                .collect::<Vec<_>>()
-                        );
-                    }
                     // 1. Write overrides to cell_store
                     for (cell_id, value) in overrides {
                         cell_store.set_value_mut(cell_id, value.clone());
@@ -493,9 +481,6 @@ impl super::ComputeCore {
                         Ok(v) => v,
                         Err(_) => CellValue::Error(CellError::Calc, None),
                     };
-                    if eval_count <= 3 {
-                        eprintln!("[DT-EVAL] result={:?}", result);
-                    }
                     result
                 };
 

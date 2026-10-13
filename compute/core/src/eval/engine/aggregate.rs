@@ -224,6 +224,9 @@ fn agg_count<'a>(vals: impl Iterator<Item = (&'a CellValue, ValueSource)>) -> Ce
         match (value, source) {
             (CellValue::Number(_), _) => count += 1,
             (CellValue::Boolean(_), ValueSource::Inline) => count += 1,
+            (CellValue::Text(_), ValueSource::Inline) if value.coerce_to_number().is_ok() => {
+                count += 1;
+            }
             _ => {}
         }
     }

@@ -358,13 +358,13 @@ fn imported_mode_and_calculation_on_save_control_live_and_saved_values() {
             include_bytes!("fixtures/calculation_automatic.xlsx"),
             "auto",
             true,
-            true,
+            false,
         ),
         (
             include_bytes!("fixtures/calculation_automatic-no-save.xlsx"),
             "auto",
             false,
-            true,
+            false,
         ),
     ];
     for (bytes, mode, save_calc, live_error) in cases {
@@ -393,7 +393,7 @@ fn imported_mode_and_calculation_on_save_control_live_and_saved_values() {
         );
         let w = f.book("output.xlsx");
         let sheet = w.sheet_by_index(0).unwrap();
-        if live_error || save_calc {
+        if live_error || (mode == "manual" && save_calc) {
             assert!(matches!(
                 sheet.get_cell_value("A1").unwrap(),
                 CellValue::Error(CellError::Name, _)

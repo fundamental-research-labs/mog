@@ -431,6 +431,9 @@ impl ComputeCore {
                 formula_cells
                     .into_par_iter()
                     .map(|(cell_id, sheet_id, formula)| {
+                        let formula = Self::qualify_implicit_table_formula(
+                            store_ref, cell_id, sheet_id, formula,
+                        );
                         let resolver = StoreCellRefResolver {
                             cell_store: store_ref,
                             current_sheet: sheet_id,
@@ -552,7 +555,6 @@ impl ComputeCore {
             builder.bulk_set_precedents(graph_edges);
             self.graph = builder.build();
         }
-
 
         // Pass 3: builder.build() rebuilds the range index.
     }

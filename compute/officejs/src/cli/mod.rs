@@ -124,9 +124,10 @@ impl State {
         }
         let reuse_imported_caches = config.input.is_some()
             && !config.request.recalculate
-            && config.request.source.is_none()
             && !config.request.preserve_results
-            && workbook.recalculate_compatible_import()?;
+            && workbook.settings().calculation_mode()? != "manual"
+            && ((config.request.source.is_none() && workbook.recalculate_compatible_import()?)
+                || workbook.prepare_imported_formula_caches()?);
         if !reuse_imported_caches && workbook.settings().calculation_mode()? != "manual" {
             workbook.recalculate()?;
         }
@@ -153,7 +154,7 @@ impl State {
         if request.preserve_results {
             preserve_results(&self.workbook)?;
         }
-        if request.source.is_some() || request.recalculate || request.preserve_results {
+        if request.preserve_results {
             self.reuse_imported_caches = false;
         }
         let output = if let Some(source) = &request.source {
@@ -170,6 +171,7 @@ impl State {
         };
         if request.recalculate
             || (request.source.is_some()
+                && !self.reuse_imported_caches
                 && self.workbook.settings().runtime_calculation_mode()? != "manual")
         {
             let stage = Stage::start("recalculate");
@@ -192,7 +194,7 @@ impl State {
             .unwrap_or_default()
             .calc_on_save
         {
-            if !self.reuse_imported_caches || !self.workbook.recalculate_compatible_import()? {
+            if !self.reuse_imported_caches {
                 self.workbook.recalculate()?;
             }
         }
@@ -276,7 +278,7 @@ mod tests {
     }
 
     #[test]
-    fn script_edits_disable_import_cache_reuse() {
+    fn script_edits_preserve_unrelated_import_caches() {
         let mut state = State {
             reuse_imported_caches: true,
             workbook: Workbook::blank().unwrap().0,
@@ -287,7 +289,7 @@ mod tests {
             source: Some("await Excel.run(async context => { const sheet = context.workbook.worksheets.add('Edited'); sheet.getRange('A1').values = [[3]]; sheet.getRange('B1').formulas = [['=A1*2']]; await context.sync(); });".into()),
             ..Request::default()
         }).unwrap();
-        assert!(!state.reuse_imported_caches);
+        assert!(state.reuse_imported_caches);
         let value = state.apply(&Request {
             source: Some("return await Excel.run(async context => { const range = context.workbook.worksheets.getItem('Edited').getRange('B1'); range.load('values'); await context.sync(); return range.values; });".into()),
             ..Request::default()

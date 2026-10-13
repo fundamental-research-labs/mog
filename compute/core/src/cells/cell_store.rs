@@ -40,6 +40,8 @@ pub struct CellStore {
     pub(crate) cells: FxHashMap<CellId, CellEntry>,
     /// Identity formulas keyed by CellId across every sheet.
     pub(crate) formulas: FxHashMap<CellId, IdentityFormula>,
+    /// Formula values published after import; their original empty caches are stale.
+    pub(crate) live_formula_values: FxHashSet<CellId>,
     pub(super) sheets: FxHashMap<SheetId, SheetStore>,
     /// Lowercase sheet name -> SheetId for case-insensitive lookup.
     pub(super) sheet_names: FxHashMap<String, SheetId>,
@@ -263,6 +265,7 @@ impl CellStore {
             cse_single_cell: FxHashSet::default(),
             cse_anchors: FxHashSet::default(),
             imported_array_cache_invalidations: FxHashSet::default(),
+            live_formula_values: FxHashSet::default(),
         }
     }
 

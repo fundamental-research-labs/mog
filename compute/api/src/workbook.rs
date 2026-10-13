@@ -36,6 +36,14 @@ impl Clone for Workbook {
 }
 
 impl Workbook {
+    /// Fill missing scalar import results while retaining unrelated stored results.
+    /// Returns false when the caller needs the full calculation path.
+    pub fn prepare_imported_formula_caches(&self) -> Result<bool, ComputeApiError> {
+        self.dispatch
+            .call_engine(|engine| engine.prepare_imported_formula_caches())
+            .and_then(|result| result.map_err(ComputeApiError::from))
+    }
+
     // -----------------------------------------------------------------
     // Construction
     // -----------------------------------------------------------------
@@ -96,7 +104,6 @@ impl Workbook {
         let (engine, recalc) = ComputeEngine::from_xlsx_path(path)?;
 
         let dispatch = Dispatch::spawn(engine)?;
-
 
         Ok((Workbook { dispatch }, recalc))
     }

@@ -51,6 +51,9 @@ impl CellStore {
             .get_mut(cell_id)
             .expect("cell existence checked before column write")
             .value = value;
+        if self.formulas.contains_key(cell_id) {
+            self.live_formula_values.insert(*cell_id);
+        }
         if let Some(pos) = updated_pos {
             let value_at = self.sheets[&sheet_id].value_at(pos, &self.cells, &self.formulas);
             self.dense_cache

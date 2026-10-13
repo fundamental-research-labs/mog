@@ -221,10 +221,10 @@ pub fn quoted_sheet_name(input: &mut &str) -> ModalResult<String> {
     parse_quoted_content(input, '\'')
 }
 
-/// Parse an unquoted sheet name (letters, digits, underscores — no spaces).
+/// Parse an unquoted sheet name (Unicode letters/digits, underscores and periods).
 #[inline]
 pub fn unquoted_sheet_name<'i>(input: &mut &'i str) -> ModalResult<&'i str> {
-    take_while(1.., |c: char| c.is_ascii_alphanumeric() || c == '_').parse_next(input)
+    take_while(1.., |c: char| c.is_alphanumeric() || c == '_' || c == '.').parse_next(input)
 }
 
 #[cfg(test)]

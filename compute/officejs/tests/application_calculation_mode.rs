@@ -173,7 +173,8 @@ fn native_20430_reported_mode_runtime_and_reopen_are_distinct() {
             ],
             "{name}"
         );
-        // API import preserves raw saved caches; CLI reopen applies open policy.
+        // API import and ordinary CLI reopen preserve caches. Explicit -r
+        // applies the native automatic-open recalculation observation.
         let saved = Workbook::from_xlsx_path(dir.path().join("saved.xlsx").to_str().unwrap())
             .unwrap()
             .0;
@@ -186,19 +187,25 @@ fn native_20430_reported_mode_runtime_and_reopen_are_distinct() {
                 .unwrap(),
             CellValue::number(dependent)
         );
-        let reopen = Command::new(env!("CARGO_BIN_EXE_mog")).current_dir(dir.path()).args([
+        for (recalculate, expected) in [(false, dependent), (true, 14.0)] {
+            let mut command = Command::new(env!("CARGO_BIN_EXE_mog"));
+            if recalculate {
+                command.arg("-r");
+            }
+            let reopen = command.current_dir(dir.path()).args([
             "-i","saved.xlsx","-e","await Excel.run(async c=>{const r=c.workbook.worksheets.getItem('Sheet1').getRange('A1:A2');r.load('values');c.application.load('calculationMode');await c.sync();console.log(JSON.stringify({mode:c.application.calculationMode,values:r.values}));});"
         ]).output().unwrap();
-        assert!(
-            reopen.status.success(),
-            "{name}: {}",
-            String::from_utf8_lossy(&reopen.stderr)
-        );
-        let value: serde_json::Value = serde_json::from_slice(&reopen.stdout).unwrap();
-        assert_eq!(
-            value,
-            json!({"mode":reported,"values":[[7],[14]]}),
-            "{name}"
-        );
+            assert!(
+                reopen.status.success(),
+                "{name}: {}",
+                String::from_utf8_lossy(&reopen.stderr)
+            );
+            let value: serde_json::Value = serde_json::from_slice(&reopen.stdout).unwrap();
+            assert_eq!(
+                value,
+                json!({"mode":reported,"values":[[7],[expected as i64]]}),
+                "{name}"
+            );
+        }
     }
 }

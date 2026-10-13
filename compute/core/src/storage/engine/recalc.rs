@@ -5,6 +5,54 @@ use crate::scheduler::ComputeCore;
 use super::{ComputeEngine, construction};
 
 impl ComputeEngine {
+    /// Fill missing scalar import results without replacing unrelated caches.
+    /// Return false for arrays or cycles that require the full calculation path.
+    pub fn prepare_imported_formula_caches(&mut self) -> Result<bool, ComputeError> {
+        // Imported array ownership needs the full spill prepass. Retain the
+        // established calculation path until incremental import supports it.
+        if self.cell_store.formulas.keys().any(|id| {
+            self.cell_store.declared_array_extent(id).is_some()
+                || self.cell_store.projection_registry.is_source(id)
+        }) {
+            return Ok(false);
+        }
+        if self
+            .stores
+            .storage
+            .metadata
+            .imported_formula_caches_complete
+        {
+            return Ok(true);
+        }
+        let missing: Vec<_> = self
+            .stores
+            .compute
+            .formula_strings_iter()
+            .map(|(id, _)| *id)
+            .filter(|id| {
+                self.cell_store
+                    .get_cell_value(id)
+                    .is_none_or(|value| value.is_null())
+                    || self.cell_store.sheet_for_cell(id).is_some_and(|sheet| {
+                        crate::storage::properties::get_properties_by_id(
+                            &self.stores.storage,
+                            &sheet,
+                            id,
+                        )
+                        .is_some_and(|properties| properties.has_empty_cached_value)
+                    })
+            })
+            .collect();
+        let prepared = self
+            .stores
+            .compute
+            .recalculate_import_forced_cells(&mut self.cell_store, &missing)?;
+        if prepared {
+            self.sync_imported_array_cache_invalidations();
+        }
+        Ok(prepared)
+    }
+
     /// Propagate cache invalidations recorded by the live cell store to the
     /// durable import sidecar.  The scheduler records an owner as soon as it
     /// publishes a result, so dependents cannot read an obsolete package

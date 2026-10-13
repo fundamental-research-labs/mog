@@ -65,24 +65,9 @@ impl ComputeEngine {
                     range.end_col,
                 );
             }
-            for range in sheet.col_format_ranges() {
-                include(0, range.start_col, 1_048_575, range.end_col);
-            }
-            let grid = self.stores.grid_indexes.get(sheet_id);
-            for entry in crate::storage::properties::get_all_row_formats(
-                &self.stores.storage,
-                sheet_id,
-                grid,
-            ) {
-                include(entry.row, 0, entry.row, 16_383);
-            }
-            for entry in crate::storage::properties::get_all_col_formats(
-                &self.stores.storage,
-                sheet_id,
-                grid,
-            ) {
-                include(0, entry.col, 1_048_575, entry.col);
-            }
+            // Native Excel does not count inherited row/column defaults as
+            // used cells. Explicit cell and bounded range formatting above
+            // still contributes, including a styled far-corner cell.
             for (sr, sc, er, ec) in crate::storage::sheet::merges::iter_merge_bounds(
                 &self.stores.storage,
                 *sheet_id,

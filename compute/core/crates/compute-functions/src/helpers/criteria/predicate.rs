@@ -185,6 +185,9 @@ pub fn parse_criteria(criteria: &CellValue) -> Box<dyn Fn(&CellValue) -> bool> {
             }
             if let Some(rest) = trimmed.strip_prefix('=') {
                 let rest = rest.trim().to_string();
+                if rest.is_empty() {
+                    return Box::new(|v| matches!(v, CellValue::Null));
+                }
                 if let Some(n) = try_parse_criteria_number(&rest) {
                     return Box::new(move |v: &CellValue| {
                         v.as_comparable_number()

@@ -74,9 +74,9 @@ fn test_eq_ne_blank_complementarity() {
         );
     }
 
-    // Special case: Text("") matches BOTH "=" and "<>" (Excel behavior —
-    // formula-produced "" is "equal to blank" but also "not blank")
+    // Native Excel distinguishes explicit "=" (truly empty cells) from
+    // an empty-string criterion (which also matches formula-produced "").
     let empty_text = CellValue::Text("".into());
-    assert!(eq_crit(&empty_text), "Text(\"\") should match \"=\"");
+    assert!(!eq_crit(&empty_text), "Text(\"\") should not match \"=\"");
     assert!(ne_crit(&empty_text), "Text(\"\") should match \"<>\"");
 }

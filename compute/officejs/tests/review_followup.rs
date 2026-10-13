@@ -71,7 +71,7 @@ fn sumifs_empty_text_matches_blank_and_empty_formula_cells() {
       s.getRange('E1:E5').formulas=[['=SUMIFS(C1:C4,A1:A4,"x",B1:B4,"")'],['=SUMIFS(C:C,A:A,"x",B:B,"")'],['=SUMIFS(C1:C4,B1:B4,"")'],['=SUMIFS(C1:C4,B1:B4,"=")'],['=SUMIF(B1:B4,"",C1:C4)']];
       const r=s.getRange('E1:E5');r.load('values');await c.sync();return r.values;
     });"#).unwrap();
-    assert_eq!(r.value, json!([[10], [10], [10], [10], [10]]));
+    assert_eq!(r.value, json!([[10], [10], [10], [2], [10]]));
 }
 
 #[test]
@@ -338,10 +338,37 @@ fn imported_row_and_column_styles_cannot_allocate_the_whole_used_range() {
       const s=c.workbook.worksheets.getItem('Sheet1');const u=s.getUsedRange();const v=s.getUsedRange(true);
       u.load('address,cellCount');v.load('values,address');await c.sync();
       const address=u.address,count=u.cellCount,values=v.values,valuesAddress=v.address;
-      u.load('values');try{await c.sync();return 'unexpected';}catch(e){return {address,count,values,valuesAddress,error:e.code};}
+      u.load('values');await c.sync();return {address,count,values,valuesAddress,usedValues:u.values};
     });"#).unwrap();
     assert_eq!(
         r.value,
-        json!({"address":"Sheet1!A1:XFD1048576","count":-1,"values":[[1]],"valuesAddress":"Sheet1!A1","error":"RequestPayloadSizeLimitExceeded"})
+        json!({"address":"Sheet1!A1","count":1,"values":[[1]],"valuesAddress":"Sheet1!A1","usedValues":[[1]]})
     );
+}
+
+#[test]
+fn count_formatted_text_and_api_types_follow_native_excel() {
+    let w = Workbook::blank().unwrap().0;
+    let output=run_office_js_with_workbook(&w,r#"return await Excel.run(async c=>{
+      const s=c.workbook.worksheets.getItem('Sheet1');
+      const texts=['2%','$2','€2','1,000','(2)','-$2','$-2','(€2)','2 %','1234,567','1,000e2','£2','¥2','1,,2','2%%','2$','2%foo','1e309','(-2)','$2%'];
+      s.getRange('A1:A'+texts.length).formulas=texts.map(t=>['=COUNT('+JSON.stringify(t)+')']);
+      const r=s.getRange('A1:A'+texts.length);r.load('values');
+      const direct=c.workbook.functions.count('2',true),matrix=c.workbook.functions.count([[2,3]]);
+      direct.load('value,error');matrix.load('value,error');await c.sync();
+      return {values:r.values,direct:{value:direct.value,error:direct.error},matrix:{value:matrix.value,error:matrix.error}};
+    });"#).unwrap();
+    assert_eq!(
+        output.value,
+        json!({"values":[[1],[1],[1],[1],[1],[1],[1],[1],[1],[1],[1],[0],[0],[0],[0],[0],[0],[0],[0],[0]],"direct":{"value":null,"error":"#VALUE!"},"matrix":{"value":2,"error":null}})
+    );
+    for args in ["null", "[2,3]"] {
+        let script = format!(
+            r#"return await Excel.run(async c=>{{const f=c.workbook.functions.count({args});f.load('value');try{{await c.sync();return 'unexpected';}}catch(e){{return e.code;}}}});"#
+        );
+        assert_eq!(
+            run_office_js_with_workbook(&w, &script).unwrap().value,
+            json!("InvalidArgument")
+        );
+    }
 }

@@ -215,6 +215,69 @@ fn agg_average<'a>(vals: impl Iterator<Item = (&'a CellValue, ValueSource)>) -> 
     }
 }
 
+/// Recognize the additional invariant numeric text forms accepted by COUNT.
+/// Unlike VALUE's permissive cleanup, malformed grouping, repeated percent
+/// signs and trailing currency symbols must remain nonnumeric.
+// Direct COUNT arguments use Excel's numeric-text coercion. References and
+// array elements retain their separate aggregate policies. These additional
+// forms match the default numeric locale, without accepting malformed groups.
+fn count_inline_text(value: &CellValue) -> bool {
+    if value.coerce_to_number().is_ok() {
+        return true;
+    }
+    let CellValue::Text(text) = value else {
+        return false;
+    };
+    let mut text = text.trim();
+    let accounting = text.starts_with('(') && text.ends_with(')');
+    if accounting {
+        text = text[1..text.len() - 1].trim();
+    }
+    let signed = text.starts_with(['+', '-']);
+    if signed {
+        if accounting {
+            return false;
+        }
+        text = &text[1..];
+    }
+    let currency = text.starts_with(['$', '€']);
+    if currency {
+        text = text
+            .strip_prefix('$')
+            .or_else(|| text.strip_prefix('€'))
+            .unwrap()
+            .trim();
+        if text.starts_with(['+', '-']) {
+            if signed || accounting {
+                return false;
+            }
+            text = &text[1..];
+        }
+    }
+    if let Some(number) = text.strip_suffix('%') {
+        if currency || accounting {
+            return false;
+        }
+        text = number.trim();
+    }
+    if text.contains(',') {
+        let mantissa = text.split(['e', 'E']).next().unwrap_or(text);
+        let integer = mantissa.split('.').next().unwrap_or(mantissa);
+        let mut groups = integer.split(',');
+        if !groups
+            .next()
+            .is_some_and(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
+            || !groups.all(|part| part.len() == 3 && part.bytes().all(|b| b.is_ascii_digit()))
+            || text[integer.len()..].contains(',')
+        {
+            return false;
+        }
+    }
+    text.replace(',', "")
+        .parse::<f64>()
+        .is_ok_and(f64::is_finite)
+}
+
 fn agg_count<'a>(vals: impl Iterator<Item = (&'a CellValue, ValueSource)>) -> CellValue {
     let mut count = 0u64;
     for (value, source) in vals {
@@ -224,7 +287,7 @@ fn agg_count<'a>(vals: impl Iterator<Item = (&'a CellValue, ValueSource)>) -> Ce
         match (value, source) {
             (CellValue::Number(_), _) => count += 1,
             (CellValue::Boolean(_), ValueSource::Inline) => count += 1,
-            (CellValue::Text(_), ValueSource::Inline) if value.coerce_to_number().is_ok() => {
+            (CellValue::Text(_), ValueSource::Inline) if count_inline_text(value) => {
                 count += 1;
             }
             _ => {}

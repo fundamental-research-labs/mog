@@ -34,6 +34,14 @@ impl SheetLayout {
     /// Set the width of a column.
     pub fn set_col_width(&self, col: u32, width: f64) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
+        if let Some(message) = self
+            .dispatch
+            .query_engine(move |e| e.physical_layout_error(&sid, true))?
+        {
+            return Err(ComputeApiError::from(value_types::ComputeError::Eval {
+                message,
+            }));
+        }
         self.dispatch
             .call_engine(move |e| e.set_col_width(&sid, col, width))
             .and_then(|r| r.map_err(ComputeApiError::from))
@@ -45,6 +53,14 @@ impl SheetLayout {
         widths: Vec<(u32, f64)>,
     ) -> Result<MutationResult, ComputeApiError> {
         let sid = self.sheet_id;
+        if let Some(message) = self
+            .dispatch
+            .query_engine(move |e| e.physical_layout_error(&sid, true))?
+        {
+            return Err(ComputeApiError::from(value_types::ComputeError::Eval {
+                message,
+            }));
+        }
         self.dispatch
             .call_engine(move |e| e.set_col_widths(&sid, &widths))
             .and_then(|r| r.map_err(ComputeApiError::from))
@@ -61,9 +77,47 @@ impl SheetLayout {
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
+    /// Pixel position of the top edge of a row, including custom sizes and visibility.
+    pub fn get_row_position(&self, row: u32) -> Result<f64, ComputeApiError> {
+        let sid = self.sheet_id;
+        if let Some(message) = self
+            .dispatch
+            .query_engine(move |e| e.physical_layout_error(&sid, false))?
+        {
+            return Err(ComputeApiError::from(value_types::ComputeError::Eval {
+                message,
+            }));
+        }
+        self.dispatch
+            .query_engine(move |e| e.get_row_position(&sid, row))
+    }
+
+    /// Pixel position of the left edge of a column, including custom sizes and visibility.
+    pub fn get_col_position(&self, col: u32) -> Result<f64, ComputeApiError> {
+        let sid = self.sheet_id;
+        if let Some(message) = self
+            .dispatch
+            .query_engine(move |e| e.physical_layout_error(&sid, true))?
+        {
+            return Err(ComputeApiError::from(value_types::ComputeError::Eval {
+                message,
+            }));
+        }
+        self.dispatch
+            .query_engine(move |e| e.get_col_position(&sid, col))
+    }
+
     /// Get the height of a row (returns 0 for hidden rows, default for unset).
     pub fn get_row_height(&self, row: u32) -> Result<f64, ComputeApiError> {
         let sid = self.sheet_id;
+        if let Some(message) = self
+            .dispatch
+            .query_engine(move |e| e.physical_layout_error(&sid, false))?
+        {
+            return Err(ComputeApiError::from(value_types::ComputeError::Eval {
+                message,
+            }));
+        }
         self.dispatch
             .query_engine(move |e| e.get_row_height_query(&sid, row))
     }
@@ -71,6 +125,14 @@ impl SheetLayout {
     /// Get the width of a column (returns 0 for hidden cols, default for unset).
     pub fn get_col_width(&self, col: u32) -> Result<f64, ComputeApiError> {
         let sid = self.sheet_id;
+        if let Some(message) = self
+            .dispatch
+            .query_engine(move |e| e.physical_layout_error(&sid, true))?
+        {
+            return Err(ComputeApiError::from(value_types::ComputeError::Eval {
+                message,
+            }));
+        }
         self.dispatch
             .query_engine(move |e| e.get_col_width_query(&sid, col))
     }
@@ -78,6 +140,14 @@ impl SheetLayout {
     /// Get the default row height for this sheet.
     pub fn get_default_row_height(&self) -> Result<f64, ComputeApiError> {
         let sid = self.sheet_id;
+        if let Some(message) = self
+            .dispatch
+            .query_engine(move |e| e.physical_layout_error(&sid, false))?
+        {
+            return Err(ComputeApiError::from(value_types::ComputeError::Eval {
+                message,
+            }));
+        }
         self.dispatch
             .query_engine(move |e| e.get_default_row_height(&sid))
     }
@@ -85,6 +155,14 @@ impl SheetLayout {
     /// Get the default column width for this sheet.
     pub fn get_default_col_width(&self) -> Result<f64, ComputeApiError> {
         let sid = self.sheet_id;
+        if let Some(message) = self
+            .dispatch
+            .query_engine(move |e| e.physical_layout_error(&sid, true))?
+        {
+            return Err(ComputeApiError::from(value_types::ComputeError::Eval {
+                message,
+            }));
+        }
         self.dispatch
             .query_engine(move |e| e.get_default_col_width(&sid))
     }

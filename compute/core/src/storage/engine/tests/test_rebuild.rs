@@ -585,3 +585,45 @@ fn test_recalculate_preserves_projections() {
         "A3=3 after recalculate()"
     );
 }
+
+#[test]
+fn runtime_mode_survives_rebuild_history_and_settings_but_not_new_engine() {
+    let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    engine.set_runtime_calculation_mode("manual").unwrap();
+    engine.rebuild_compute_core().unwrap();
+    assert_eq!(engine.get_runtime_calculation_mode(), "manual");
+    engine.set_cell_value_parsed(&sheet_id(), 0, 0, "7").unwrap();
+    assert_eq!(cell_value_at(&engine, &sheet_id(), 1, 0), num(30.0));
+    engine.undo().unwrap();
+    assert_eq!(engine.get_runtime_calculation_mode(), "manual");
+    engine.redo().unwrap();
+    assert_eq!(engine.get_runtime_calculation_mode(), "manual");
+    engine.set_max_iterations(33).unwrap();
+    assert_eq!(engine.get_runtime_calculation_mode(), "manual");
+    engine.set_cell_value_parsed(&sheet_id(), 0, 0, "8").unwrap();
+    assert_eq!(cell_value_at(&engine, &sheet_id(), 1, 0), num(30.0));
+    let reopened = rebuild_native_engine(&engine);
+    assert_eq!(reopened.get_runtime_calculation_mode(), "auto");
+    assert_eq!(engine.get_runtime_calculation_mode(), "manual");
+}
+
+#[test]
+fn runtime_mode_survives_csv_rebuild_with_and_without_recalculation() {
+    for recalculate in [false, true] {
+        let (mut engine, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        engine.set_runtime_calculation_mode("manual").unwrap();
+        if recalculate {
+            engine.import_from_csv_bytes(b"1,2\n", Default::default()).unwrap();
+        } else {
+            engine.import_from_csv_bytes_no_recalc(b"1,2\n", Default::default()).unwrap();
+        }
+        assert_eq!(engine.get_runtime_calculation_mode(), "manual");
+        let sid = engine.stores.storage.sheet_order()[0];
+        engine.set_cell_value_parsed(&sid, 1, 0, "=A1+B1").unwrap();
+        engine.recalculate().unwrap();
+        engine.set_cell_value_parsed(&sid, 0, 0, "7").unwrap();
+        assert_eq!(cell_value_at(&engine, &sid, 1, 0), num(3.0));
+    }
+    let (fresh, _) = ComputeEngine::from_csv_bytes(b"1,2\n", Default::default()).unwrap();
+    assert_eq!(fresh.get_runtime_calculation_mode(), "auto");
+}

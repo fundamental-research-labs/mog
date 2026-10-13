@@ -16,6 +16,9 @@ fn format_font_fill_and_protection_round_trip_all_exposed_fields() {
         r##"
         return await Excel.run(async context => {
           const range = context.workbook.worksheets.getItem("Sheet1").getRange("A1:B2");
+          // Test explicit point sizes, independent of blank-workbook host defaults.
+          range.format.columnWidth = 48;
+          range.format.rowHeight = 15;
           range.format.set({
             horizontalAlignment: "CenterAcrossSelection",
             verticalAlignment: "Center",

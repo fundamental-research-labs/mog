@@ -323,20 +323,38 @@ pub(in crate::storage::engine) fn mutation_copy_sheet(
 ) -> Result<(String, MutationResult), ComputeError> {
     use crate::identity::GridIndex;
 
+    let source_name =
+        crate::storage::sheet::properties::get_sheet_name(&stores.storage, source_sheet_id);
+
     let formulas_by_pos: std::collections::HashMap<_, _> = cell_store
         .get_sheet(source_sheet_id)
         .into_iter()
         .flat_map(|sheet| {
-            cell_store.iter_sheet_cells(source_sheet_id).filter_map(|(id, _)| {
-                let pos = sheet.position_of(id)?;
-                let text = crate::storage::engine::formula_read::formula_text_for_cell_id(
-                    stores,
-                    cell_store,
-                    source_sheet_id,
-                    id,
-                )?;
-                Some((pos, text))
-            })
+            cell_store
+                .iter_sheet_cells(source_sheet_id)
+                .filter_map(|(id, _)| {
+                    let pos = sheet.position_of(id)?;
+                    let text = crate::storage::engine::formula_read::formula_text_for_cell_id(
+                        stores,
+                        cell_store,
+                        source_sheet_id,
+                        id,
+                    )?;
+                    // Rebind only real self-sheet reference tokens. Do not rewrite
+                    // foreign sheets, external workbooks, or quoted string values.
+                    let text = compute_parser::rewrite_reference_tokens(&text, |class, token| {
+                        if class != compute_parser::ReferenceTokenClass::SheetRef {
+                            return None;
+                        }
+                        let (sheet_name, reference) = compute_parser::split_sheet_prefix(token);
+                        let sheet_name = sheet_name?.replace("''", "'");
+                        if !sheet_name.eq_ignore_ascii_case(source_name.as_deref()?) {
+                            return None;
+                        }
+                        Some(format!("'{}'!{}", new_name.replace("'", "''"), reference))
+                    });
+                    Some((pos, text))
+                })
         })
         .collect();
 

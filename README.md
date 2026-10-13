@@ -71,8 +71,10 @@ mog -e 'console.log("hello")' -o hello.xlsx   # inline JavaScript
 ```
 
 With `-i` and no `-o`, Mog saves **in place**. Without either, it chooses an
-unused `workbook.xlsx`, `workbook-2.xlsx`, and so on. Scripts trigger
-recalculation before saving; a script failure does not save the workbook.
+unused `workbook.xlsx`, `workbook-2.xlsx`, and so on. Calculation follows the
+workbook mode and calculation-on-save setting. `--preserve-results` explicitly
+selects manual mode without calculation on save. A script failure does not save
+the workbook.
 Running `mog` alone shows help.
 
 For repeated edits, `mog -s -i input.xlsx` starts a background session and prints

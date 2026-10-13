@@ -12,6 +12,17 @@ pub(super) fn is_static_ref(node: &ASTNode) -> bool {
     }
 }
 
+/// AREAS counts reference areas, including unions, without reading cell values.
+/// Names and function-produced references remain dynamic and retain dependencies.
+pub(super) fn is_static_area_ref(node: &ASTNode) -> bool {
+    match node {
+        ASTNode::Paren(inner) => is_static_area_ref(inner),
+        ASTNode::Union { ranges } => !ranges.is_empty() && ranges.iter().all(is_static_area_ref),
+        ASTNode::SheetRef { inner, .. } => is_static_area_ref(inner),
+        _ => is_static_ref(node),
+    }
+}
+
 /// Returns true if the reference argument of this function is used only for
 /// address metadata (row/col/dimensions), never for the cell's computed value.
 /// When true AND the ref arg is a static ref, we can safely skip

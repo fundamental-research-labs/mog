@@ -10,6 +10,7 @@
 
 mod borders;
 mod comments;
+mod chart_properties;
 mod conditional;
 mod diagnostics;
 mod dispatch;

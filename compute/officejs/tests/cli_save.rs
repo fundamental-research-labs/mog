@@ -24,7 +24,7 @@ impl Fixture {
         let mut zip = ZipWriter::new();
         zip.add_file("[Content_Types].xml", br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>"#.to_vec());
         zip.add_file("_rels/.rels", br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#.to_vec());
-        zip.add_file("xl/workbook.xml", br#"<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets><calcPr calcMode="manual"/></workbook>"#.to_vec());
+        zip.add_file("xl/workbook.xml", br#"<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets><calcPr calcMode="manual" calcOnSave="0"/></workbook>"#.to_vec());
         zip.add_file("xl/_rels/workbook.xml.rels", br#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#.to_vec());
         zip.add_file("xl/worksheets/sheet1.xml", br#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:F3"/><sheetData><row r="1"><c r="A1"><v>10</v></c><c r="B1"><v>5</v></c><c r="C1"><f>A1+B1</f><v>0</v></c><c r="D1"><f>A1/B1</f><v>0</v></c><c r="E1"><f>RAND()</f><v>0.25</v></c><c r="F1"><f>E1*2</f><v>0.5</v></c></row><row r="2"><c r="A2"><v>20</v></c><c r="B2"><v>15</v></c><c r="C2"><f>A2*B2</f><v>0</v></c><c r="D2"><f>AVERAGE(A1:A3)</f><v>0</v></c></row><row r="3"><c r="A3"><v>30</v></c><c r="C3"><f>SUM(A1:A3)</f><v>0</v></c></row></sheetData></worksheet>"#.to_vec());
         fs::write(path.join("input.xlsx"), zip.finish().unwrap()).unwrap();
@@ -133,12 +133,12 @@ fn run_recalculate_exports_results_after_script_mutation() {
 }
 
 #[test]
-fn script_automatically_recalculates_imported_manual_workbook() {
+fn script_honors_imported_manual_calculation_mode() {
     let fixture = Fixture::new();
     let workbook = fixture.save(false, Some("return 1;"));
     let sheet = workbook.sheet_by_index(0).unwrap();
-    assert_eq!(sheet.get_cell_value("C1").unwrap(), CellValue::number(15.0));
-    assert_eq!(sheet.get_cell_value("C3").unwrap(), CellValue::number(60.0));
+    assert_eq!(sheet.get_cell_value("C1").unwrap(), CellValue::number(0.0));
+    assert_eq!(sheet.get_cell_value("C3").unwrap(), CellValue::number(0.0));
 }
 
 #[test]

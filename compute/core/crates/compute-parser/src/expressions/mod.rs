@@ -5,10 +5,10 @@
 //! 2. Concatenation: &
 //! 3. Addition/Subtraction: +, -
 //! 4. Multiplication/Division: *, /
-//! 5. Power: ^ (right-associative)
-//! 6. Unary: +, -, @
+//! 5. Unary plus and implicit intersection: +, @
+//! 6. Power: ^ (left-associative)
 //! 7. Percent and call expressions
-//! 8. Intersection: implicit whitespace between range-like expressions
+//! 8. Negation, then intersection: implicit whitespace between range-like expressions
 //! 9. Expression-level range operator: :
 //! 10. Atomic: literals, references, function calls, parens
 //!

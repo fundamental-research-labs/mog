@@ -17,7 +17,7 @@ pub use col_visibility::{get_hidden_columns, hide_columns, is_column_hidden, unh
 pub use cols::get_col_width_stored;
 pub use cols::{
     DEFAULT_COL_WIDTH, get_col_width, get_col_width_explicit, get_sheet_default_col_width,
-    set_col_width,
+    set_col_width, set_col_width_from_pixels,
 };
 pub use row_visibility::{
     clear_filter_hidden_rows, get_hidden_rows, get_row_visibility_ownership, hide_manual_rows,

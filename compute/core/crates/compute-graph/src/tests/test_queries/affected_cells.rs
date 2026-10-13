@@ -150,3 +150,80 @@ fn test_volatile_with_dependents() {
     assert!(affected.contains(&now_cell));
     assert!(affected.contains(&display_cell));
 }
+
+struct SymbolicResolver;
+impl crate::positions::PositionResolver for SymbolicResolver {
+    fn resolve(&self, cell: &CellId) -> Option<CellPosition> {
+        if *cell == cid(99) || *cell == cid(98) {
+            return None;
+        }
+        Some(CellPosition {
+            sheet: sid(1),
+            row: 0,
+            col: if *cell == cid(1) { 1 } else { 5 },
+        })
+    }
+    fn is_nonspatial(&self, cell: &CellId) -> bool {
+        *cell == cid(99)
+    }
+}
+
+#[test]
+fn symbolic_volatile_keeps_real_dependents_without_global_range_sweep() {
+    let mut graph = DependencyGraph::new();
+    graph.mark_volatile(&cid(99));
+    graph.set_precedents(&cid(1), vec![DepTarget::Cell(cid(99))]);
+    graph.set_precedents(
+        &cid(2),
+        vec![DepTarget::Range(
+            RangePos::new(sid(1), 0, 1, 0, 1),
+            RangeAccess::Aggregate,
+        )],
+    );
+    graph.set_precedents(
+        &cid(3),
+        vec![DepTarget::Range(
+            RangePos::new(sid(2), 0, 0, 9, 9),
+            RangeAccess::Aggregate,
+        )],
+    );
+    let affected = graph.affected_cells(&[], &SymbolicResolver).into_value();
+    for id in [99, 1, 2] {
+        assert!(affected.contains(&cid(id)));
+    }
+    assert!(!affected.contains(&cid(3)));
+    // An actual unresolved cell still invokes the conservative all-range sweep.
+    let affected = graph
+        .affected_cells(&[cid(98)], &SymbolicResolver)
+        .into_value();
+    assert!(affected.contains(&cid(3)));
+}
+
+#[test]
+fn position_override_takes_precedence_over_symbolic_classification() {
+    use crate::positions::{PositionResolver, WithOverrides};
+    let resolver = WithOverrides::new(SymbolicResolver).with_override(
+        cid(99),
+        CellPosition {
+            sheet: sid(2),
+            row: 0,
+            col: 0,
+        },
+    );
+    assert!(!resolver.is_nonspatial(&cid(99)));
+    let mut graph = DependencyGraph::new();
+    graph.mark_volatile(&cid(99));
+    graph.set_precedents(
+        &cid(3),
+        vec![DepTarget::Range(
+            RangePos::new(sid(2), 0, 0, 9, 9),
+            RangeAccess::Aggregate,
+        )],
+    );
+    assert!(
+        graph
+            .affected_cells(&[], &resolver)
+            .into_value()
+            .contains(&cid(3))
+    );
+}

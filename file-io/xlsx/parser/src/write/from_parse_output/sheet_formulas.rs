@@ -10,6 +10,7 @@ pub(super) fn data_table_master_formula_map(
         .iter()
         .map(|region| {
             let flags = data_table_ooxml_flags_for_export(region);
+            let column_input = !flags.dt2d && !flags.dtr;
             let cell_formula = CellFormula {
                 t: CellFormulaType::DataTable,
                 r#ref: Some(format!(
@@ -17,19 +18,25 @@ pub(super) fn data_table_master_formula_map(
                     crate::infra::a1::to_a1(region.start_row, region.start_col),
                     crate::infra::a1::to_a1(region.end_row, region.end_col),
                 )),
-                // Domain DataTableRegion refs are normalized: col_input_ref
-                // came from OOXML r1, row_input_ref came from OOXML r2.
+                // Reverse the orientation-aware import mapping. In particular,
+                // do not invent r2 for a one-variable column-input table.
                 r1: flags.r1.clone().or_else(|| {
-                    region
-                        .col_input_ref
-                        .as_ref()
-                        .and_then(crate::infra::a1::cell_ref_to_absolute_a1)
+                    (if column_input {
+                        &region.row_input_ref
+                    } else {
+                        &region.col_input_ref
+                    })
+                    .as_ref()
+                    .and_then(crate::infra::a1::cell_ref_to_absolute_a1)
                 }),
                 r2: flags.r2.clone().or_else(|| {
-                    region
-                        .row_input_ref
-                        .as_ref()
-                        .and_then(crate::infra::a1::cell_ref_to_absolute_a1)
+                    (if column_input {
+                        &region.col_input_ref
+                    } else {
+                        &region.row_input_ref
+                    })
+                    .as_ref()
+                    .and_then(crate::infra::a1::cell_ref_to_absolute_a1)
                 }),
                 aca: flags.aca,
                 ca: flags.ca,
@@ -51,6 +58,8 @@ fn data_table_ooxml_flags_for_export(
     let mut flags = region.ooxml_flags.clone().unwrap_or_default();
     if region.row_input_ref.is_some() && region.col_input_ref.is_some() {
         flags.dt2d = true;
+    } else if region.ooxml_flags.is_none() {
+        flags.dtr = region.col_input_ref.is_some();
     }
     flags
 }

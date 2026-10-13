@@ -4,6 +4,8 @@
 //! while parser implementations live in focused child modules.
 
 mod calc;
+mod calc_features;
+pub use calc_features::parse_calculation_features;
 mod inventory;
 mod properties;
 mod rels;

@@ -440,6 +440,32 @@ impl ComputeCore {
         }
     }
 
+    pub(super) fn qualify_implicit_table_formula(
+        cell_store: &CellStore,
+        cell_id: CellId,
+        sheet_id: SheetId,
+        formula: String,
+    ) -> String {
+        if !formula.contains('[') {
+            return formula;
+        }
+        let table_name = cell_store.resolve_position(&cell_id).and_then(|pos| {
+            let sheet_hex = sheet_id.to_uuid_string();
+            cell_store
+                .all_tables()
+                .iter()
+                .find(|t| {
+                    t.sheet_id == sheet_hex
+                        && pos.row() >= t.range.start_row()
+                        && pos.row() <= t.range.end_row()
+                        && pos.col() >= t.range.start_col()
+                        && pos.col() <= t.range.end_col()
+                })
+                .map(|t| t.name.clone())
+        });
+        compute_parser::qualify_implicit_structured_refs(&formula, table_name.as_deref())
+    }
+
     /// Parse a formula, extract dependencies, and register them in the graph.
     ///
     /// Also generates an [`IdentityFormula`] and stores it in the cell's
@@ -465,23 +491,7 @@ impl ComputeCore {
     ) {
         // Qualify implicit structured refs: [@Col] → TableName[@Col]
         // when the cell is inside a table.
-        let formula = {
-            let table_name = cell_store.resolve_position(&cell_id).and_then(|pos| {
-                let sheet_hex = sheet_id.to_uuid_string();
-                cell_store
-                    .all_tables()
-                    .iter()
-                    .find(|t| {
-                        t.sheet_id == sheet_hex
-                            && pos.row() >= t.range.start_row()
-                            && pos.row() <= t.range.end_row()
-                            && pos.col() >= t.range.start_col()
-                            && pos.col() <= t.range.end_col()
-                    })
-                    .map(|t| t.name.clone())
-            });
-            compute_parser::qualify_implicit_structured_refs(&formula, table_name.as_deref())
-        };
+        let formula = Self::qualify_implicit_table_formula(cell_store, cell_id, sheet_id, formula);
 
         // Normalize: auto-quote sheet names, close parens, canonicalize refs
         let formula = {

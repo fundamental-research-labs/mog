@@ -271,9 +271,8 @@ fn test_deeply_nested_unary_returns_err() {
 
 #[test]
 fn test_deeply_nested_power_returns_err() {
-    // 2^2^2^...^2 200 levels
-    let parts: Vec<&str> = std::iter::repeat_n("2", 200).collect();
-    let formula = format!("={}", parts.join("^"));
+    // Explicitly nested powers; an unparenthesized chain is left associative.
+    let formula = format!("={}2{}", "2^(".repeat(200), ")".repeat(200));
     let result = parse_formula(&formula, None);
     assert!(
         result.is_err(),

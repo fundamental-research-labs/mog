@@ -1,5 +1,5 @@
 use crate::support::{
-    assert_array_or_first_number, assert_null_or_zero_or_non_error, assert_number, build_snapshot,
+    assert_array_or_first_number, assert_error_debug, assert_number, build_snapshot,
     recalc_snapshot,
 };
 use value_types::CellValue;
@@ -64,21 +64,11 @@ fn test_xlookup_return_range_shorter_than_lookup() {
 
     let result = recalc_snapshot(snapshot);
 
-    assert_number(
-        &result,
-        0,
-        0,
-        2,
-        200.0,
-        "shorter return range should still return in-bounds matches",
-    );
-    assert_null_or_zero_or_non_error(
-        &result,
-        0,
-        1,
-        2,
-        "matched rows beyond a shorter return range should be handled gracefully",
-    );
+    // Shape validation precedes matching even when the selected index would
+    // fit inside the shorter return array (issue #431).
+    for row in [0, 1] {
+        assert_error_debug(&result, 0, row, 2, "Value", "mismatched return dimension");
+    }
 }
 
 #[test]

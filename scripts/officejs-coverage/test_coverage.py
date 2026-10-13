@@ -235,20 +235,37 @@ class HostScanTests(unittest.TestCase):
         self.assertIn(("Excel.Range", "values"), implemented)
         self.assertIn(("Excel.WorksheetFreezePanes", "freezeRows"), implemented)
 
-    def test_shared_host_types_table_sort_and_filter_hierarchies(self) -> None:
+    def test_source_aliases_table_sort_and_filter_hierarchies(self) -> None:
         js = """
         function RangeSort(context, range) {}
         RangeSort.prototype.apply = function (fields) {};
         Excel.RangeSort = RangeSort;
+        Table.prototype.getDataBodyRange = function () { return new Excel.Range(); };
+        Object.defineProperty(Table.prototype, "sort", {
+          get: function () {
+            if (!this._sort) { this._sort = this.getDataBodyRange().sort; }
+            return this._sort;
+          }
+        });
+        Object.defineProperty(Excel.Range.prototype, "sort", {
+          get: function () {
+            if (!this._sort) this._sort = new RangeSort(this.context, this);
+            return this._sort;
+          }
+        });
         function PivotHierarchyList(context, pivot, area) {}
         PivotHierarchyList.prototype.add = function (hierarchy) {};
         Excel.RowColumnPivotHierarchyCollection = PivotHierarchyList;
+        Excel.RowColumnPivotHierarchyCollection.prototype.rowOnly = function () {};
         """
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp)
             (src / "host.js").write_text(js)
             catalog = {
                 "classes": [
+                    {
+                        "id": "Excel.Table",
+                    },
                     {
                         "id": "Excel.RangeSort",
                         "family": "object-model",
@@ -286,6 +303,19 @@ class HostScanTests(unittest.TestCase):
                 ]
             }
             implemented = cov.scan_officejs_host(src, catalog)
+            for old, new in (
+                ('Table.prototype, "sort"', 'Table.prototype, "other"'),
+                ('this.getDataBodyRange().sort', 'this.getDataBodyRange().other'),
+                ('new RangeSort(this.context, this)', 'new OtherSort(this.context, this)'),
+                ('Table.prototype.getDataBodyRange =', 'Table.prototype.other ='),
+                ('return this._sort;', 'return this._other;'),
+                ('RangeSort.prototype.apply =', 'RangeSort.prototype.other ='),
+            ):
+                with self.subTest(mutation=old):
+                    (src / "host.js").write_text(js.replace(old, new))
+                    changed = cov.scan_officejs_host(src, catalog)
+                    self.assertNotIn(("Excel.TableSort", "apply"), changed)
+        self.assertNotIn(("Excel.FilterPivotHierarchyCollection", "rowOnly"), implemented)
         self.assertIn(("Excel.RangeSort", "apply"), implemented)
         self.assertIn(("Excel.TableSort", "apply"), implemented)
         self.assertNotIn(("Excel.TableSort", "clear"), implemented)

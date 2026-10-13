@@ -203,11 +203,9 @@ pub(crate) fn standard_chart_source_fingerprint(
                     && (*start_col..=*end_col).contains(&cell.col)
             })
         {
-            let formula = cell
-                .formula
-                .as_deref()
-                .unwrap_or_default()
-                .trim_start_matches('=');
+            let formula =
+                compute_parser::normalize_xlsx_formula(cell.formula.as_deref().unwrap_or_default());
+            let formula = formula.trim_start_matches('=');
             let value = cell
                 .value
                 .as_ref()
@@ -335,6 +333,7 @@ fn standard_chart_source_fingerprint_from_source(
         .collect();
     let mut present_cells = Vec::new();
     visit(&requested, &mut |sheet_name, row, col, formula, value| {
+        let formula = compute_parser::normalize_xlsx_formula(formula);
         let formula = formula.trim_start_matches('=');
         let value = value.to_string();
         if !formula.is_empty() || !value.is_empty() {

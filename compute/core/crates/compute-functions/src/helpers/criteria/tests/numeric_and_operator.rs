@@ -297,3 +297,20 @@ fn test_lte_numeric_does_not_match_text() {
     let crit = parse_criteria(&CellValue::Text("<=999999".into()));
     assert!(!crit(&CellValue::Text("hello".into())));
 }
+
+#[test]
+fn text_criteria_unicode_equality_preserves_other_criteria_rules() {
+    for criterion in ["café", "=café"] {
+        let pred = parse_criteria(&CellValue::Text(criterion.into()));
+        assert!(pred(&CellValue::Text("CAFÉ".into())));
+        assert!(!pred(&CellValue::Text("cafe".into())));
+        assert!(!pred(&CellValue::Error(CellError::Value, None)));
+    }
+    let unequal = parse_criteria(&CellValue::Text("<>café".into()));
+    assert!(!unequal(&CellValue::Text("CAFÉ".into())));
+    assert!(unequal(&CellValue::Text("cafe".into())));
+    assert!(!unequal(&CellValue::Error(CellError::Value, None)));
+    let numeric = parse_criteria(&CellValue::Text("=20".into()));
+    assert!(numeric(&CellValue::number(20.0)));
+    assert!(!numeric(&CellValue::number(21.0)));
+}

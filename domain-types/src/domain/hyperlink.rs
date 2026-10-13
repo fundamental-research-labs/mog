@@ -30,6 +30,25 @@ pub struct Hyperlink {
     pub target_mode: Option<String>,
 }
 
+/// Split the address and document reference of supported network hyperlinks.
+/// Keep the combined target in storage for the existing string API; OOXML
+/// stores the document reference separately as the worksheet location.
+pub fn web_hyperlink_parts(target: &str) -> (&str, Option<&str>) {
+    let Some((scheme, _)) = target.split_once("://") else {
+        return (target, None);
+    };
+    if !["http", "https", "ftp"]
+        .iter()
+        .any(|s| scheme.eq_ignore_ascii_case(s))
+    {
+        return (target, None);
+    }
+    match target.split_once('#') {
+        Some((address, reference)) => (address, (!reference.is_empty()).then_some(reference)),
+        None => (target, None),
+    }
+}
+
 /// Whether a worksheet hyperlink target must be represented through an OPC
 /// relationship (`r:id`) instead of a worksheet `location` attribute.
 ///

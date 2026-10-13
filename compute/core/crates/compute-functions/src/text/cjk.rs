@@ -1,4 +1,4 @@
-//! CJK functions: ASC, DBCS, JIS, PHONETIC
+//! CJK functions: ASC, DBCS, PHONETIC
 
 use value_types::CellValue;
 
@@ -330,29 +330,6 @@ impl PureFunction for FnDbcs {
     }
 }
 
-pub(crate) struct FnJis;
-impl PureFunction for FnJis {
-    fn is_scalar_arg(&self, _index: usize) -> bool {
-        true
-    }
-    fn name(&self) -> &'static str {
-        "JIS"
-    }
-    fn min_args(&self) -> usize {
-        1
-    }
-    fn max_args(&self) -> Option<usize> {
-        Some(1)
-    }
-    fn call(&self, args: &[CellValue]) -> CellValue {
-        // JIS is the Japanese localized spelling of the DBCS width
-        // conversion. Keep the accepted alias because legacy workbooks can
-        // persist JIS even though the invariant OOXML function list names
-        // DBCS; formula availability is resolved by the parser/registry.
-        FnDbcs.call(args)
-    }
-}
-
 pub(crate) struct FnPhonetic;
 impl PureFunction for FnPhonetic {
     fn is_scalar_arg(&self, _index: usize) -> bool {
@@ -383,7 +360,8 @@ impl PureFunction for FnPhonetic {
 pub fn register(registry: &mut FunctionRegistry) {
     registry.register(Box::new(FnAsc));
     registry.register(Box::new(FnDbcs));
-    registry.register(Box::new(FnJis));
+    // JIS is a localized spelling, not an invariant formula function name.
+    // Native Excel accepts these formulas but evaluates them as #NAME?.
     registry.register(Box::new(FnPhonetic));
 }
 
@@ -415,8 +393,19 @@ mod tests {
     }
 
     #[test]
-    fn test_jis_same_as_dbcs() {
-        assert_eq!(FnJis.call(&[text("A")]), FnDbcs.call(&[text("A")]));
+    fn localized_jis_name_is_not_registered_as_invariant_function() {
+        let registry = FunctionRegistry::new();
+        for value in [
+            value_types::CellValue::Null,
+            text("ABC 123"),
+            text("ＡＢＣ　１２３"),
+        ] {
+            assert!(matches!(
+                registry.call("JIS", &[value]),
+                value_types::CellValue::Error(CellError::Name, _)
+            ));
+        }
+        assert!(registry.get_by_name("DBCS").is_some());
     }
 
     #[test]
@@ -502,14 +491,6 @@ mod tests {
     }
 
     #[test]
-    fn test_jis_identical_to_dbcs() {
-        // JIS is functionally identical to DBCS
-        assert_eq!(FnJis.call(&[text("Hello")]), FnDbcs.call(&[text("Hello")]));
-        assert_eq!(FnJis.call(&[text("123")]), FnDbcs.call(&[text("123")]));
-        assert_eq!(FnJis.call(&[text(" ")]), FnDbcs.call(&[text(" ")]));
-    }
-
-    #[test]
     fn test_asc_converts_katakana_and_voiced_forms() {
         assert_eq!(
             FnAsc.call(&[text("\u{30AB}\u{30BF}\u{30AB}\u{30CA}")]),
@@ -549,17 +530,10 @@ mod tests {
     }
 
     #[test]
-    fn test_jis_alias_keeps_dbcs_blank_and_kana_semantics() {
-        assert_eq!(FnJis.call(&[value_types::CellValue::Null]), text(""));
-        assert_eq!(FnJis.call(&[text("\u{FF76}\u{FF9E}")]), text("\u{30AC}"));
-    }
-
-    #[test]
     fn test_width_functions_blank_cell_return_empty_text() {
         let blank = value_types::CellValue::Null;
         assert_eq!(FnAsc.call(std::slice::from_ref(&blank)), text(""));
         assert_eq!(FnDbcs.call(std::slice::from_ref(&blank)), text(""));
-        assert_eq!(FnJis.call(std::slice::from_ref(&blank)), text(""));
     }
 
     #[test]

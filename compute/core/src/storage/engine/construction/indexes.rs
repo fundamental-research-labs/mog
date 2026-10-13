@@ -73,10 +73,8 @@ pub(in crate::storage::engine) fn build_pixel_layout_for_sheet(
     let roundtrip_meta = crate::storage::sheet::settings::get_roundtrip_meta(storage, sheet_id);
 
     // Convert canonical → pixels for the PixelLayout (rendering concern)
-    let default_row_height_px = meta
-        .as_ref()
-        .map(|_| domain_types::units::points_to_pixels(default_row_height_pt))
-        .unwrap_or_else(|| layout_metrics.default_row_height());
+    let default_row_height_px = layout_metrics
+        .effective_row_height(Some(default_row_height_pt), roundtrip_meta.custom_height);
     let default_col_width_px = domain_types::units::resolve_default_column_width(
         roundtrip_meta
             .default_col_width
@@ -95,12 +93,7 @@ pub(in crate::storage::engine) fn build_pixel_layout_for_sheet(
     let custom_col_widths: Vec<(usize, domain_types::units::Pixels)> =
         dimensions::get_all_custom_col_widths(&storage, sheet_id, grid_index)
             .into_iter()
-            .map(|(col, cw)| {
-                (
-                    col,
-                    domain_types::units::char_width_to_pixels(cw, layout_metrics.column_width_mdw),
-                )
-            })
+            .map(|(col, cw)| (col, layout_metrics.column_width_to_pixels(cw)))
             .collect();
 
     let mut hidden_rows = dimensions::get_hidden_rows(storage, sheet_id, grid_index);

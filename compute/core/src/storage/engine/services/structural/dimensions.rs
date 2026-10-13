@@ -96,9 +96,8 @@ pub(in crate::storage::engine) fn set_col_width(
     // works instead of failing with a misleading SheetNotFound.
     ensure_axis_capacity(stores, cell_store, sheet_id, 0, col)?;
     // Store canonical units (char-width) in native metadata
-    let mdw = stores.layout_metrics.column_width_mdw;
-    let width_cw = domain_types::units::pixels_to_char_width(width_px, mdw);
-    dimensions::set_col_width(
+    let width_cw = stores.layout_metrics.pixels_to_column_width(width_px);
+    dimensions::set_col_width_from_pixels(
         &mut stores.storage,
         sheet_id,
         col,
@@ -135,12 +134,11 @@ pub(in crate::storage::engine) fn set_col_widths(
     if let Some(max_col) = widths.iter().map(|(col, _)| *col).max() {
         ensure_axis_capacity(stores, cell_store, sheet_id, 0, max_col)?;
     }
-    let mdw = stores.layout_metrics.column_width_mdw;
     let mut result = MutationResult::empty();
 
     for (col, width_px) in widths {
-        let width_cw = domain_types::units::pixels_to_char_width(*width_px, mdw);
-        dimensions::set_col_width(
+        let width_cw = stores.layout_metrics.pixels_to_column_width(*width_px);
+        dimensions::set_col_width_from_pixels(
             &mut stores.storage,
             sheet_id,
             *col,
@@ -179,8 +177,7 @@ pub(in crate::storage::engine) fn set_col_width_chars(
         width_cw,
         stores.grid_indexes.get(sheet_id),
     )?;
-    let mdw = stores.layout_metrics.column_width_mdw;
-    let width_px = domain_types::units::char_width_to_pixels(width_cw, mdw);
+    let width_px = stores.layout_metrics.column_width_to_pixels(width_cw);
     stores.invalidate_pixel_layout(sheet_id);
     let mut result = MutationResult::empty();
     result
@@ -206,7 +203,6 @@ pub(in crate::storage::engine) fn set_col_widths_chars(
     if let Some(max_col) = widths.iter().map(|(col, _)| *col).max() {
         ensure_axis_capacity(stores, cell_store, sheet_id, 0, max_col)?;
     }
-    let mdw = stores.layout_metrics.column_width_mdw;
     let mut result = MutationResult::empty();
 
     for (col, width_cw) in widths {
@@ -217,7 +213,7 @@ pub(in crate::storage::engine) fn set_col_widths_chars(
             *width_cw,
             stores.grid_indexes.get(sheet_id),
         )?;
-        let width_px = domain_types::units::char_width_to_pixels(*width_cw, mdw);
+        let width_px = stores.layout_metrics.column_width_to_pixels(*width_cw);
         stores.invalidate_pixel_layout(sheet_id);
         result
             .dimension_changes

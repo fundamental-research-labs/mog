@@ -234,6 +234,11 @@ impl<'a> EvalDataAccess for OverrideContext<'a> {
 }
 
 impl<'a> EvalMetadata for OverrideContext<'a> {
+    fn cell_filename(&self, sheet: &SheetId) -> Option<String> {
+        let store = self.access.cell_store;
+        Some(format!("{}{}", store.source_file_prefix.as_ref()?, store.get_sheet(sheet)?.name))
+    }
+
     fn cell_reference_metadata(
         &self,
         sheet: &SheetId,

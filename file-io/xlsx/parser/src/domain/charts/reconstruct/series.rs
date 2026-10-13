@@ -542,15 +542,25 @@ fn build_cat_data_source(
     source_type: Option<ChartSeriesCategorySourceTypeData>,
     force_numeric: bool,
 ) -> Option<CatDataSource> {
+    // Imported references can claim numeric categories without a cache even
+    // when their cells contain labels. Rebuilt label caches must use strRef;
+    // writing text into numCache creates invalid numeric points.
+    let has_text_category = cache.is_some_and(|cache| {
+        cache
+            .points
+            .iter()
+            .any(|point| !point.value.trim().is_empty() && point.value.parse::<f64>().is_err())
+    });
     let numeric_category = force_numeric
-        || match source_type {
-            Some(ChartSeriesCategorySourceTypeData::Number) => true,
-            Some(
-                ChartSeriesCategorySourceTypeData::String
-                | ChartSeriesCategorySourceTypeData::MultiLevelString,
-            ) => false,
-            None => category_cache_is_numeric(cache, category_label_format),
-        };
+        || (!has_text_category
+            && match source_type {
+                Some(ChartSeriesCategorySourceTypeData::Number) => true,
+                Some(
+                    ChartSeriesCategorySourceTypeData::String
+                    | ChartSeriesCategorySourceTypeData::MultiLevelString,
+                ) => false,
+                None => category_cache_is_numeric(cache, category_label_format),
+            });
 
     if source_kind == Some(ChartSeriesDimensionSourceKindData::Literal) {
         return cache
@@ -1082,5 +1092,50 @@ fn build_num_data_from_point_cache(cache: &ChartSeriesPointCacheData) -> NumData
             })
             .collect(),
         extensions: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod category_cache_type_tests {
+    use super::*;
+    use domain_types::chart::ChartSeriesPointCachePointData;
+
+    #[test]
+    fn rebuilt_category_caches_keep_numeric_points_and_encode_labels_as_strings() {
+        for (values, force_numeric, expected_numeric) in [
+            (vec!["A", "B"], false, false),
+            (vec!["1", "B"], false, false),
+            (vec!["1", "2"], false, true),
+            (vec!["1", "2"], true, true),
+        ] {
+            let cache = ChartSeriesPointCacheData {
+                point_count: Some(values.len() as u32),
+                format_code: None,
+                points: values
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, v)| ChartSeriesPointCachePointData {
+                        idx: i as u32,
+                        value: v.into(),
+                        format_code: None,
+                    })
+                    .collect(),
+            };
+            let result = build_cat_data_source(
+                Some("Sheet1!A2:A3"),
+                Some(&cache),
+                None,
+                None,
+                Some(ChartSeriesDimensionSourceKindData::Ref),
+                Some(ChartSeriesCategorySourceTypeData::Number),
+                force_numeric,
+            )
+            .unwrap();
+            assert_eq!(matches!(result, CatDataSource::NumRef(_)), expected_numeric);
+            if let CatDataSource::StrRef(reference) = result {
+                assert_eq!(reference.f, "Sheet1!A2:A3");
+                assert_eq!(reference.str_cache.unwrap().pts[1].v, "B");
+            }
+        }
     }
 }

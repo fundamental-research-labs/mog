@@ -67,6 +67,18 @@ impl ExtensionHandler for FunctionsHandler {
         let args = operation["args"]
             .as_array()
             .ok_or_else(|| invalid("Expected function arguments"))?;
+        if name == "COUNT"
+            && args.iter().any(|arg| {
+                arg.is_null()
+                    || arg
+                        .as_array()
+                        .is_some_and(|rows| rows.iter().any(|row| !row.is_array()))
+            })
+        {
+            return Err(invalid(
+                "COUNT expects scalar numbers, references, or a rectangular matrix",
+            ));
+        }
         let value = if let Some(error) = office_js_argument_error(name, args) {
             error
         } else {
@@ -98,6 +110,9 @@ fn office_js_argument_error(name: &str, args: &[Value]) -> Option<CellValue> {
     let allowed = match name {
         "CONCATENATE" => args.iter().all(|arg| arg.is_string() || arg.is_object()),
         "COUNTA" => args.iter().all(|arg| arg.is_number() || arg.is_object()),
+        "COUNT" => args
+            .iter()
+            .all(|arg| arg.is_number() || arg.is_object() || arg.is_array()),
         _ => true,
     };
     (!allowed).then_some(CellValue::Error(CellError::Value, None))

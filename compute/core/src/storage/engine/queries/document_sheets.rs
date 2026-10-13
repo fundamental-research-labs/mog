@@ -186,16 +186,24 @@ pub(in crate::storage::engine) fn get_default_row_height(
     engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> f64 {
-    let pt = services::queries::get_default_row_height(&engine.stores, sheet_id);
-    domain_types::units::points_to_pixels(pt).0
+    crate::storage::sheet::settings::get_sheet_settings_with_layout_metrics(
+        &engine.stores.storage,
+        sheet_id,
+        engine.stores.layout_metrics,
+    )
+    .default_row_height
 }
 
 pub(in crate::storage::engine) fn get_default_col_width(
     engine: &ComputeEngine,
     sheet_id: &SheetId,
 ) -> f64 {
-    let cw = services::queries::get_default_col_width(&engine.stores, sheet_id);
-    domain_types::units::char_width_to_pixels(cw, engine.stores.layout_metrics.column_width_mdw).0
+    crate::storage::sheet::settings::get_sheet_settings_with_layout_metrics(
+        &engine.stores.storage,
+        sheet_id,
+        engine.stores.layout_metrics,
+    )
+    .default_col_width
 }
 
 pub(in crate::storage::engine) fn get_row_heights_batch(

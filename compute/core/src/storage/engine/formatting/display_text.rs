@@ -38,7 +38,13 @@ impl ComputeEngine {
         domain_types::theme_color::resolve_theme_refs(&mut effective, &self.settings.theme_palette);
 
         let format_code = effective.number_format.as_deref().unwrap_or("General");
-        compute_formats::format_value(value, format_code, &self.settings.locale).text
+        compute_formats::format_value_with_date_system(
+            value,
+            format_code,
+            &self.settings.locale,
+            self.cell_store.date1904,
+        )
+        .text
     }
 
     /// Look up the cell's effective value and format it through the canonical

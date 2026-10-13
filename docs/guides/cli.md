@@ -21,10 +21,52 @@ mog --version
 
 `-e` / `--eval` takes inline JavaScript; `-f` / `--file` loads a script file.
 Use `--file=-script.js` for a filename beginning with `-`. Opening and saving without
-a script preserves imported formula caches. `-r` / `--recalculate` evaluates
-formulas before export. Scripts automatically trigger full recalculation after
-they finish, including workbooks imported in manual calculation mode. Within a
-script, `context.sync()` retains the Office.js calculation behavior.
+a script still follows the workbook's calculation settings. An unedited automatic
+import with supported calculation-feature metadata and complete formula caches
+can reuse those caches. Ordinary open/save refreshes volatile formulas and their
+dependents, plus cells explicitly flagged for recalculation. A per-cell flag does
+not itself schedule unflagged dependents. Workbook or sheet full-calculation
+flags, unsupported calculation cases, and missing caches use full calculation.
+Scripts and edits disable this import-only reuse path. Automatic workbooks are
+calculated after scripts.
+
+Manual workbooks retain cached results during reads and edits; changing a
+precedent can leave dependent results stale. Saving calculates when `calcOnSave`
+is enabled, including in manual mode; eligible imports use the same scoped
+refresh. Missing settings use the XLSX defaults: automatic mode and calculation
+on save. `-r` / `--recalculate` explicitly evaluates formulas, bypassing imported
+cache reuse even in manual mode. Cache reuse does not validate the correctness
+of every stored result; use `-r` when full evaluation is required.
+
+`--preserve-results` explicitly sets manual calculation mode and disables
+calculation on save before reading or editing the workbook. Both settings are
+saved in the output and remain in a session; other calculation settings stay
+unchanged. This is a mode override, not a claim that an automatic-mode Excel open
+would retain old cached values. It conflicts with `-r`; the command fails before
+running a script or writing output. The flag is not applied again on later
+session requests unless supplied again, so a script can subsequently switch back
+to automatic mode. Restart sessions created by older binaries before using the
+new calculation policy; requests to workers without support are rejected except
+for explicit discard. This includes save-only and close requests.
+
+Scripts can queue `context.application.calculationMode` changes using `Manual`,
+`Automatic`, or `AutomaticExceptTables`, load that property, and call
+`context.application.calculate(Excel.CalculationType.full)`. These operations run
+in queue order at `context.sync()`. Switching from manual to automatic calculates
+before subsequent queued reads; full calculation does not change the mode.
+Office.js mode changes affect the current workbook engine session across requests,
+but do not overwrite the stored workbook mode. Reopening uses the stored mode.
+The loaded Office.js property reports the stored/opened mode, independently of
+runtime scheduling. This matches the measured Windows Excel 16.0.20430.20146
+behavior across fresh syncs and contexts; it is not a claim about every Office
+version. For example, opening Automatic then requesting Manual leaves the getter
+Automatic while dependent edits stay pending. Saving retains Automatic, so a
+later reopen calculates those edits. This runtime setting is separate from the
+deliberate persisted CLI override.
+`Recalculate` and `FullRebuild` calculation types are not yet supported. The
+same-input native Excel checks cover manual/automatic behavior for the tested
+workbooks; they do not establish every Excel version/freshness or data-table
+calculation condition.
 
 Exports finish serialization before touching an explicit destination, so a
 serialization failure does not truncate the input. Mog first tries atomic rename.

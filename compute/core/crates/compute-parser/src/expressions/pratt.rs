@@ -11,7 +11,7 @@ use crate::parser::ParseErrorKind;
 use crate::state::{MAX_DEPTH, ParseState};
 
 use super::atom::parse_atomic;
-use super::binding::{PREFIX_BP, infix_bp, peek_infix};
+use super::binding::{NEGATION_BP, PREFIX_BP, infix_bp, peek_infix};
 use super::postfix::{try_call_expression, try_postfix_hash, try_postfix_percent};
 use super::range_ops::{try_expression_range_op, try_intersection};
 
@@ -46,7 +46,7 @@ pub(super) fn parse_expr_bp(
     let mut lhs = if input.starts_with('-') {
         *input = &input[1..];
         let _ = lexer::ws.parse_next(input)?;
-        let operand = parse_expr_bp(input, state, PREFIX_BP).inspect_err(|_e| {
+        let operand = parse_expr_bp(input, state, NEGATION_BP).inspect_err(|_e| {
             stash_if_empty(state, ParseErrorKind::ExpectedOperand);
         })?;
         ASTNode::UnaryOp {

@@ -78,6 +78,7 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         }
 
         match upper {
+            "PRODUCT" | "SUMSQ" => self.eval_product_or_sumsq(args, upper == "PRODUCT").await,
             "ARRAYFORMULA" => {
                 if args.len() != 1 {
                     return Ok(CellValue::Error(CellError::Value, None));

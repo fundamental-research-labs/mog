@@ -154,7 +154,7 @@ impl DependencyGraph {
                         }
                     }
                 }
-            } else if !did_full_range_sweep {
+            } else if !positions.is_nonspatial(&cell) && !did_full_range_sweep {
                 warn!(
                     cell = ?cell,
                     range_entries = self.range_deps.len(),

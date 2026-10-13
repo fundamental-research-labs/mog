@@ -1,0 +1,2 @@
+# Preserve the exact native replay scripts, including their trailing spaces.
+*/script.js whitespace=-blank-at-eol

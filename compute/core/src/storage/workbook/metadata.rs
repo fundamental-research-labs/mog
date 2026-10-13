@@ -11,6 +11,9 @@ use crate::snapshot::WorkbookSettings;
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct WorkbookMetadata {
+    /// Parsed import-only calculation profile; never synthesized on export.
+    pub imported_calculation_features: Option<Vec<String>>,
+    pub imported_formula_caches_complete: bool,
     pub external_links: super::external_links::ExternalLinks,
     pub scenarios: Vec<crate::snapshot::Scenario>,
     pub custom_cell_styles:

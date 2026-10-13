@@ -7,6 +7,65 @@ use crate::{FunctionContext, PureFunction};
 
 pub(super) struct FnXirr;
 
+/// Native controls for nonnegative conventional-cash-flow roots match the
+/// midpoint of a rate-space bracket. Keep this path separate from the general
+/// solver: mixed-sign flows can have several roots, and negative-root bracket
+/// selection is a different contract.
+fn conventional_nonnegative_root<F>(mut f: F, guess: f64) -> Option<f64>
+where
+    F: FnMut(f64) -> f64,
+{
+    if guess <= 0.0 {
+        return None;
+    }
+    let at_zero = f(0.0);
+    if !at_zero.is_finite() || at_zero < 0.0 {
+        return None;
+    }
+    let mut low = 0.0;
+    let mut high = guess;
+    let mut remaining = 100;
+    loop {
+        let value = f(high);
+        if !value.is_finite() {
+            return None;
+        }
+        if value <= 0.0 {
+            break;
+        }
+        if remaining == 0 {
+            return None;
+        }
+        remaining -= 1;
+        low = high;
+        high *= 2.0;
+        if !high.is_finite() {
+            return None;
+        }
+    }
+    while high - low > 1e-8 * (1.0 + low.abs() + high.abs()) {
+        if remaining == 0 {
+            return None;
+        }
+        remaining -= 1;
+        let middle = (low + high) * 0.5;
+        if !middle.is_finite() {
+            return None;
+        }
+        let value = f(middle);
+        if !value.is_finite() {
+            return None;
+        }
+        if value > 0.0 {
+            low = middle;
+        } else {
+            high = middle;
+        }
+    }
+    let middle = (low + high) * 0.5;
+    middle.is_finite().then_some(middle)
+}
+
 impl PureFunction for FnXirr {
     fn name(&self) -> &'static str {
         "XIRR"
@@ -98,7 +157,17 @@ impl PureFunction for FnXirr {
                 let total = acc.total();
                 if total.is_finite() { total } else { f64::NAN }
             };
-            let result = solve_financial_root(xnpv, xnpv_deriv, guess, 100, 1e-12, 1e-8);
+            let conventional = values[0] < 0.0
+                && values[1..].iter().all(|value| *value >= 0.0)
+                && dates.iter().all(|date| *date >= base_date)
+                && values
+                    .iter()
+                    .zip(&dates)
+                    .any(|(value, date)| *value > 0.0 && *date > base_date);
+            let result = conventional
+                .then(|| conventional_nonnegative_root(xnpv, guess))
+                .flatten()
+                .or_else(|| solve_financial_root(xnpv, xnpv_deriv, guess, 100, 1e-12, 1e-8));
 
             match result {
                 Some(rate) => Ok(rate),

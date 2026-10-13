@@ -148,7 +148,7 @@ pub(in crate::storage::engine) fn build_workbook_snapshot(
     calculation_settings.enable_iterative_calculation = iterative_calc;
     calculation_settings.max_iterations = max_iterations;
     calculation_settings.max_change = max_change;
-    calculation_settings.calc_mode = stores.compute.calc_mode();
+    calculation_settings.calc_mode = stores.compute.stored_calc_mode();
 
     WorkbookSnapshot {
         axis_run_high_water_mark: Some(

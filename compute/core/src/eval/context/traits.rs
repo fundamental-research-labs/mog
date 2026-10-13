@@ -140,6 +140,11 @@ pub trait DataSource {
 
 /// Positional / structural metadata — synchronous queries passed to functions.
 pub trait EvalMetadata {
+    /// Host-provided input path plus referenced sheet name; absent for byte imports.
+    fn cell_filename(&self, _sheet: &SheetId) -> Option<String> {
+        None
+    }
+
     fn cell_reference_metadata(
         &self,
         _sheet: &SheetId,

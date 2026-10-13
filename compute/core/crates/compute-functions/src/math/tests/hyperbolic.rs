@@ -162,3 +162,19 @@ fn test_tanh_zero() {
     let r = reg();
     assert_close(r.call("TANH", &[num(0.0)]), 0.0);
 }
+
+#[test]
+fn test_sinh_native_rounding_and_extreme_controls() {
+    for (input, expected) in [
+        (std::f64::consts::PI, 11.548739357257748),
+        (-std::f64::consts::PI, -11.548739357257748),
+        (0.1, 0.10016675001984403),
+        (0.0, 0.0),
+        (1e-20, 1e-20),
+    ] {
+        assert_eq!(FnSinh.call(&[num(input)]), num(expected), "SINH({input})");
+    }
+    // Preserve the finite range beyond exp overflow and the existing error.
+    assert_eq!(FnSinh.call(&[num(710.0)]), num(710.0_f64.sinh()));
+    assert_eq!(FnSinh.call(&[num(1000.0)]), err(CellError::Num));
+}

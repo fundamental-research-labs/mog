@@ -106,6 +106,10 @@ impl Fixture {
         let mut command = Command::new(env!("CARGO_BIN_EXE_mog"));
         if recalculate {
             command.arg("--recalculate");
+        } else if script.is_none() {
+            // Cache-only round trips now request preservation explicitly;
+            // the workbook fixture otherwise defaults to calculation on save.
+            command.arg("--preserve-results");
         }
         command.arg("--input").arg(input);
         if let Some(script) = script {

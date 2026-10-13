@@ -21,11 +21,19 @@ pub(crate) fn convert_data_tables(
             start_col: dt.start_col,
             end_row: dt.end_row,
             end_col: dt.end_col,
-            // Excel's naming is inverted: r1 ("row input cell") receives top-row
-            // (col-varying) values, r2 ("column input cell") receives left-column
-            // (row-varying) values. Swap here so downstream semantics are correct.
-            row_input_ref: dt.col_input_ref,
-            col_input_ref: dt.row_input_ref,
+            // Two-variable tables and dtr=1 use r1 for top-row values.
+            // A one-variable dtr=0 table instead uses r1 for left-column
+            // values. Domain "row" means row-varying, not Excel's UI label.
+            row_input_ref: if dt.ooxml_flags.as_ref().is_some_and(|f| !f.dt2d && !f.dtr) {
+                dt.row_input_ref
+            } else {
+                dt.col_input_ref
+            },
+            col_input_ref: if dt.ooxml_flags.as_ref().is_some_and(|f| !f.dt2d && !f.dtr) {
+                dt.col_input_ref
+            } else {
+                dt.row_input_ref
+            },
             ooxml_flags: dt.ooxml_flags.clone(),
         })
         .collect()

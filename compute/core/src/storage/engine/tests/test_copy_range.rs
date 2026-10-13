@@ -997,3 +997,17 @@ fn test_copy_range_cross_sheet_preserves_explicit_source_sheet_ref_after_formula
         "Sheet2!E1 should evaluate through Sheet1!A1+Sheet1!A2, not Sheet2 A1+A2"
     );
 }
+
+#[test]
+fn copy_all_metadata_refreshes_live_conditional_format_cache() {
+    let (mut engine, _) = ComputeEngine::from_snapshot(copy_range_snapshot()).unwrap();
+    let sid=engine.storage().sheet_order()[0];
+    engine.add_cf_rule(&sid,serde_json::json!({
+        "id":"red", "sheetId":sid.to_uuid_string(),
+        "ranges":[{"startRow":0,"startCol":0,"endRow":0,"endCol":0}],
+        "rules":[{"id":"rule","priority":1,"type":"formula","formula":"TRUE","style":{"backgroundColor":"#FF0000"}}]
+    })).unwrap();
+    engine.copy_range(&sid,0,0,0,0,&sid,4,4,domain_types::CopyType::All,false,false).unwrap();
+    let id=engine.resolve_cell_id_at(&sid,4,4).unwrap();
+    assert_eq!(engine.get_cell_format_with_cf(&sid,&id,4,4).background_color.as_deref(),Some("#ff0000"));
+}

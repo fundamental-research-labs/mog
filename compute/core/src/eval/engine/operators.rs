@@ -3,7 +3,7 @@
 #[cfg(feature = "dd-precision")]
 use compute_functions::helpers::arithmetic::normalize_formula_value;
 use compute_functions::helpers::arithmetic::{is_formula_zero, normalize_formula_result};
-use compute_functions::helpers::power::try_negative_base_pow;
+use compute_functions::helpers::power::{real_power, try_negative_base_pow};
 use compute_parser::{BinOp, UnaryOp};
 use value_types::{CellArray, CellError, CellValue};
 
@@ -191,7 +191,7 @@ pub(in crate::eval) fn eval_binary_op(op: BinOp, left: &CellValue, right: &CellV
                         let is_even = rn % 2.0 == 0.0;
                         return formula_number(if is_even { 1.0 } else { -1.0 });
                     }
-                    let r = ln.powf(rn);
+                    let r = real_power(ln, rn);
                     if r.is_nan() || r.is_infinite() {
                         // Small positive base with negative exp overflows to inf
                         // → Excel returns #DIV/0! (conceptually 1/0)
@@ -218,8 +218,8 @@ pub(in crate::eval) fn eval_binary_op(op: BinOp, left: &CellValue, right: &CellV
             };
             CellValue::Text(format!("{}{}", ls, rs).into())
         }
-        BinOp::Eq => CellValue::Boolean(cell_value_cmp(left, right) == 0),
-        BinOp::Neq => CellValue::Boolean(cell_value_cmp(left, right) != 0),
+        BinOp::Eq => CellValue::Boolean(formula_values_equal(left, right)),
+        BinOp::Neq => CellValue::Boolean(!formula_values_equal(left, right)),
         BinOp::Lt => CellValue::Boolean(cell_value_cmp(left, right) < 0),
         BinOp::Gt => CellValue::Boolean(cell_value_cmp(left, right) > 0),
         BinOp::Lte => CellValue::Boolean(cell_value_cmp(left, right) <= 0),
@@ -227,6 +227,21 @@ pub(in crate::eval) fn eval_binary_op(op: BinOp, left: &CellValue, right: &CellV
         // Value-level fallback only. Valid reference intersections are resolved
         // by the evaluator before their operands are materialized.
         BinOp::Intersect => CellValue::Error(CellError::Null, None),
+    }
+}
+
+// Formula equality follows the existing Unicode lowercase policy used for
+// ordinary COUNTIF text matching. Keep ordering, lookup and EXACT independent.
+fn formula_values_equal(left: &CellValue, right: &CellValue) -> bool {
+    match (left, right) {
+        (CellValue::Text(a), CellValue::Text(b)) => {
+            if a.is_ascii() && b.is_ascii() {
+                a.eq_ignore_ascii_case(b)
+            } else {
+                a.to_lowercase() == b.to_lowercase()
+            }
+        }
+        _ => cell_value_cmp(left, right) == 0,
     }
 }
 

@@ -107,6 +107,7 @@ fn scan_reference_token(formula: &str, start: usize) -> Option<(usize, Reference
         )),
         b'$' => scan_cell_or_range(formula, start)
             .or_else(|| scan_col_range(formula, start))
+            .or_else(|| scan_row_range(formula, start))
             .map(|end| (end, reference_class_for_span(formula, start, end))),
         b'A'..=b'Z' | b'a'..=b'z' | b'_' | b'\\' => scan_alpha_reference(formula, start),
         b'0'..=b'9' => {
@@ -573,6 +574,14 @@ mod tests {
                 .map(|token| token.class)
                 .collect::<Vec<_>>(),
             vec![ReferenceTokenClass::SheetRef; 7]
+        );
+    }
+    #[test]
+    fn absolute_whole_row_tokens_include_leading_dollar() {
+        let tokens = collect_reference_tokens("SUM($2:$2,$1:3,2:$4)");
+        assert_eq!(
+            tokens.iter().map(|token| token.text.as_str()).collect::<Vec<_>>(),
+            vec!["$2:$2", "$1:3", "2:$4"]
         );
     }
 }

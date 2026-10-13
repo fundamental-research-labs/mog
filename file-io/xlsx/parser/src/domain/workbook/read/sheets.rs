@@ -1,69 +1,78 @@
-use super::xml::{
-    checked_xml_text, decode_xml_entities, extract_attr_value_in_range, find_closing_tag_simple,
-    find_element_end_simple,
-};
 use crate::domain::workbook::types::{SheetInfo, SheetState};
-use crate::infra::scanner::find_tag_simd;
+use quick_xml::{NsReader, events::Event, name::ResolveResult};
 
-/// Parse workbook.xml to extract sheet information.
-///
-/// Returns a vector of SheetInfo in document order.
+/// Parse workbook.xml sheet entries with namespace-aware relationship attributes.
+/// Unqualified legacy fragments remain accepted by this low-level parser.
 pub fn parse_workbook(xml: &[u8]) -> Vec<SheetInfo> {
     let mut sheets = Vec::new();
-
-    let sheets_start = match find_tag_simd(xml, b"sheets", 0) {
-        Some(pos) => pos,
-        None => return sheets,
-    };
-
-    let sheets_end = find_closing_tag_simple(xml, b"sheets", sheets_start).unwrap_or(xml.len());
-    let mut pos = sheets_start;
-
-    while pos < sheets_end {
-        let sheet_pos = match find_tag_simd(xml, b"sheet", pos) {
-            Some(p) if p < sheets_end => p,
-            _ => break,
+    let mut reader = NsReader::from_reader(xml);
+    let mut in_sheets = false;
+    loop {
+        let Ok((namespace, event)) = reader.read_resolved_event() else {
+            break;
         };
-
-        let after_tag = sheet_pos + 6;
-        if after_tag < xml.len() {
-            let next_byte = xml[after_tag];
-            if next_byte == b's' {
-                pos = sheet_pos + 7;
-                continue;
+        let workbook_namespace = match namespace {
+            ResolveResult::Unbound => true,
+            ResolveResult::Bound(ns) => matches!(
+                ns.as_ref(),
+                b"http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+                    | b"http://purl.oclc.org/ooxml/spreadsheetml/main"
+            ),
+            _ => false,
+        };
+        match event {
+            Event::Start(ref element)
+                if workbook_namespace && element.local_name().as_ref() == b"sheets" =>
+            {
+                in_sheets = true
             }
+            Event::End(ref element)
+                if workbook_namespace && element.local_name().as_ref() == b"sheets" =>
+            {
+                in_sheets = false
+            }
+            Event::Start(ref element) | Event::Empty(ref element)
+                if in_sheets && workbook_namespace && element.local_name().as_ref() == b"sheet" =>
+            {
+                let mut sheet = SheetInfo {
+                    name: String::new(),
+                    sheet_id: 0,
+                    r_id: String::new(),
+                    state: SheetState::Visible,
+                };
+                for attr in element.attributes().filter_map(Result::ok) {
+                    let Ok(value) = attr.unescape_value() else {
+                        continue;
+                    };
+                    match attr.key.as_ref() {
+                        b"name" => sheet.name = value.into_owned(),
+                        b"sheetId" => sheet.sheet_id = value.parse().unwrap_or(0),
+                        b"state" => sheet.state = SheetState::from_bytes(value.as_bytes()),
+                        _ => {
+                            let (ns, local) = reader.resolve_attribute(attr.key);
+                            let relationship = match ns {
+                                ResolveResult::Bound(ns) => matches!(ns.as_ref(),
+                                    b"http://schemas.openxmlformats.org/officeDocument/2006/relationships" |
+                                    b"http://purl.oclc.org/ooxml/officeDocument/relationships"),
+                                // Preserve permissive support for legacy test fragments
+                                // without namespace declarations, never a bound wrong URI.
+                                ResolveResult::Unknown(_) => attr.key.as_ref() == b"r:id",
+                                _ => false,
+                            };
+                            if relationship && local.as_ref() == b"id" {
+                                sheet.r_id = value.into_owned();
+                            }
+                        }
+                    }
+                }
+                if !sheet.name.is_empty() {
+                    sheets.push(sheet);
+                }
+            }
+            Event::Eof => break,
+            _ => {}
         }
-
-        let element_end = find_element_end_simple(xml, sheet_pos).unwrap_or(xml.len());
-        let element = &xml[sheet_pos..element_end.min(xml.len())];
-
-        let name = extract_attr_value_in_range(element, b"name=\"")
-            .map(decode_xml_entities)
-            .unwrap_or_default();
-        let sheet_id = extract_attr_value_in_range(element, b"sheetId=\"")
-            .and_then(|s| std::str::from_utf8(s).ok())
-            .and_then(|s| s.parse::<u32>().ok())
-            .unwrap_or(0);
-        let r_id = extract_attr_value_in_range(element, b"r:id=\"")
-            .or_else(|| extract_attr_value_in_range(element, b":id=\""))
-            .map(checked_xml_text)
-            .unwrap_or_default();
-        let state = extract_attr_value_in_range(element, b"state=\"")
-            .map(SheetState::from_bytes)
-            .unwrap_or(SheetState::Visible);
-
-        if !name.is_empty() {
-            sheets.push(SheetInfo {
-                name,
-                sheet_id,
-                r_id,
-                state,
-            });
-        }
-
-        pos = element_end + 1;
     }
-
     sheets
 }
 
@@ -270,5 +279,33 @@ mod tests {
         assert_eq!(sheets[0].sheet_id, 0);
         assert_eq!(sheets[0].r_id, "rId1");
         assert_eq!(sheets[0].state, SheetState::Visible);
+    }
+}
+
+#[cfg(test)]
+mod namespace_tests {
+    use super::*;
+    use crate::domain::workbook::read::parse_calc_settings;
+    #[test]
+    fn prefixed_workbook_retains_sheet_relationships_and_calculation_settings() {
+        let plain = br#"<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets><calcPr calcMode="manual" calcOnSave="0"/></workbook>"#;
+        let prefixed = br#"<long:workbook xmlns:long="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:ns1="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><long:sheets><long:sheet name="Sheet1" sheetId="1" ns1:id="rId1"/></long:sheets><long:calcPr calcMode="manual" calcOnSave="0"/></long:workbook>"#;
+        let a = parse_workbook(plain);
+        let b = parse_workbook(prefixed);
+        assert_eq!(a.len(), 1);
+        assert_eq!(b.len(), 1);
+        assert_eq!(a[0].name, b[0].name);
+        assert_eq!(a[0].sheet_id, b[0].sheet_id);
+        assert_eq!(a[0].r_id, b[0].r_id);
+        let a = parse_calc_settings(plain);
+        let b = parse_calc_settings(prefixed);
+        assert_eq!(a.calc_mode, b.calc_mode);
+        assert_eq!(a.calc_on_save, b.calc_on_save);
+        assert!(!b.calc_on_save);
+    }
+    #[test]
+    fn unrelated_namespace_id_is_not_a_sheet_relationship() {
+        let xml=br#"<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="urn:unrelated"><sheets><sheet name="Sheet1" sheetId="1" r:id="bad"/></sheets></workbook>"#;
+        assert_eq!(parse_workbook(xml)[0].r_id, "");
     }
 }

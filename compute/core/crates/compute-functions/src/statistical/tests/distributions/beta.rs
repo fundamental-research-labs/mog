@@ -214,3 +214,69 @@ fn test_betainv_legacy_delegates() {
     let args = [num(0.5), num(2.0), num(3.0)];
     assert_eq!(FnBetaInv.call(&args), FnBetaInvLegacy.call(&args));
 }
+
+#[test]
+fn beta_symmetric_midpoint_matches_native_excel() {
+    // Native Excel Full, public formula_stress_test Statistical!B4:
+    // BETADIST(0.5, 2, 2) = 0.5. This is also exact by density symmetry.
+    assert_eq!(
+        FnBetaDistLegacy.call(&[num(0.5), num(2.0), num(2.0)]),
+        num(0.5)
+    );
+    assert_eq!(
+        FnBetaDist.call(&[num(0.5), num(2.0), num(2.0), bv(true)]),
+        num(0.5)
+    );
+}
+
+#[test]
+fn beta_symmetric_midpoint_controls() {
+    // Symmetry holds for every positive shape, including U-shaped densities,
+    // and survives the affine transformation to non-default bounds.
+    for shape in [0.125, 0.5, 1.0, 2.0, 7.0, 100.0] {
+        for (a, b) in [(0.0, 1.0), (-4.0, 8.0), (100.0, 104.0)] {
+            let midpoint = a + (b - a) / 2.0;
+            assert_eq!(
+                FnBetaDist.call(&[
+                    num(midpoint),
+                    num(shape),
+                    num(shape),
+                    bv(true),
+                    num(a),
+                    num(b)
+                ]),
+                num(0.5)
+            );
+            assert_eq!(
+                FnBetaDistLegacy.call(&[num(midpoint), num(shape), num(shape), num(a), num(b)]),
+                num(0.5)
+            );
+        }
+    }
+    for x in [0.49, 0.51] {
+        let result = FnBetaDist.call(&[num(x), num(2.0), num(2.0), bv(true)]);
+        assert_num(
+            result.clone(),
+            3.0 * x * x - 2.0 * x * x * x,
+            1e-14,
+            "Beta(2,2) polynomial CDF",
+        );
+        assert_ne!(result, num(0.5));
+    }
+    assert_num(
+        FnBetaDist.call(&[num(0.5), num(1.0), num(2.0), bv(true)]),
+        0.75,
+        1e-14,
+        "asymmetric CDF",
+    );
+    assert_num(
+        FnBetaDist.call(&[num(0.5), num(2.0), num(2.0), bv(false)]),
+        1.5,
+        1e-14,
+        "midpoint PDF",
+    );
+    assert_num_err(
+        FnBetaDist.call(&[num(0.5), num(0.0), num(0.0), bv(true)]),
+        "invalid equal shapes",
+    );
+}

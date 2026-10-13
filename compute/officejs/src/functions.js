@@ -57,7 +57,9 @@
     var context = functions.context;
     var values = Array.prototype.map.call(args, function (value) { return argument(value, context); });
     // Omitted optional parameters use the evaluator's normal defaults.
-    while (values.length && values[values.length - 1] === null) values.pop();
+    if (name !== "COUNT") {
+      while (values.length && values[values.length - 1] === null) values.pop();
+    }
     var sheet = context.workbook.worksheets.getActiveWorksheet();
     var result = new FunctionResult(context);
     context._queue.push({ op: "functionEvaluate", id: result._id, worksheetId: sheet._id, name: name, args: values });

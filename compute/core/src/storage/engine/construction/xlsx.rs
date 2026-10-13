@@ -1,4 +1,5 @@
 use super::*;
+mod layout_profile;
 mod stream;
 use stream::NativeCellSink;
 
@@ -29,7 +30,7 @@ fn from_xlsx_bytes_with_layout(
 ) -> Result<(ComputeEngine, RecalcResult), ComputeError> {
     let mut on_chunk = on_chunk;
     let (
-        storage,
+        mut storage,
         workbook_snap,
         import_report,
         imported_formats,
@@ -37,6 +38,38 @@ fn from_xlsx_bytes_with_layout(
         formula_cells,
         stats,
     ) = parse_and_hydrate_xlsx(xlsx_data, &mut on_chunk)?;
+
+    // Raw workbook children inherit the workbook's namespace declarations.
+    let mut retained = String::from("<workbook");
+    for ns in &storage.metadata.root_namespaces.declarations {
+        let key = ns
+            .prefix
+            .as_ref()
+            .map_or("xmlns".to_owned(), |p| format!("xmlns:{p}"));
+        retained.push_str(&format!(
+            " {key}=\"{}\"",
+            ns.uri
+                .replace('&', "&amp;")
+                .replace('"', "&quot;")
+                .replace('<', "&lt;")
+        ));
+    }
+    retained.push('>');
+    if let Some(package) = &storage.metadata.package_fidelity {
+        for child in &package.workbook_xml_fidelity.raw_children {
+            retained.push_str(&String::from_utf8_lossy(&child.xml));
+        }
+    }
+    retained.push_str("</workbook>");
+    storage.metadata.imported_calculation_features =
+        xlsx_parser::domain::workbook::read::parse_calculation_features(retained.as_bytes());
+    storage.metadata.imported_formula_caches_complete = formula_cells.iter().all(|(id, _, _)| {
+        cell_store
+            .get_cell_value(id)
+            .is_some_and(|v| !matches!(v, value_types::CellValue::Null))
+    });
+
+    let layout_metrics = layout_profile::resolve(&storage, layout_metrics);
 
     let (cell_store, compute, recalc_result) = {
         let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "store_compute_rebuild");
@@ -79,6 +112,7 @@ fn from_xlsx_bytes_with_layout(
         domain_types::ImportPhase::FullHydration,
     );
 
+    engine.stores.compute.imported_cache_reuse = true;
     Ok((engine, recalc_result))
 }
 
@@ -96,7 +130,21 @@ pub(in crate::storage::engine) fn from_xlsx_path(
     let mapped = unsafe { MmapXlsxFile::open(path) }.map_err(|e| ComputeError::Deserialize {
         message: format!("mmap {path}: {e}"),
     })?;
-    from_xlsx_bytes(mapped.as_slice())
+    let (mut engine, recalc) = from_xlsx_bytes(mapped.as_slice())?;
+    // Keep the input identity across exports to other paths. Export is not an
+    // interactive SaveAs and must not change already calculated CELL values.
+    let absolute = std::path::absolute(path).map_err(|e| ComputeError::Deserialize {
+        message: format!("absolute input path {path}: {e}"),
+    })?;
+    let filename = absolute.file_name().and_then(|s| s.to_str()).ok_or_else(|| ComputeError::Deserialize {
+        message: "input filename must be UTF-8".into(),
+    })?;
+    let parent = absolute.parent().and_then(|s| s.to_str()).ok_or_else(|| ComputeError::Deserialize {
+        message: "input directory must be UTF-8".into(),
+    })?;
+    let separator = if parent.ends_with(std::path::MAIN_SEPARATOR) { "" } else { std::path::MAIN_SEPARATOR_STR };
+    engine.cell_store.source_file_prefix = Some(format!("{parent}{separator}[{filename}]"));
+    Ok((engine, recalc))
 }
 
 /// Import from raw XLSX bytes into an existing engine, with or without recalc.

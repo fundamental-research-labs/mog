@@ -197,6 +197,7 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
     do_recalc: bool,
 ) -> Result<RecalcResult, ComputeError> {
     let char_code_page = engine.cell_store.char_code_page;
+    let source_file_prefix = engine.cell_store.source_file_prefix.clone();
     engine.stores.storage = new_storage;
 
     // CellStore is built inside init_from_snapshot / init_from_snapshot_minimal.
@@ -204,7 +205,11 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
     // Rebuild ComputeCore (also rebuilds CellStore)
     let recalc_result = {
         let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "store_compute_rebuild");
+        let runtime_mode = engine.stores.compute.runtime_calc_mode_override();
         engine.stores.compute = ComputeCore::new();
+        if let Some(mode) = runtime_mode {
+            engine.stores.compute.set_runtime_calc_mode(mode);
+        }
         let date1904 = workbook_settings::get_settings(&engine.stores.storage.metadata).date1904;
         let recalc_result = if do_recalc {
             engine.cell_store = super::rebuild::build_initial_store(
@@ -213,6 +218,7 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
                 engine.stores.layout_metrics,
             )?;
             engine.cell_store.char_code_page = char_code_page;
+            engine.cell_store.source_file_prefix = source_file_prefix.clone();
             engine.cell_store.date1904 = date1904;
             engine
                 .stores
@@ -233,6 +239,7 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
         // scheduler initializer. Reapply the runtime-only calculation option
         // after either branch; the recalc branch also set it before parsing.
         engine.cell_store.char_code_page = char_code_page;
+        engine.cell_store.source_file_prefix = source_file_prefix.clone();
         engine.cell_store.date1904 = date1904;
         engine.cell_store.install_cell_metadata_provider(
             crate::storage::engine::cell_metadata::provider(

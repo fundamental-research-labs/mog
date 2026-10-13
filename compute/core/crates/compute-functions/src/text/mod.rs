@@ -2,7 +2,7 @@
 //! TEXT, FIND, SEARCH, SUBSTITUTE, REPLACE, REPT, EXACT, CHAR, CODE,
 //! TEXTJOIN, VALUE, PROPER, CLEAN, T, CONCAT, DOLLAR, FIXED, NUMBERVALUE,
 //! VALUETOTEXT, UNICHAR, UNICODE, FINDB, LEFTB, LENB, MIDB, REPLACEB,
-//! RIGHTB, SEARCHB, ASC, DBCS, JIS, PHONETIC, ARRAYTOTEXT, TEXTAFTER,
+//! RIGHTB, SEARCHB, ASC, DBCS, PHONETIC, ARRAYTOTEXT, TEXTAFTER,
 //! TEXTBEFORE, TEXTSPLIT, ENCODEURL, BAHTTEXT, JOIN, SPLIT, REGEXEXTRACT,
 //! REGEXREPLACE, REGEXMATCH, REGEXTEST, TO_DATE, TO_DOLLARS, TO_PERCENT,
 //! TO_PURE_NUMBER, TO_TEXT
@@ -48,7 +48,7 @@ pub fn register(registry: &mut FunctionRegistry) {
     unicode::register(registry);
     // Byte operations (aliases for non-DBCS locales): LEFTB, RIGHTB, MIDB, LENB, FINDB, SEARCHB, REPLACEB
     byte_ops::register(registry);
-    // CJK: ASC, DBCS, JIS, PHONETIC
+    // CJK: ASC, DBCS, PHONETIC
     cjk::register(registry);
     // Modern Text (Excel 365): TEXTBEFORE, TEXTAFTER, TEXTSPLIT
     modern::register(registry);
@@ -88,7 +88,10 @@ mod registry_tests {
     #[test]
     fn test_registry_jis() {
         let reg = crate::FunctionRegistry::new();
-        assert_eq!(reg.call("JIS", &[text("A")]), text("\u{FF21}"));
+        assert!(matches!(
+            reg.call("JIS", &[text("A")]),
+            value_types::CellValue::Error(value_types::CellError::Name, _)
+        ));
     }
 
     #[test]

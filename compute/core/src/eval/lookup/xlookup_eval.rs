@@ -9,7 +9,7 @@ use crate::eval::engine::operators::{cell_value_cmp_for_lookup, cell_value_eq_lo
 use crate::functions::helpers::criteria::WildcardPattern;
 use crate::functions::lookup::helpers::get_return_value;
 
-use super::range_geometry::{is_whole_range, try_extract_single_col_range};
+use super::range_geometry::{extract_range_bounds, is_whole_range, try_extract_single_col_range};
 
 pub(in crate::eval) async fn eval_xlookup<'a, D: EvalDataAccess, M: EvalMetadata>(
     evaluator: &mut Evaluator<'a, D, M>,
@@ -67,6 +67,34 @@ pub(in crate::eval) async fn eval_xlookup<'a, D: EvalDataAccess, M: EvalMetadata
     }
     // Validate match_mode early
     if !matches!(match_mode, -1..=2) {
+        return Ok(CellValue::Error(CellError::Value, None));
+    }
+
+    // Validate both axes before indexed lookup can return an early match.
+    // Reference geometry keeps the indexed path from materializing full columns.
+    let mut dimensions = Vec::with_capacity(2);
+    let mut materialized = [None, None];
+    for (index, arg) in args[1..3].iter().enumerate() {
+        let shape = if let Some((_, r0, r1, c0, c1)) = extract_range_bounds(arg, evaluator.meta) {
+            ((r1 - r0) as usize + 1, (c1 - c0) as usize + 1)
+        } else {
+            let value = evaluator.eval_node_cv(arg).await?;
+            let shape = match &value {
+                CellValue::Array(arr) => (arr.rows(), arr.cols()),
+                CellValue::Error(e, _) => return Ok(CellValue::Error(*e, None)),
+                _ => (1, 1),
+            };
+            materialized[index] = Some(value);
+            shape
+        };
+        dimensions.push(shape);
+    }
+    let ((lookup_rows, lookup_cols), (return_rows, return_cols)) = (dimensions[0], dimensions[1]);
+    let horizontal = lookup_cols > 1;
+    if (lookup_rows > 1 && lookup_cols > 1)
+        || (horizontal && lookup_cols != return_cols)
+        || (!horizontal && lookup_rows != return_rows)
+    {
         return Ok(CellValue::Error(CellError::Value, None));
     }
 
@@ -182,11 +210,17 @@ pub(in crate::eval) async fn eval_xlookup<'a, D: EvalDataAccess, M: EvalMetadata
         }
 
         // Materialization fallback for array lookup
-        let lookup_arr_val = evaluator.eval_node_cv(&args[1]).await?;
+        let lookup_arr_val = match &materialized[0] {
+            Some(value) => value.clone(),
+            None => evaluator.eval_node_cv(&args[1]).await?,
+        };
         if let CellValue::Error(e, _) = lookup_arr_val {
             return Ok(CellValue::Error(e, None));
         }
-        let return_arr = evaluator.eval_node_cv(&args[2]).await?;
+        let return_arr = match &materialized[1] {
+            Some(value) => value.clone(),
+            None => evaluator.eval_node_cv(&args[2]).await?,
+        };
 
         let lookup_flat = match &lookup_arr_val {
             CellValue::Array(arr) => arr.iter().cloned().collect::<Vec<_>>(),
@@ -210,7 +244,7 @@ pub(in crate::eval) async fn eval_xlookup<'a, D: EvalDataAccess, M: EvalMetadata
                 .unwrap_or(CellValue::Null);
             match xlookup_match_in_materialized(&elem, &lookup_flat, match_mode, search_mode) {
                 Some(idx) => {
-                    let row_result = get_xlookup_return_value(&return_arr, idx);
+                    let row_result = get_xlookup_return_value(&return_arr, idx, false);
                     match row_result {
                         CellValue::Array(arr) => results.extend(arr.iter().cloned()),
                         scalar => results.push(scalar),
@@ -304,13 +338,17 @@ pub(in crate::eval) async fn eval_xlookup<'a, D: EvalDataAccess, M: EvalMetadata
                     }
                     // Fallback: materialize return array (non-column return ranges,
                     // or when get_column_values returns None for non-dense columns)
-                    let return_arr = evaluator.eval_node_cv(&args[2]).await?;
+                    let return_arr = match &materialized[1] {
+                        Some(value) => value.clone(),
+                        None => evaluator.eval_node_cv(&args[2]).await?,
+                    };
                     if let CellValue::Error(e, _) = return_arr {
                         return Ok(CellValue::Error(e, None));
                     }
                     return Ok(get_xlookup_return_value(
                         &return_arr,
                         (row - start_row) as usize,
+                        false,
                     ));
                 }
                 // Row outside range — fall through to materialization
@@ -338,11 +376,17 @@ pub(in crate::eval) async fn eval_xlookup<'a, D: EvalDataAccess, M: EvalMetadata
 
     // 4. Materialization fallback — evaluate lookup_array and return_array,
     //    then run the same linear/binary search as the PureFunction.
-    let lookup_arr_val = evaluator.eval_node_cv(&args[1]).await?;
+    let lookup_arr_val = match &materialized[0] {
+        Some(value) => value.clone(),
+        None => evaluator.eval_node_cv(&args[1]).await?,
+    };
     if let CellValue::Error(e, _) = lookup_arr_val {
         return Ok(CellValue::Error(e, None));
     }
-    let return_arr = evaluator.eval_node_cv(&args[2]).await?;
+    let return_arr = match &materialized[1] {
+        Some(value) => value.clone(),
+        None => evaluator.eval_node_cv(&args[2]).await?,
+    };
     // Note: return_arr errors are checked at extraction time
 
     // Flatten lookup_array to a 1D vector
@@ -355,7 +399,7 @@ pub(in crate::eval) async fn eval_xlookup<'a, D: EvalDataAccess, M: EvalMetadata
     let match_idx = xlookup_match_in_materialized(&lookup, &lookup_arr, match_mode, search_mode);
 
     match match_idx {
-        Some(idx) => Ok(get_xlookup_return_value(&return_arr, idx)),
+        Some(idx) => Ok(get_xlookup_return_value(&return_arr, idx, horizontal)),
         None => {
             // Whole-column/row references are clamped to sheet.rows,
             // so trailing empties beyond the data extent are lost.
@@ -374,7 +418,18 @@ pub(in crate::eval) async fn eval_xlookup<'a, D: EvalDataAccess, M: EvalMetadata
     }
 }
 
-fn get_xlookup_return_value(return_arr: &CellValue, idx: usize) -> CellValue {
+fn get_xlookup_return_value(return_arr: &CellValue, idx: usize, horizontal: bool) -> CellValue {
+    if horizontal {
+        if let CellValue::Array(arr) = return_arr {
+            if idx >= arr.cols() {
+                return CellValue::Error(CellError::Value, None);
+            }
+            let values = (0..arr.rows())
+                .map(|row| arr.data()[row * arr.cols() + idx].clone())
+                .collect();
+            return CellValue::array(values, 1);
+        }
+    }
     match return_arr {
         CellValue::Array(arr) if arr.rows() == 1 && idx >= arr.cols() => CellValue::Null,
         CellValue::Array(arr) if arr.rows() > 1 && idx >= arr.rows() => CellValue::Null,

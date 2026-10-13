@@ -39,3 +39,44 @@ fn test_noop_without_formula_or_table_context() {
         "=[@Score]"
     );
 }
+
+#[test]
+fn qualify_long_this_row_without_rewriting_strings_or_qualified_tables() {
+    for (input, expected) in [
+        ("=[[#This Row],Sales]*2", "=Data[[#This Row],Sales]*2"),
+        ("=[[#this row],[Sales]]", "=Data[[#this row],[Sales]]"),
+        ("=Other[[#This Row],Sales]", "=Other[[#This Row],Sales]"),
+        ("=Données[[#This Row],Sales]", "=Données[[#This Row],Sales]"),
+        (
+            r#"="[[#This Row],Sales]""quote"&[[#This Row],[Sales]]"#,
+            r#"="[[#This Row],Sales]""quote"&Data[[#This Row],[Sales]]"#,
+        ),
+        ("=[[#This Row],[Sales'#]]", "=Data[[#This Row],[Sales'#]]"),
+    ] {
+        assert_eq!(
+            qualify_implicit_structured_refs(input, Some("Data")),
+            expected
+        );
+        assert_eq!(qualify_implicit_structured_refs(input, None), input);
+    }
+}
+
+#[test]
+fn qualified_long_this_row_parses() {
+    let qualified = qualify_implicit_structured_refs("=[[#This Row],Sales]*2", Some("Data"));
+    assert!(
+        crate::parse_formula(&qualified, None).is_ok(),
+        "{qualified}"
+    );
+}
+
+#[test]
+fn long_this_row_rejects_extra_or_malformed_unbracketed_parts() {
+    for formula in [
+        "=Data[[#This Row],Sales,Other]",
+        "=Data[[#This Row],Sales:Other]",
+        "=Data[[#This Row],#Headers]",
+    ] {
+        assert!(crate::parse_formula(formula, None).is_err(), "{formula}");
+    }
+}

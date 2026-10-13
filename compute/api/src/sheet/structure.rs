@@ -190,6 +190,45 @@ impl SheetStructure {
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
+    /// Copy a frozen source into repeated destination tiles.
+    #[allow(clippy::too_many_arguments)]
+    pub fn copy_range_tiled(
+        &self,
+        src_start_row: u32,
+        src_start_col: u32,
+        src_end_row: u32,
+        src_end_col: u32,
+        target_sheet_id: SheetId,
+        target_row: u32,
+        target_col: u32,
+        copy_type: CopyType,
+        skip_blanks: bool,
+        transpose: bool,
+        row_tiles: u32,
+        col_tiles: u32,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .call_engine(move |e| {
+                e.copy_range_tiled(
+                    &sid,
+                    src_start_row,
+                    src_start_col,
+                    src_end_row,
+                    src_end_col,
+                    &target_sheet_id,
+                    target_row,
+                    target_col,
+                    copy_type,
+                    skip_blanks,
+                    transpose,
+                    row_tiles,
+                    col_tiles,
+                )
+            })
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
     /// Check whether merging a range would cause data loss.
     ///
     /// Returns `(has_data_loss, affected_cell_count)`.

@@ -3,8 +3,18 @@ use value_types::CellValue;
 use super::number::try_parse_criteria_number;
 use super::wildcard::WildcardPattern;
 
+// Match the existing frequency-cache and wildcard Unicode lowercase policy.
+// This is case-insensitive equality, not locale-aware collation.
+fn text_equal(left: &str, right: &str) -> bool {
+    if left.is_ascii() && right.is_ascii() {
+        left.eq_ignore_ascii_case(right)
+    } else {
+        left.to_lowercase() == right.to_lowercase()
+    }
+}
+
 /// Return a plain text criterion whose equality uses string coercion and
-/// ASCII-insensitive comparison. Numeric text, operators and wildcard patterns
+/// Unicode lowercase comparison. Numeric text, operators and wildcard patterns
 /// require the general criteria predicate instead.
 pub fn plain_text_criteria(criteria: &CellValue) -> Option<&str> {
     let text = match criteria {
@@ -133,7 +143,7 @@ pub fn parse_criteria(criteria: &CellValue) -> Box<dyn Fn(&CellValue) -> bool> {
                         return false;
                     }
                     match v.coerce_to_string() {
-                        Ok(vs) => !vs.eq_ignore_ascii_case(&rest),
+                        Ok(vs) => !text_equal(&vs, &rest),
                         Err(_) => false,
                     }
                 });
@@ -175,6 +185,9 @@ pub fn parse_criteria(criteria: &CellValue) -> Box<dyn Fn(&CellValue) -> bool> {
             }
             if let Some(rest) = trimmed.strip_prefix('=') {
                 let rest = rest.trim().to_string();
+                if rest.is_empty() {
+                    return Box::new(|v| matches!(v, CellValue::Null));
+                }
                 if let Some(n) = try_parse_criteria_number(&rest) {
                     return Box::new(move |v: &CellValue| {
                         v.as_comparable_number()
@@ -182,7 +195,7 @@ pub fn parse_criteria(criteria: &CellValue) -> Box<dyn Fn(&CellValue) -> bool> {
                     });
                 }
                 return Box::new(move |v: &CellValue| match v.coerce_to_string() {
-                    Ok(vs) => vs.eq_ignore_ascii_case(&rest),
+                    Ok(vs) => text_equal(&vs, &rest),
                     Err(_) => false,
                 });
             }
@@ -203,7 +216,7 @@ pub fn parse_criteria(criteria: &CellValue) -> Box<dyn Fn(&CellValue) -> bool> {
                 } else {
                     let text = s.clone();
                     Box::new(move |v: &CellValue| match v.coerce_to_string() {
-                        Ok(vs) => vs.eq_ignore_ascii_case(&text),
+                        Ok(vs) => text_equal(&vs, &text),
                         Err(_) => false,
                     })
                 }

@@ -3,6 +3,7 @@ mod dated_pairs;
 mod xirr_convergence;
 mod xirr_errors;
 mod xirr_known_answers;
+mod xirr_native_rounding;
 mod xirr_numerical;
 
 use value_types::{CellError, CellValue};

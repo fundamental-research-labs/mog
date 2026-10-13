@@ -19,6 +19,50 @@ pub fn normalize_power_result(result: f64) -> f64 {
     normalize_formula_result(result)
 }
 
+/// Real-power evaluation paths matched by native Excel numeric controls.
+/// Negative integer powers use repeated squaring. Positive bases use an exact
+/// square-root path for half powers and exp/log for other fractional powers;
+/// negative exponents take the reciprocal after evaluating the positive power.
+/// The bounded integer conversion avoids narrowing large exponents to i32.
+#[inline]
+pub fn real_power(base: f64, exponent: f64) -> f64 {
+    if base < 0.0
+        && exponent.is_finite()
+        && exponent == exponent.trunc()
+        && exponent.abs() <= 9_007_199_254_740_992.0
+    {
+        let mut n = exponent.abs() as u64;
+        let mut factor = base;
+        let mut result = 1.0;
+        while n != 0 {
+            if n & 1 != 0 {
+                result *= factor;
+            }
+            n >>= 1;
+            if n != 0 {
+                factor *= factor;
+            }
+        }
+        if exponent < 0.0 { 1.0 / result } else { result }
+    } else if base > 0.0 && exponent.is_finite() {
+        let magnitude = exponent.abs();
+        let positive = if magnitude == 0.5 {
+            base.sqrt()
+        } else if magnitude == magnitude.trunc() {
+            base.powf(magnitude)
+        } else {
+            (magnitude * base.ln()).exp()
+        };
+        if exponent < 0.0 {
+            1.0 / positive
+        } else {
+            positive
+        }
+    } else {
+        base.powf(exponent)
+    }
+}
+
 /// Maximum odd denominator to test when detecting rational exponents.
 /// Covers all common fractional exponents like 1/3, 2/3, 1/5, 3/7, etc.
 const MAX_ODD_DENOM: u64 = 99;

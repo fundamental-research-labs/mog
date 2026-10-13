@@ -36,6 +36,7 @@ pub fn run() -> Result<()> {
             _ => None,
         },
         recalculate: args.recalculate,
+        preserve_results: args.preserve_results,
         output: args.output.map(absolute).transpose()?,
         close: args.close || args.close_all,
         discard: args.discard,
@@ -91,12 +92,15 @@ struct Config {
 struct Request {
     source: Option<String>,
     recalculate: bool,
+    #[serde(default)]
+    preserve_results: bool,
     output: Option<PathBuf>,
     close: bool,
     discard: bool,
 }
 
 struct State {
+    reuse_imported_caches: bool,
     workbook: Workbook,
     output: Option<PathBuf>,
     directory: PathBuf,
@@ -115,8 +119,21 @@ impl State {
         } else {
             Workbook::blank()?.0
         };
+        if config.request.preserve_results {
+            preserve_results(&workbook)?;
+        }
+        let reuse_imported_caches = config.input.is_some()
+            && !config.request.recalculate
+            && !config.request.preserve_results
+            && workbook.settings().calculation_mode()? != "manual"
+            && ((config.request.source.is_none() && workbook.recalculate_compatible_import()?)
+                || workbook.prepare_imported_formula_caches()?);
+        if !reuse_imported_caches && workbook.settings().calculation_mode()? != "manual" {
+            workbook.recalculate()?;
+        }
         stage.complete();
         Ok(Self {
+            reuse_imported_caches,
             workbook,
             output: config
                 .request
@@ -128,8 +145,17 @@ impl State {
     }
 
     fn apply(&mut self, request: &Request) -> Result<String> {
+        if request.preserve_results && request.recalculate {
+            return Err("--preserve-results conflicts with --recalculate".into());
+        }
         if let Some(path) = &request.output {
             validate_output(path)?;
+        }
+        if request.preserve_results {
+            preserve_results(&self.workbook)?;
+        }
+        if request.preserve_results {
+            self.reuse_imported_caches = false;
         }
         let output = if let Some(source) = &request.source {
             let output = mog::run_office_js_with_workbook(&self.workbook, source)?;
@@ -143,7 +169,11 @@ impl State {
         } else {
             String::new()
         };
-        if request.recalculate || request.source.is_some() {
+        if request.recalculate
+            || (request.source.is_some()
+                && !self.reuse_imported_caches
+                && self.workbook.settings().runtime_calculation_mode()? != "manual")
+        {
             let stage = Stage::start("recalculate");
             self.workbook.recalculate()?;
             stage.complete();
@@ -156,6 +186,18 @@ impl State {
 
     fn save(&self) -> Result<Option<String>> {
         let stage = Stage::start("save_workbook");
+        if self
+            .workbook
+            .settings()
+            .get_workbook_settings()?
+            .calculation_settings
+            .unwrap_or_default()
+            .calc_on_save
+        {
+            if !self.reuse_imported_caches {
+                self.workbook.recalculate()?;
+            }
+        }
         let (path, publication) = if let Some(path) = &self.output {
             // Follow an existing symlink just as loading the input does.
             let path = if path.exists() {
@@ -201,6 +243,18 @@ impl State {
     }
 }
 
+fn preserve_results(workbook: &Workbook) -> Result<()> {
+    let mut settings = workbook.settings().get_workbook_settings()?;
+    let calculation = settings
+        .calculation_settings
+        .get_or_insert_with(Default::default);
+    calculation.calc_on_save = false;
+    workbook.settings().set_workbook_settings(settings)?;
+    workbook.settings().set_calculation_mode("manual")?;
+    workbook.settings().set_runtime_calculation_mode("manual")?;
+    Ok(())
+}
+
 fn validate_output(path: &std::path::Path) -> Result<()> {
     if path
         .extension()
@@ -210,4 +264,59 @@ fn validate_output(path: &std::path::Path) -> Result<()> {
         return Err(format!("output must be .xlsx, got {}", path.display()).into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_requests_keep_default_recalculation_policy() {
+        let request: Request = serde_json::from_str(r#"{"source":"return 1;","recalculate":false,"output":null,"close":false,"discard":false}"#).unwrap();
+        assert!(!request.preserve_results);
+        assert!(request.source.is_some());
+    }
+
+    #[test]
+    fn script_edits_preserve_unrelated_import_caches() {
+        let mut state = State {
+            reuse_imported_caches: true,
+            workbook: Workbook::blank().unwrap().0,
+            output: None,
+            directory: PathBuf::new(),
+        };
+        state.apply(&Request {
+            source: Some("await Excel.run(async context => { const sheet = context.workbook.worksheets.add('Edited'); sheet.getRange('A1').values = [[3]]; sheet.getRange('B1').formulas = [['=A1*2']]; await context.sync(); });".into()),
+            ..Request::default()
+        }).unwrap();
+        assert!(state.reuse_imported_caches);
+        let value = state.apply(&Request {
+            source: Some("return await Excel.run(async context => { const range = context.workbook.worksheets.getItem('Edited').getRange('B1'); range.load('values'); await context.sync(); return range.values; });".into()),
+            ..Request::default()
+        }).unwrap();
+        assert_eq!(value, "[[6]]");
+    }
+
+    #[test]
+    fn contradictory_worker_request_fails_before_script_execution() {
+        let request = Request {
+            source: Some("throw new Error('script executed');".into()),
+            recalculate: true,
+            preserve_results: true,
+            ..Request::default()
+        };
+        let mut state = State {
+            reuse_imported_caches: false,
+            workbook: Workbook::blank().unwrap().0,
+            output: None,
+            directory: PathBuf::new(),
+        };
+        assert!(
+            state
+                .apply(&request)
+                .unwrap_err()
+                .to_string()
+                .contains("conflicts")
+        );
+    }
 }

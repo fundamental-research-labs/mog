@@ -70,7 +70,8 @@ pub(super) fn build_cell_data_for_cell_id(
         current
     });
     let formula_result_type = cell_props.formula_result_type;
-    let has_empty_cached_value = cell_props.has_empty_cached_value;
+    let has_empty_cached_value =
+        cell_props.has_empty_cached_value && !cell_store.live_formula_values.contains(cell_id);
     let formula_cache_provenance = &cell_props.formula_cache_provenance;
     let original_sst_index = cell_props.original_sst_index;
     let original_value = cell_props.original_value.as_ref();

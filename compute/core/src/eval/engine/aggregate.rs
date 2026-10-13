@@ -30,9 +30,8 @@ use crate::eval::functions::dense_aggregate::{
 ///   Booleans are coerced to 1.0/0.0, nulls to 0.0.
 ///
 /// - **InlineArray**: from elements of inline array constants like `{1,TRUE}`.
-///   For SUM/AVERAGE/MIN/MAX booleans are coerced (same as Inline), but for
-///   COUNT booleans are **skipped** (same as Range). This matches Excel
-///   where `SUM({TRUE,1})` = 2 but `COUNT({TRUE,1})` = 1.
+///   SUM and COUNT skip booleans (same as Range). Other reducers keep
+///   their own coercion policy.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::eval) enum ValueSource {
     Range,
@@ -108,7 +107,7 @@ pub(in crate::eval) fn flatten_tagged(
                     ValueSource::Range
                 } else if source == ValueSource::Inline {
                     // Elements of inline array constants (e.g., `{1, TRUE}`) get
-                    // InlineArray so SUM coerces booleans but COUNT skips them.
+                    // InlineArray so each reducer applies its array coercion policy.
                     ValueSource::InlineArray
                 } else {
                     source
@@ -132,6 +131,7 @@ fn value_to_number(value: &CellValue, source: ValueSource) -> Option<Result<f64,
     match value {
         CellValue::Error(e, _) => Some(Err(*e)),
         CellValue::Number(n) => Some(Ok(n.get())),
+        CellValue::Text(_) if source == ValueSource::Inline => Some(value.coerce_to_number()),
         CellValue::Boolean(b)
             if source == ValueSource::Inline || source == ValueSource::InlineArray =>
         {
@@ -157,14 +157,16 @@ fn agg_sum<'a>(vals: impl Iterator<Item = (&'a CellValue, ValueSource)>) -> Cell
             match value {
                 CellValue::Error(e, _) => return CellValue::Error(*e, None),
                 CellValue::Number(n) => acc.add_dd(n.to_f64x2()),
-                CellValue::Boolean(b)
-                    if source == ValueSource::Inline || source == ValueSource::InlineArray =>
-                {
+                CellValue::Text(_) if source == ValueSource::Inline => {
+                    match value.coerce_to_number() {
+                        Ok(n) => acc.add(n),
+                        Err(e) => return CellValue::Error(e, None),
+                    }
+                }
+                CellValue::Boolean(b) if source == ValueSource::Inline => {
                     acc.add(if *b { 1.0 } else { 0.0 });
                 }
-                CellValue::Null
-                    if source == ValueSource::Inline || source == ValueSource::InlineArray =>
-                {
+                CellValue::Null if source == ValueSource::Inline => {
                     acc.add(0.0);
                 }
                 _ => {}
@@ -177,6 +179,12 @@ fn agg_sum<'a>(vals: impl Iterator<Item = (&'a CellValue, ValueSource)>) -> Cell
     {
         let mut acc = value_types::KahanSum::new();
         for (value, source) in vals {
+            // Array constants, like references, do not coerce booleans in SUM.
+            let source = if source == ValueSource::InlineArray {
+                ValueSource::Range
+            } else {
+                source
+            };
             match value_to_number(value, source) {
                 Some(Ok(n)) => acc.add(n),
                 Some(Err(e)) => return CellValue::Error(e, None),
@@ -207,6 +215,69 @@ fn agg_average<'a>(vals: impl Iterator<Item = (&'a CellValue, ValueSource)>) -> 
     }
 }
 
+/// Recognize the additional invariant numeric text forms accepted by COUNT.
+/// Unlike VALUE's permissive cleanup, malformed grouping, repeated percent
+/// signs and trailing currency symbols must remain nonnumeric.
+// Direct COUNT arguments use Excel's numeric-text coercion. References and
+// array elements retain their separate aggregate policies. These additional
+// forms match the default numeric locale, without accepting malformed groups.
+fn count_inline_text(value: &CellValue) -> bool {
+    if value.coerce_to_number().is_ok() {
+        return true;
+    }
+    let CellValue::Text(text) = value else {
+        return false;
+    };
+    let mut text = text.trim();
+    let accounting = text.starts_with('(') && text.ends_with(')');
+    if accounting {
+        text = text[1..text.len() - 1].trim();
+    }
+    let signed = text.starts_with(['+', '-']);
+    if signed {
+        if accounting {
+            return false;
+        }
+        text = &text[1..];
+    }
+    let currency = text.starts_with(['$', '€']);
+    if currency {
+        text = text
+            .strip_prefix('$')
+            .or_else(|| text.strip_prefix('€'))
+            .unwrap()
+            .trim();
+        if text.starts_with(['+', '-']) {
+            if signed || accounting {
+                return false;
+            }
+            text = &text[1..];
+        }
+    }
+    if let Some(number) = text.strip_suffix('%') {
+        if currency || accounting {
+            return false;
+        }
+        text = number.trim();
+    }
+    if text.contains(',') {
+        let mantissa = text.split(['e', 'E']).next().unwrap_or(text);
+        let integer = mantissa.split('.').next().unwrap_or(mantissa);
+        let mut groups = integer.split(',');
+        if !groups
+            .next()
+            .is_some_and(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
+            || !groups.all(|part| part.len() == 3 && part.bytes().all(|b| b.is_ascii_digit()))
+            || text[integer.len()..].contains(',')
+        {
+            return false;
+        }
+    }
+    text.replace(',', "")
+        .parse::<f64>()
+        .is_ok_and(f64::is_finite)
+}
+
 fn agg_count<'a>(vals: impl Iterator<Item = (&'a CellValue, ValueSource)>) -> CellValue {
     let mut count = 0u64;
     for (value, source) in vals {
@@ -216,6 +287,9 @@ fn agg_count<'a>(vals: impl Iterator<Item = (&'a CellValue, ValueSource)>) -> Ce
         match (value, source) {
             (CellValue::Number(_), _) => count += 1,
             (CellValue::Boolean(_), ValueSource::Inline) => count += 1,
+            (CellValue::Text(_), ValueSource::Inline) if count_inline_text(value) => {
+                count += 1;
+            }
             _ => {}
         }
     }
@@ -447,6 +521,45 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
             op,
             flat.iter().map(|tagged| (&tagged.value, tagged.source)),
         ))
+    }
+
+    /// Preserve scalar/reference provenance for PRODUCT and SUMSQ too.
+    pub(in crate::eval) async fn eval_product_or_sumsq(
+        &mut self,
+        args: &[ASTNode],
+        product: bool,
+    ) -> Result<CellValue, ComputeError> {
+        if args.is_empty() {
+            return Ok(CellValue::Error(CellError::Value, None));
+        }
+        let vals = self.eval_and_flatten_tagged(args).await?;
+        let mut sum = value_types::KahanSum::new();
+        let mut result = 1.0;
+        let mut seen = false;
+        for tagged in vals {
+            let source = if tagged.source == ValueSource::InlineArray {
+                ValueSource::Range
+            } else {
+                tagged.source
+            };
+            match value_to_number(&tagged.value, source) {
+                Some(Ok(n)) => {
+                    seen = true;
+                    if product {
+                        result *= n;
+                    } else {
+                        sum.add(n * n);
+                    }
+                }
+                Some(Err(e)) => return Ok(CellValue::Error(e, None)),
+                None => {}
+            }
+        }
+        Ok(CellValue::number(if product {
+            if seen { result } else { 0.0 }
+        } else {
+            sum.total()
+        }))
     }
 
     /// Evaluate args and flatten arrays, tagging each value with whether it

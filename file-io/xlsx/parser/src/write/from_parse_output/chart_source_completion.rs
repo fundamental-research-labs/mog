@@ -208,12 +208,11 @@ fn workbook_cell_state(output: &ParseOutput) -> WorkbookCellState {
                         (
                             (cell.row, cell.col),
                             WorkbookCellStateValue {
-                                formula: cell
-                                    .formula
-                                    .as_deref()
-                                    .unwrap_or_default()
-                                    .trim_start_matches('=')
-                                    .to_string(),
+                                formula: compute_parser::normalize_xlsx_formula(
+                                    cell.formula.as_deref().unwrap_or_default(),
+                                )
+                                .trim_start_matches('=')
+                                .to_string(),
                                 value: cell.value.to_string(),
                             },
                         )

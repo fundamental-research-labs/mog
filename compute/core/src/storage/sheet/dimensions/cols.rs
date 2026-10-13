@@ -13,6 +13,27 @@ pub fn set_col_width(
     width: CharWidth,
     grid_index: Option<&GridIndex>,
 ) -> Result<(), ComputeError> {
+    set_col_width_with_origin(storage, sheet_id, col, width, grid_index, false)
+}
+
+pub fn set_col_width_from_pixels(
+    storage: &mut WorkbookStorage,
+    sheet_id: &SheetId,
+    col: u32,
+    width: CharWidth,
+    grid_index: Option<&GridIndex>,
+) -> Result<(), ComputeError> {
+    set_col_width_with_origin(storage, sheet_id, col, width, grid_index, true)
+}
+
+fn set_col_width_with_origin(
+    storage: &mut WorkbookStorage,
+    sheet_id: &SheetId,
+    col: u32,
+    width: CharWidth,
+    grid_index: Option<&GridIndex>,
+    width_from_pixels: bool,
+) -> Result<(), ComputeError> {
     let default = get_sheet_default_col_width(storage, sheet_id);
     let Some(id) = grid_index.and_then(|grid| grid.col_id(col)) else {
         return if width == default {
@@ -32,9 +53,12 @@ pub fn set_col_width(
                 sheet_id: sheet_id.to_uuid_string(),
             })?;
     let record = meta.dimensions.columns.entry(id).or_default();
-    record.width = (width != default).then_some(width);
+    // A pixel write is explicit even when its host width equals the sheet default.
+    // XLSX may use a different Normal-font metric, so do not erase its provenance.
+    record.width = (width_from_pixels || width != default).then_some(width);
+    record.width_from_pixels = width_from_pixels;
     record.width_str = None;
-    record.custom_width = width != default;
+    record.custom_width = record.width.is_some();
     record.width_present = record.width.map(|_| true);
     record.custom_width_attr = record.custom_width.then_some(true);
     Ok(())

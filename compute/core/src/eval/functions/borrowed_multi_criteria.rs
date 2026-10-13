@@ -192,6 +192,12 @@ pub(in crate::eval) async fn try_eval_multi_criteria_borrowed<
         && unwrapped_criteria
             .iter()
             .all(|cv| is_exact_match_criteria(cv))
+        // Empty text matches both blank cells and text cells containing "".
+        // The normalized result cache stores these as distinct groups; use
+        // the predicate/bitmap path so accumulation preserves source order.
+        && !unwrapped_criteria
+            .iter()
+            .any(|cv| matches!(cv, CellValue::Text(text) if text.is_empty()))
         && let Some(ss) = sum_slice
         && let Some(sumifs_epoch) = evaluator.meta.sumifs_cache_epoch()
     {
@@ -494,7 +500,7 @@ pub(in crate::eval) async fn try_eval_single_criteria_borrowed<
                     &[criteria_slice],
                     &ss,
                     total_rows,
-                    &[NormalizedKey::Text(text.to_ascii_lowercase())],
+                    &[NormalizedKey::Text(text.to_lowercase())],
                 ),
             )
         } else {

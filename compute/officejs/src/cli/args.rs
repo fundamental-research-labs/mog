@@ -13,6 +13,13 @@ pub const HELP: &str = "Usage: mog [OPTIONS]
       --close              Save and end the session selected with -s ID
       --close-all          Save and end all sessions for this user
       --discard            End without saving (with --close or --close-all)
+      --output-task <UUID>  Register a new session as one task's intended workbook
+      --intended-output <file.xlsx> Declared target for that task (paired with --output-task)
+      --prepare-output <UUID> Stage one candidate for a registered live task
+      --output-request <UUID> Idempotency key for --prepare-output
+      --output-budget-ms <ms> Candidate preparation deadline, 1..50000
+      --cancel-output <UUID> Cancel candidate preparation for this task
+      --output-capabilities Print the supported output-staging protocol
   -V, --version            Show the version
   -h, --help               Show this help
 ";
@@ -29,6 +36,13 @@ pub struct Args {
     pub close_all: bool,
     pub discard: bool,
     pub help: bool,
+    pub output_task: Option<String>,
+    pub intended_output: Option<PathBuf>,
+    pub prepare_output: Option<String>,
+    pub output_request: Option<String>,
+    pub output_budget_ms: Option<u64>,
+    pub cancel_output: Option<String>,
+    pub output_capabilities: bool,
     pub version: bool,
 }
 
@@ -55,6 +69,13 @@ impl Args {
                 "-o" | "--output" => set(&mut result.output, value()?.into(), flag)?,
                 "-e" | "--eval" => set(&mut result.eval, value()?, flag)?,
                 "-f" | "--file" => set(&mut result.script, value()?.into(), flag)?,
+                "--output-task" => set(&mut result.output_task, value()?, flag)?,
+                "--intended-output" => set(&mut result.intended_output, value()?.into(), flag)?,
+                "--prepare-output" => set(&mut result.prepare_output, value()?, flag)?,
+                "--output-request" => set(&mut result.output_request, value()?, flag)?,
+                "--output-budget-ms" => set(&mut result.output_budget_ms, value()?.parse()?, flag)?,
+                "--cancel-output" => set(&mut result.cancel_output, value()?, flag)?,
+                "--output-capabilities" if inline.is_none() => result.output_capabilities = true,
                 "-s" | "--session" => {
                     let id = if let Some(id) = inline {
                         if id.is_empty() {
@@ -87,6 +108,39 @@ impl Args {
         }
         if result.eval.is_some() && result.script.is_some() {
             return Err("use either --eval or --file".into());
+        }
+        if result.output_task.is_some() != result.intended_output.is_some()
+            || (result.output_task.is_some() && !matches!(result.session, Some(None)))
+        {
+            return Err("--output-task and --intended-output require a new --session".into());
+        }
+        let output_action = result.prepare_output.is_some()
+            || result.cancel_output.is_some()
+            || result.output_capabilities;
+        if output_action
+            && (result.session.is_some()
+                || result.input.is_some()
+                || result.output.is_some()
+                || result.eval.is_some()
+                || result.script.is_some()
+                || result.recalculate
+                || result.close
+                || result.close_all
+                || result.discard
+                || result.output_task.is_some()
+                || result.help
+                || result.version
+                || usize::from(result.prepare_output.is_some())
+                    + usize::from(result.cancel_output.is_some())
+                    + usize::from(result.output_capabilities)
+                    != 1)
+        {
+            return Err("output task commands cannot be combined with workbook commands".into());
+        }
+        if result.prepare_output.is_some() != result.output_request.is_some()
+            || result.prepare_output.is_some() != result.output_budget_ms.is_some()
+        {
+            return Err("--prepare-output requires --output-request and --output-budget-ms".into());
         }
         if matches!(result.session, Some(Some(_))) && result.input.is_some() {
             return Err(

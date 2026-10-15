@@ -9,6 +9,7 @@
 //! accepts a closure. This allows sub-API modules to add engine calls
 //! independently without modifying this file.
 
+use crate::edit_checkpoint::{CellEditCheckpoint, CellEditEvidence, CellEditTracker};
 use crate::error::ComputeApiError;
 
 mod actor {
@@ -19,7 +20,7 @@ mod actor {
     use std::thread;
 
     /// An erased command — a boxed closure that runs on the engine thread.
-    struct ErasedCmd(Box<dyn FnOnce(&mut ComputeEngine) + Send>);
+    struct ErasedCmd(Box<dyn FnOnce(&mut ComputeEngine, &mut CellEditTracker) + Send>);
 
     enum Cmd {
         Execute(ErasedCmd),
@@ -58,9 +59,20 @@ mod actor {
             &self,
             f: impl FnOnce(&mut ComputeEngine) -> T + Send + 'static,
         ) -> Result<T, ComputeApiError> {
+            self.execute(move |engine, tracker| {
+                tracker.allow_mutation()?;
+                tracker.invalidate("unsupported_mutation");
+                Ok(f(engine))
+            })?
+        }
+
+        fn execute<T: Send + 'static>(
+            &self,
+            f: impl FnOnce(&mut ComputeEngine, &mut CellEditTracker) -> T + Send + 'static,
+        ) -> Result<T, ComputeApiError> {
             let (reply_tx, reply_rx) = bounded::<Box<dyn Any + Send>>(1);
-            let cmd = Cmd::Execute(ErasedCmd(Box::new(move |engine| {
-                let result = f(engine);
+            let cmd = Cmd::Execute(ErasedCmd(Box::new(move |engine, tracker| {
+                let result = f(engine, tracker);
                 let _ = reply_tx.send(Box::new(result) as Box<dyn Any + Send>);
             })));
             self.tx
@@ -81,7 +93,59 @@ mod actor {
             &self,
             f: impl FnOnce(&ComputeEngine) -> T + Send + 'static,
         ) -> Result<T, ComputeApiError> {
-            self.call_engine(move |engine| f(engine))
+            self.execute(move |engine, _| f(engine))
+        }
+
+        /// Only audited bookkeeping/calculation operations may bypass the
+        /// default invalidation. They still cannot mutate a frozen workbook.
+        pub(crate) fn call_preserving_checkpoint<T: Send + 'static>(
+            &self,
+            f: impl FnOnce(&mut ComputeEngine) -> T + Send + 'static,
+        ) -> Result<T, ComputeApiError> {
+            self.execute(move |engine, tracker| {
+                tracker.allow_mutation()?;
+                let result = f(engine);
+                tracker.audit_projections(engine);
+                Ok(result)
+            })?
+        }
+
+        pub(crate) fn call_typed_cell_edit<T: Send + 'static>(
+            &self,
+            positions: Vec<(cell_types::SheetId, u32, u32)>,
+            f: impl FnOnce(&mut ComputeEngine) -> Result<T, value_types::ComputeError> + Send + 'static,
+        ) -> Result<Result<T, value_types::ComputeError>, ComputeApiError> {
+            self.execute(move |engine, tracker| {
+                tracker.allow_mutation()?;
+                tracker.capture(engine, positions);
+                let result = f(engine);
+                tracker.audit_projections(engine);
+                if result.is_err() {
+                    tracker.invalidate("typed_edit_failed");
+                }
+                Ok(result)
+            })?
+        }
+
+        pub(crate) fn begin_cell_edit_checkpoint(
+            &self,
+        ) -> Result<CellEditCheckpoint, ComputeApiError> {
+            self.execute(|_, tracker| tracker.begin())?
+        }
+
+        pub(crate) fn cell_edit_evidence(
+            &self,
+            id: CellEditCheckpoint,
+            freeze: bool,
+        ) -> Result<CellEditEvidence, ComputeApiError> {
+            self.execute(move |engine, tracker| tracker.inspect(engine, id, freeze))?
+        }
+
+        pub(crate) fn invalidate_cell_edit_checkpoint(
+            &self,
+            reason: &'static str,
+        ) -> Result<(), ComputeApiError> {
+            self.execute(move |_, tracker| tracker.invalidate(reason))
         }
     }
 
@@ -91,9 +155,10 @@ mod actor {
     /// disconnect). Do not send shutdown from `Drop` of a cloned handle:
     /// `Workbook::sheets()` clones `Dispatch` for a temporary sub-API.
     fn engine_loop(mut engine: ComputeEngine, rx: crossbeam_channel::Receiver<Cmd>) {
+        let mut tracker = CellEditTracker::default();
         for cmd in rx {
             match cmd {
-                Cmd::Execute(ErasedCmd(f)) => f(&mut engine),
+                Cmd::Execute(ErasedCmd(f)) => f(&mut engine, &mut tracker),
             }
         }
     }

@@ -12,6 +12,7 @@
 mod address;
 pub mod bridge_service;
 pub mod dispatch;
+mod edit_checkpoint;
 mod error;
 pub mod pure;
 mod sdk_value;
@@ -21,6 +22,7 @@ mod workbook;
 
 pub use address::{CellAddress, CellRange};
 pub use bridge_service::ComputeService;
+pub use edit_checkpoint::{CellEditCheckpoint, CellEditEvidence, CellEditStatus};
 pub use error::ComputeApiError;
 pub use sdk_value::SdkValue;
 pub use sheet::Sheet;

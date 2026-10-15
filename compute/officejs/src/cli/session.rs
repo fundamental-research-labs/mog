@@ -6,7 +6,7 @@ use std::{
     net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream},
     path::PathBuf,
     process::{Command, Stdio},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -66,7 +66,7 @@ impl Reply {
     }
 }
 
-fn directory() -> Result<PathBuf> {
+pub(super) fn directory() -> Result<PathBuf> {
     let path = if let Some(path) = env::var_os("MOG_SESSION_DIR") {
         PathBuf::from(path)
     } else {
@@ -175,7 +175,7 @@ pub(super) fn worker() -> Result<()> {
         let mut state = State::load(&config)?;
         let output = state.apply(&config.request)?;
         let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))?;
-        let id = Uuid::new_v4().simple().to_string();
+        let id = config.workbook_id.clone();
         let record = Record {
             port: listener.local_addr()?.port(),
             token: Uuid::new_v4().to_string(),
@@ -210,6 +210,17 @@ pub(super) fn worker() -> Result<()> {
                 return Err("invalid session credentials".into());
             }
             let request = envelope.request;
+            if let Some(prepare) = &request.prepare_output {
+                if request.source.is_some()
+                    || request.recalculate
+                    || request.output.is_some()
+                    || request.close
+                    || request.discard
+                {
+                    return Err("output preparation cannot include mutations or close".into());
+                }
+                return state.prepare_output(prepare);
+            }
             let output = state.apply(&request)?;
             if request.close {
                 if !request.discard {
@@ -245,12 +256,34 @@ impl Drop for Registration {
 }
 
 pub(super) fn execute(id: &str, request: &Request) -> Result<String> {
+    execute_with_timeout(id, request, None)
+}
+
+pub(super) fn execute_bounded(id: &str, request: &Request, timeout: Duration) -> Result<String> {
+    execute_with_timeout(id, request, Some(timeout))
+}
+
+fn execute_with_timeout(id: &str, request: &Request, timeout: Option<Duration>) -> Result<String> {
+    let deadline = timeout.map(|timeout| Instant::now() + timeout);
+    let remaining = || -> Result<Option<Duration>> {
+        deadline
+            .map(|deadline| {
+                deadline
+                    .checked_duration_since(Instant::now())
+                    .filter(|time| !time.is_zero())
+                    .ok_or_else(|| "output_budget_exhausted".into())
+            })
+            .transpose()
+    };
     let path = record_path(id)?;
     let record: Record = serde_json::from_slice(
         &fs::read(&path).map_err(|e| format!("session {id} is unavailable: {e}"))?,
     )?;
     let address = SocketAddr::from((Ipv4Addr::LOCALHOST, record.port));
-    let mut stream = match TcpStream::connect_timeout(&address, IO_TIMEOUT) {
+    let mut stream = match TcpStream::connect_timeout(
+        &address,
+        remaining()?.map_or(IO_TIMEOUT, |time| time.min(IO_TIMEOUT)),
+    ) {
         Ok(stream) => stream,
         Err(error) => {
             if error.kind() == std::io::ErrorKind::ConnectionRefused {
@@ -259,14 +292,19 @@ pub(super) fn execute(id: &str, request: &Request) -> Result<String> {
             return Err(format!("session {id} is unavailable: {error}").into());
         }
     };
-    stream.set_write_timeout(Some(IO_TIMEOUT))?;
-    // Scripts and large exports can take arbitrarily long; do not time them out
-    // and leave the caller unsure whether an operation completed.
+    stream.set_write_timeout(Some(
+        remaining()?.map_or(IO_TIMEOUT, |time| time.min(IO_TIMEOUT)),
+    ))?;
+    // Ordinary script/export requests retain their existing unbounded read.
+    // Candidate preparation has an explicit deadline and durable attempt receipt.
     send(
         &mut stream,
         &serde_json::json!({ "token": record.token, "request": request }),
     )?;
-    receive::<Reply>(&mut stream)?.into_result()
+    stream.set_read_timeout(remaining()?)?;
+    let result = receive::<Reply>(&mut stream)?.into_result();
+    remaining()?;
+    result
 }
 
 pub(super) fn close_all(request: &Request) -> Result<()> {

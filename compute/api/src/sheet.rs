@@ -125,10 +125,10 @@ impl Sheet {
                         })
                     })
             })
-            .collect();
+            .collect::<Vec<_>>();
 
         self.dispatch
-            .call_engine(move |engine| engine.batch_set_cells_by_position(updates, false))
+            .call_typed_cell_edit(updates)
             .and_then(|result| result.map_err(ComputeApiError::from))
     }
 

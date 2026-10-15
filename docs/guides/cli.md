@@ -86,3 +86,9 @@ Sessions use authenticated loopback connections and a private registry under
 can select another private directory, including for isolated test runs.
 `--close-all` covers sessions in that registry. Stale records from crashed
 workers are removed when a connection is refused.
+
+## Registered output candidates
+
+For hosts that need conservative recovery from a still-live intended workbook,
+see [registered workbook candidates](output-candidates.md). This opt-in protocol
+stages a candidate and does not publish the final task result.

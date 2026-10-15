@@ -1,9 +1,10 @@
 mod args;
+mod output;
 mod session;
 
 use std::{env, fs, path::PathBuf};
 
-use compute_api::Workbook;
+use compute_api::{CellEditCheckpoint, Workbook};
 use serde::{Deserialize, Serialize};
 
 use crate::diagnostics::Stage;
@@ -26,6 +27,26 @@ pub fn run() -> Result<()> {
         println!("mog {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
+    if args.output_capabilities {
+        println!(
+            "{{\"protocol\":1,\"live_registered_cell_candidates\":true,\"publishes_final_output\":false}}"
+        );
+        return Ok(());
+    }
+    if let Some(task) = &args.cancel_output {
+        return output::cancel(task);
+    }
+    if let Some(task) = &args.prepare_output {
+        println!(
+            "{}",
+            output::prepare_task(
+                task,
+                args.output_request.as_ref().unwrap(),
+                args.output_budget_ms.unwrap()
+            )?
+        );
+        return Ok(());
+    }
     let request = Request {
         source: match (args.eval, args.script) {
             (Some(source), _) => Some(source),
@@ -39,6 +60,7 @@ pub fn run() -> Result<()> {
         output: args.output.map(absolute).transpose()?,
         close: args.close || args.close_all,
         discard: args.discard,
+        prepare_output: None,
     };
     if args.close_all {
         return session::close_all(&request);
@@ -50,6 +72,17 @@ pub fn run() -> Result<()> {
             input: args.input.map(absolute).transpose()?,
             directory: env::current_dir()?,
             request,
+            workbook_id: uuid::Uuid::new_v4().simple().to_string(),
+            registration: match (args.output_task, args.intended_output) {
+                (Some(task_id), Some(path)) => {
+                    validate_output(&path)?;
+                    Some(output::Registration {
+                        task_id,
+                        declared_output: absolute(path)?,
+                    })
+                }
+                _ => None,
+            },
         };
         if args.session.is_some() {
             let (id, output) = session::start(config)?;
@@ -85,6 +118,8 @@ struct Config {
     input: Option<PathBuf>,
     directory: PathBuf,
     request: Request,
+    workbook_id: String,
+    registration: Option<output::Registration>,
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -94,12 +129,16 @@ struct Request {
     output: Option<PathBuf>,
     close: bool,
     discard: bool,
+    #[serde(default)]
+    prepare_output: Option<output::PrepareRequest>,
 }
 
 struct State {
     workbook: Workbook,
     output: Option<PathBuf>,
     directory: PathBuf,
+    workbook_id: String,
+    registered: Option<(output::Registration, CellEditCheckpoint)>,
 }
 
 impl State {
@@ -116,6 +155,15 @@ impl State {
             Workbook::blank()?.0
         };
         stage.complete();
+        let registered = if let Some(registration) = &config.registration {
+            let checkpoint = workbook.begin_cell_edit_checkpoint()?;
+            Some((
+                output::register(registration.clone(), &config.workbook_id)?,
+                checkpoint,
+            ))
+        } else {
+            None
+        };
         Ok(Self {
             workbook,
             output: config
@@ -124,6 +172,8 @@ impl State {
                 .clone()
                 .or_else(|| config.input.clone()),
             directory: config.directory.clone(),
+            workbook_id: config.workbook_id.clone(),
+            registered,
         })
     }
 
@@ -132,7 +182,13 @@ impl State {
             validate_output(path)?;
         }
         let output = if let Some(source) = &request.source {
-            let output = mog::run_office_js_with_workbook(&self.workbook, source)?;
+            let output = match mog::run_office_js_with_workbook(&self.workbook, source) {
+                Ok(output) => output,
+                Err(error) => {
+                    self.workbook.invalidate_cell_edit_checkpoint()?;
+                    return Err(error.into());
+                }
+            };
             if !output.stdout.is_empty() {
                 output.stdout
             } else if !output.value.is_null() {
@@ -152,6 +208,20 @@ impl State {
             self.output = Some(path.clone());
         }
         Ok(output)
+    }
+
+    fn prepare_output(&self, request: &output::PrepareRequest) -> Result<String> {
+        let (registration, checkpoint) = self
+            .registered
+            .as_ref()
+            .ok_or("output_registration_missing")?;
+        output::prepare(
+            &self.workbook,
+            *checkpoint,
+            registration,
+            &self.workbook_id,
+            request,
+        )
     }
 
     fn save(&self) -> Result<Option<String>> {

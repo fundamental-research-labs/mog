@@ -25,6 +25,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tempfile = "3"
 uuid = { workspace = true }
+sha2 = "0.10"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

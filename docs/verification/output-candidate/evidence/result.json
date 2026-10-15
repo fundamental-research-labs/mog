@@ -1,0 +1,36 @@
+{
+  "source_commit": "b06a8f0182eeeb4968dbd00bede68d42434ff294",
+  "binary_sha256": "b5227618650ab6484c9613165bfb8ba27b90348a988f61259ebf6be1408a8099",
+  "platform": "Darwin/arm64",
+  "started_at": "2026-10-15T16:56:12.592446+00:00",
+  "finished_at": "2026-10-15T16:56:22.944200+00:00",
+  "steps": [
+    "PASS 1 | Explicit task/workbook registration; final result does not exist.",
+    "PASS 2 | One separate atomic candidate: 3353 bytes; digest verified.",
+    "PASS 3 | Independent native reader sees A1=21, B1=42 and formula =A1*2.",
+    "PASS 4 | Identical repeat receipt; late edits and second save attempt rejected.",
+    "PASS 5 | Edit then revert is unavailable; it cannot masquerade as completed work.",
+    "PASS 6 | Cancelled work is rejected; no declared final output has been published.",
+    "PASS 7 | All task-owned native workers closed; synthetic files removed."
+  ],
+  "native_reader_observed": {
+    "values": [
+      [
+        21,
+        42
+      ]
+    ],
+    "formulas": [
+      [
+        21,
+        "=A1*2"
+      ]
+    ]
+  },
+  "candidate_sha256": "a25d618b9a57cd7bf964757b8e665e7ed1ff9e581684ba310b67f1c55274071c",
+  "candidate_bytes": 3353,
+  "remaining_native_workers": 0,
+  "publishes_final_output": false,
+  "terminal_task_success": false,
+  "coverage": "Actual local native CLI; candidate staging only, no Excel or platform image claim."
+}

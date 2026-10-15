@@ -51,14 +51,14 @@ impl WorkbookHistory {
     /// collapsed into a single undo step. Supports nesting.
     pub fn begin_undo_group(&self) -> Result<MutationResult, ComputeApiError> {
         self.dispatch
-            .call_engine(move |e| e.begin_undo_group())
+            .call_preserving_checkpoint(move |e| e.begin_undo_group())
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
     /// End an undo group. After this, mutations become individual undo steps again.
     pub fn end_undo_group(&self) -> Result<MutationResult, ComputeApiError> {
         self.dispatch
-            .call_engine(move |e| e.end_undo_group())
+            .call_preserving_checkpoint(move |e| e.end_undo_group())
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 }

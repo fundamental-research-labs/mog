@@ -1,0 +1,11 @@
+{"version": 2, "width": 170, "height": 27, "timestamp": 1792083372, "command": "python3 docs/verification/output-candidate/acceptance.py --binary \"$MOG_ACCEPTANCE_BINARY\" --source b06a8f0182eeeb4968dbd00bede68d42434ff294 --binary-sha256 b5227618650ab6484c9613165bfb8ba27b90348a988f61259ebf6be1408a8099 --result docs/verification/output-candidate/evidence/result.json", "env": {"SHELL": "/bin/zsh"}, "metadata_redaction": "Machine-local binary path replaced by MOG_ACCEPTANCE_BINARY; terminal events unchanged."}
+[0.187779, "o", "NATIVE MOG | registered live workbook candidate acceptance\r\nSource b06a8f0182eeeb4968dbd00bede68d42434ff294\r\nBinary SHA256 b5227618650ab6484c9613165bfb8ba27b90348a988f61259ebf6be1408a8099\r\nSynthetic local files; no model, database, remote service or Excel host.\r\n"]
+[0.950107, "o", "PASS 1 | Explicit task/workbook registration; final result does not exist.\r\n"]
+[2.515589, "o", "PASS 2 | One separate atomic candidate: 3353 bytes; digest verified.\r\n"]
+[4.066997, "o", "PASS 3 | Independent native reader sees A1=21, B1=42 and formula =A1*2.\r\n"]
+[5.620757, "o", "PASS 4 | Identical repeat receipt; late edits and second save attempt rejected.\r\n"]
+[7.463111, "o", "PASS 5 | Edit then revert is unavailable; it cannot masquerade as completed work.\r\n"]
+[9.02833, "o", "PASS 6 | Cancelled work is rejected; no declared final output has been published.\r\n"]
+[10.539415, "o", "PASS 7 | All task-owned native workers closed; synthetic files removed.\r\n"]
+[12.043444, "o", "ACCEPTED | native candidate slice only; host validation/publication remains separate.\r\n"]
+[12.048793, "x", "0"]

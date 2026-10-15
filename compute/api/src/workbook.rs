@@ -53,7 +53,6 @@ impl Workbook {
 
         let dispatch = Dispatch::spawn(engine)?;
 
-
         Ok((Workbook { dispatch }, recalc))
     }
 
@@ -85,7 +84,6 @@ impl Workbook {
 
         let dispatch = Dispatch::spawn(engine)?;
 
-
         Ok((Workbook { dispatch }, recalc))
     }
 
@@ -99,7 +97,6 @@ impl Workbook {
 
         let dispatch = Dispatch::spawn(engine)?;
 
-
         Ok((Workbook { dispatch }, recalc))
     }
 
@@ -112,7 +109,7 @@ impl Workbook {
     /// results are not expected to equal a previously saved workbook's caches.
     pub fn recalculate(&self) -> Result<RecalcResult, ComputeApiError> {
         self.dispatch
-            .call_engine(|e| e.recalculate())
+            .call_preserving_checkpoint(|e| e.recalculate())
             .and_then(|result| result.map_err(ComputeApiError::from))
     }
 
@@ -269,6 +266,34 @@ impl Workbook {
     /// Undo/redo operations.
     pub fn history(&self) -> history::WorkbookHistory {
         history::WorkbookHistory::new(self.dispatch.clone())
+    }
+
+    /// Begin conservative tracking before the task's first authored mutation.
+    /// One checkpoint may be created per workbook actor; it cannot be reset.
+    pub fn begin_cell_edit_checkpoint(&self) -> Result<crate::CellEditCheckpoint, ComputeApiError> {
+        self.dispatch.begin_cell_edit_checkpoint()
+    }
+
+    pub fn cell_edit_evidence(
+        &self,
+        checkpoint: crate::CellEditCheckpoint,
+    ) -> Result<crate::CellEditEvidence, ComputeApiError> {
+        self.dispatch.cell_edit_evidence(checkpoint, false)
+    }
+
+    /// Freeze the same actor that produced the evidence before exporting.
+    /// Subsequent mutable facade calls fail, including calls through clones.
+    pub fn freeze_cell_edit_checkpoint(
+        &self,
+        checkpoint: crate::CellEditCheckpoint,
+    ) -> Result<crate::CellEditEvidence, ComputeApiError> {
+        self.dispatch.cell_edit_evidence(checkpoint, true)
+    }
+
+    /// A failed host script may have partially mutated through unsupported paths.
+    pub fn invalidate_cell_edit_checkpoint(&self) -> Result<(), ComputeApiError> {
+        self.dispatch
+            .invalidate_cell_edit_checkpoint("script_failed")
     }
 
     /// Named ranges CRUD.

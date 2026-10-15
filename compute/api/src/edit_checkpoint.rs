@@ -110,7 +110,11 @@ impl CellEditTracker {
         }
     }
 
-    pub(crate) fn capture(&mut self, engine: &ComputeEngine, positions: Vec<Position>) {
+    pub(crate) fn capture(
+        &mut self,
+        engine: &ComputeEngine,
+        positions: impl Iterator<Item = Position>,
+    ) {
         let Some(state) = &mut self.0 else { return };
         state.revision = match state.revision.checked_add(1) {
             Some(revision) => revision,

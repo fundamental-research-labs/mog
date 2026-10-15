@@ -110,15 +110,24 @@ mod actor {
             })?
         }
 
-        pub(crate) fn call_typed_cell_edit<T: Send + 'static>(
+        /// The only admitted authored mutation: capture positions from the same
+        /// owned typed batch that the engine executes, without an extra vector.
+        pub(crate) fn call_typed_cell_edit(
             &self,
-            positions: Vec<(cell_types::SheetId, u32, u32)>,
-            f: impl FnOnce(&mut ComputeEngine) -> Result<T, value_types::ComputeError> + Send + 'static,
-        ) -> Result<Result<T, value_types::ComputeError>, ComputeApiError> {
+            updates: Vec<(cell_types::SheetId, u32, u32, crate::mutation::CellInput)>,
+        ) -> Result<
+            Result<snapshot_types::MutationResult, value_types::ComputeError>,
+            ComputeApiError,
+        > {
             self.execute(move |engine, tracker| {
                 tracker.allow_mutation()?;
-                tracker.capture(engine, positions);
-                let result = f(engine);
+                tracker.capture(
+                    engine,
+                    updates
+                        .iter()
+                        .map(|(sheet, row, col, _)| (*sheet, *row, *col)),
+                );
+                let result = engine.batch_set_cells_by_position(updates, false);
                 tracker.audit_projections(engine);
                 if result.is_err() {
                     tracker.invalidate("typed_edit_failed");

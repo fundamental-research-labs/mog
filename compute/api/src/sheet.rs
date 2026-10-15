@@ -127,14 +127,8 @@ impl Sheet {
             })
             .collect::<Vec<_>>();
 
-        let positions = updates
-            .iter()
-            .map(|(sheet, row, col, _)| (*sheet, *row, *col))
-            .collect();
         self.dispatch
-            .call_typed_cell_edit(positions, move |engine| {
-                engine.batch_set_cells_by_position(updates, false)
-            })
+            .call_typed_cell_edit(updates)
             .and_then(|result| result.map_err(ComputeApiError::from))
     }
 

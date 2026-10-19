@@ -43,9 +43,7 @@ impl<'a> XlsxArchive<'a> {
         let result = (|| {
             // Find the entry
             let entry = self
-                .entries
-                .iter()
-                .find(|e| e.name == name)
+                .find_entry(name)
                 .ok_or_else(|| ZipError::FileNotFound(name.to_string()))?;
 
             // Get compressed data offset by parsing local file header

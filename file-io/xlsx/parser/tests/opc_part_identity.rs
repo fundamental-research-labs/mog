@@ -171,25 +171,78 @@ fn override_identity_lookup_preserves_original_spelling_and_rejects_collisions()
     assert!(ContentTypes::parse(xml.as_bytes()).is_err());
 }
 
+const CORRUPTION_PART_NAMES: [(&str, &str, &str); 2] = [
+    ("worksheets/sheet1.xml", "/xl/worksheets/sheet1.xml", "xl/worksheets/sheet1.xml"),
+    ("worksheets/Résumé.xml", "/xl/worksheets/Résumé.xml", "xl/worksheets/R%C3%A9sum%C3%A9.xml"),
+];
+
 #[test]
-fn mapped_unicode_names_do_not_hide_missing_xml_or_crc_failures() {
-    let logical = "worksheets/Résumé.xml";
-    let override_name = "/xl/worksheets/Résumé.xml";
-    let physical = "xl/worksheets/R%C3%A9sum%C3%A9.xml";
-    let missing = workbook(logical, override_name, None, SHEET, &[]);
-    assert!(parse_xlsx_full_native(&missing, None).is_err());
-    for malformed in [b"\xff".as_slice(), b"<worksheet><sheetData><row><c><v>42</c></row></sheetData></worksheet>".as_slice()] {
-        let bytes = workbook(logical, override_name, Some(physical), malformed, &[]);
-        assert!(parse_xlsx_full_native(&bytes, None).is_err());
+fn missing_required_parts_fail_for_ascii_and_mapped_names() {
+    for (logical, override_name, _) in CORRUPTION_PART_NAMES {
+        let bytes = workbook(logical, override_name, None, SHEET, &[]);
+        assert!(parse_xlsx_full_native(&bytes, None).is_err(), "{logical}");
     }
-    let mut bytes = workbook(logical, override_name, Some(physical), SHEET, &[]);
-    let offset = XlsxArchive::new(&bytes).unwrap().find_entry(physical).unwrap().offset;
-    let crc = u32::from_le_bytes(bytes[offset + 14..offset + 18].try_into().unwrap()) ^ 1;
-    bytes[offset + 14..offset + 18].copy_from_slice(&crc.to_le_bytes());
-    let name = physical.as_bytes();
-    let central = bytes.windows(46 + name.len()).position(|window| {
-        window.starts_with(b"PK\x01\x02") && &window[46..] == name
-    }).expect("worksheet central header");
-    bytes[central + 16..central + 20].copy_from_slice(&crc.to_le_bytes());
-    assert!(parse_xlsx_full_native(&bytes, None).is_err());
+}
+
+#[test]
+fn invalid_utf8_fails_for_ascii_and_mapped_names() {
+    for (logical, override_name, physical) in CORRUPTION_PART_NAMES {
+        let bytes = workbook(logical, override_name, Some(physical), b"\xff", &[]);
+        let error = parse_xlsx_full_native(&bytes, None).unwrap_err();
+        assert!(error.contains("UTF-8"), "{logical}: {error}");
+    }
+}
+
+#[test]
+fn truncated_sheet_data_fails_for_ascii_and_mapped_names() {
+    let truncated = br#"<worksheet><sheetData><row><c r="A1"><v>42</v></c></row></worksheet>"#;
+    for (logical, override_name, physical) in CORRUPTION_PART_NAMES {
+        let bytes = workbook(logical, override_name, Some(physical), truncated, &[]);
+        let error = parse_xlsx_full_native(&bytes, None).unwrap_err();
+        assert!(error.contains("Truncated worksheet XML"), "{logical}: {error}");
+    }
+}
+
+#[test]
+fn missing_value_end_tag_preserves_existing_lenient_recovery_for_mapped_names() {
+    // The cell scanner intentionally recovers a missing </v> as an empty
+    // value when </c> and </sheetData> are present. OPC lookup must preserve
+    // that existing ASCII behavior, not introduce a stricter XML policy.
+    let malformed = b"<worksheet><sheetData><row><c><v>42</c></row></sheetData></worksheet>";
+    let mut decoded_cells = Vec::new();
+    for (logical, override_name, physical) in CORRUPTION_PART_NAMES {
+        let bytes = workbook(logical, override_name, Some(physical), malformed, &[]);
+        let parsed = parse_xlsx_full_native(&bytes, None).expect(logical);
+        assert_eq!(parsed.workbook_sheet_inventory.len(), 1);
+        assert_eq!(parsed.workbook_sheet_inventory[0].kind, domain_types::WorkbookSheetKind::Worksheet);
+        assert_eq!(parsed.sheets.len(), 1);
+        let sheet = &parsed.sheets[0];
+        assert_eq!(sheet.name, "Model");
+        assert_eq!(sheet.sheet_id, Some(1));
+        assert_eq!(sheet.owner_part_path.as_deref(), Some(physical));
+        assert_eq!(sheet.cells.len(), 1);
+        let cell = &sheet.cells[0];
+        assert_eq!((cell.row, cell.col), (0, 0));
+        assert_eq!(cell.value, None);
+        assert_eq!(cell.formula, None);
+        decoded_cells.push((cell.row, cell.col, cell.value.clone(), cell.formula.clone()));
+    }
+    assert_eq!(decoded_cells[0], decoded_cells[1]);
+}
+
+#[test]
+fn crc_failures_are_not_hidden_for_ascii_or_mapped_names() {
+    for (logical, override_name, physical) in CORRUPTION_PART_NAMES {
+        let mut bytes = workbook(logical, override_name, Some(physical), SHEET, &[]);
+        let offset = XlsxArchive::new(&bytes).unwrap().find_entry(physical).unwrap().offset;
+        let crc = u32::from_le_bytes(bytes[offset + 14..offset + 18].try_into().unwrap()) ^ 1;
+        bytes[offset + 14..offset + 18].copy_from_slice(&crc.to_le_bytes());
+        let name = physical.as_bytes();
+        let central = bytes.windows(46 + name.len()).position(|window| {
+            window.starts_with(b"PK\x01\x02") && &window[46..] == name
+        }).expect("worksheet central header");
+        bytes[central + 16..central + 20].copy_from_slice(&crc.to_le_bytes());
+        let error = parse_xlsx_full_native(&bytes, None).unwrap_err();
+        assert!(error.contains("CRC mismatch"), "{logical}: {error}");
+    }
 }

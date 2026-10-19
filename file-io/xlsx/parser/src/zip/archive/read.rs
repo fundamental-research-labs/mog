@@ -18,9 +18,7 @@ impl<'a> XlsxArchive<'a> {
     pub fn read_file(&self, name: &str) -> Result<Vec<u8>, ZipError> {
         // Find the entry
         let entry = self
-            .entries
-            .iter()
-            .find(|e| e.name == name)
+            .find_entry(name)
             .ok_or_else(|| ZipError::FileNotFound(name.to_string()))?;
 
         self.read_entry(entry, true, true)
@@ -35,9 +33,7 @@ impl<'a> XlsxArchive<'a> {
     /// bytes, not for XML that the parser interprets.
     pub fn read_file_verbatim(&self, name: &str) -> Result<Vec<u8>, ZipError> {
         let entry = self
-            .entries
-            .iter()
-            .find(|e| e.name == name)
+            .find_entry(name)
             .ok_or_else(|| ZipError::FileNotFound(name.to_string()))?;
 
         self.read_entry(entry, true, false)
@@ -127,9 +123,7 @@ impl<'a> XlsxArchive<'a> {
     /// Number of bytes written or a `ZipError`
     pub fn read_file_into(&self, name: &str, output: &mut [u8]) -> Result<usize, ZipError> {
         let entry = self
-            .entries
-            .iter()
-            .find(|e| e.name == name)
+            .find_entry(name)
             .ok_or_else(|| ZipError::FileNotFound(name.to_string()))?;
 
         let decompressed = self

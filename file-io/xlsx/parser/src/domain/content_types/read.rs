@@ -164,7 +164,7 @@ impl ContentTypes {
                             content_types
                                 .ordered_defaults_list
                                 .push((ext.clone(), content_type.clone()));
-                            content_types.defaults.insert(ext, content_type);
+                            content_types.defaults.insert(ext.to_ascii_lowercase(), content_type);
                         }
                     } else if local == b"Override"
                         && is_opc_content_types_ns(&ns)
@@ -173,8 +173,12 @@ impl ContentTypes {
                         let normalized = normalize_path(&part_name);
                         content_types
                             .ordered_overrides_list
-                            .push((normalized.clone(), content_type.clone()));
-                        content_types.overrides.insert(normalized, content_type);
+                            .push((part_name.strip_prefix('/').unwrap_or(&part_name).to_string(), content_type.clone()));
+                        if content_types.overrides.insert(normalized, content_type).is_some()
+                            && crate::infra::opc::part_name_identity(&part_name).is_ok()
+                        {
+                            return Err(ParseError::InvalidAttribute("PartName"));
+                        }
                     }
                 }
                 Event::Eof => break,
@@ -206,8 +210,8 @@ impl ContentTypes {
         }
 
         // Fall back to defaults based on extension
-        if let Some(ext) = get_extension(&normalized) {
-            if let Some(content_type) = self.defaults.get(ext) {
+        if let Some(ext) = get_extension(path) {
+            if let Some(content_type) = self.defaults.get(&ext.to_ascii_lowercase()) {
                 return Some(content_type.as_str());
             }
         }
@@ -217,7 +221,7 @@ impl ContentTypes {
 
     /// Find all parts with a specific content type
     pub fn find_parts_by_type(&self, content_type: &str) -> Vec<&str> {
-        self.overrides
+        self.ordered_overrides_list
             .iter()
             .filter(|(_, ct)| ct.as_str() == content_type)
             .map(|(path, _)| path.as_str())
@@ -296,23 +300,22 @@ impl ContentTypes {
 
     /// Check if a default exists for an extension
     pub fn has_default(&self, extension: &str) -> bool {
-        self.defaults.contains_key(extension)
+        self.defaults.contains_key(&extension.to_ascii_lowercase())
     }
 
     /// Check if an override exists for a path
     pub fn has_override(&self, path: &str) -> bool {
-        let normalized = normalize_path(path);
-        self.overrides.contains_key(&normalized)
+        self.overrides.contains_key(&normalize_path(path))
     }
 
     /// Get an iterator over all override entries
     pub fn overrides(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.overrides.iter().map(|(k, v)| (k.as_str(), v.as_str()))
+        self.ordered_overrides_list.iter().map(|(k, v)| (k.as_str(), v.as_str()))
     }
 
     /// Get an iterator over all default entries
     pub fn defaults(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.defaults.iter().map(|(k, v)| (k.as_str(), v.as_str()))
+        self.ordered_defaults_list.iter().map(|(k, v)| (k.as_str(), v.as_str()))
     }
 
     /// Get an iterator over default entries in their original XML order.
@@ -367,9 +370,11 @@ fn is_opc_content_types_ns(ns: &ResolveResult<'_>) -> bool {
     }
 }
 
-/// Normalize a path by removing the leading slash
+/// Use OPC identity where supported, otherwise retain the old literal lookup.
+/// Unsupported unrelated metadata must not acquire a new abort/alias policy.
 fn normalize_path(path: &str) -> String {
-    path.strip_prefix('/').unwrap_or(path).to_string()
+    crate::infra::opc::part_name_identity(path)
+        .unwrap_or_else(|_| path.strip_prefix('/').unwrap_or(path).to_string())
 }
 
 /// Get the file extension from a path

@@ -124,6 +124,10 @@ pub fn build_workbook_sheet_inventory(
             } else {
                 match resolve_relationship_target(Some("xl/workbook.xml"), &rel.target) {
                     Ok(path) => {
+                        // Keep the original physical name for later package
+                        // ownership/export, not the spelling of its logical URI.
+                        let path = archive.find_entry(&path)
+                            .map(|entry| entry.name.clone()).unwrap_or(path);
                         if !resolved_targets.insert(path.clone()) {
                             diagnostics.push(package_diag(
                                 "workbook_sheet_duplicate_target",

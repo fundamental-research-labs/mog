@@ -6,6 +6,9 @@ use std::collections::HashMap;
 
 use crate::infra::scanner::{extract_quoted_value, find_attr_simd, find_gt_simd, find_tag_simd};
 
+mod part_names;
+pub(crate) use part_names::part_name_identity;
+
 /// Relationship type for worksheets.
 pub const REL_WORKSHEET: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";

@@ -43,6 +43,8 @@ pub struct XlsxArchive<'a> {
     data: &'a [u8],
     /// Indexed entries from the central directory
     entries: Vec<ZipEntry>,
+    /// Opt-in OPC identity index; generic ZIP access retains exact names.
+    opc_entries: Option<HashMap<String, usize>>,
     /// Cumulative materialized bytes charged through production archive reads.
     materialized_uncompressed: Cell<usize>,
     /// Relationship records charged once per `.rels` part name.
@@ -101,10 +103,32 @@ impl<'a> XlsxArchive<'a> {
         Ok(XlsxArchive {
             data,
             entries,
+            opc_entries: None,
             materialized_uncompressed: Cell::new(0),
             relationship_record_counts: RefCell::new(HashMap::new()),
             fatal_safety_error: RefCell::new(None),
         })
+    }
+
+    /// Open an OPC package without changing the physical entry names.
+    /// Reject ambiguous identities before any consumer can select an alias.
+    pub(crate) fn new_opc(data: &'a [u8]) -> Result<Self, ZipError> {
+        let mut archive = Self::new(data)?;
+        let mut index = HashMap::with_capacity(archive.entries.len());
+        for (position, entry) in archive.entries.iter().enumerate() {
+            // An unrelated legacy/unsupported name was previously ignorable.
+            // Do not turn it into a new whole-package rejection policy.
+            let Ok(key) = crate::infra::opc::part_name_identity(&entry.name) else {
+                continue;
+            };
+            if index.insert(key, position).is_some() {
+                return Err(ZipError::InvalidFileName(format!(
+                    "colliding OPC part identity: {}", entry.name
+                )));
+            }
+        }
+        archive.opc_entries = Some(index);
+        Ok(archive)
     }
 
     /// Get the raw archive data
@@ -124,12 +148,19 @@ impl<'a> XlsxArchive<'a> {
 
     /// Find an entry by name
     pub fn find_entry(&self, name: &str) -> Option<&ZipEntry> {
+        if let Some(index) = &self.opc_entries {
+            if let Ok(key) = crate::infra::opc::part_name_identity(name) {
+                return self.entries.get(*index.get(&key)?);
+            }
+        }
+        // Unsupported representations get no aliases, only their old exact
+        // lookup behavior. In particular, `%20` cannot select a raw-space name.
         self.entries.iter().find(|e| e.name == name)
     }
 
     /// Check if a file exists in the archive
     pub fn contains(&self, name: &str) -> bool {
-        self.entries.iter().any(|e| e.name == name)
+        self.find_entry(name).is_some()
     }
 
     /// Charge streamed uncompressed output against the archive safety budget.

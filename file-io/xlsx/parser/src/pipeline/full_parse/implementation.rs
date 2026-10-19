@@ -341,7 +341,7 @@ pub(super) fn parse_xlsx_full_native_impl(
 
     // Open ZIP archive
     ctx.set_current_part("xlsx archive");
-    let archive = match XlsxArchive::new(xlsx_data) {
+    let archive = match XlsxArchive::new_opc(xlsx_data) {
         Ok(a) => a,
         Err(e) => {
             return Err(format!("Failed to open XLSX archive: {}", e));
@@ -420,10 +420,15 @@ pub(super) fn parse_xlsx_full_native_impl(
         .map_err(|e| format!("Failed to read xl/_rels/workbook.xml.rels: {}", e))?;
     let workbook_relationships = workbook::parse_all_rels(&wb_rels_xml);
 
-    let parsed_content_types = archive
-        .get_content_types()
-        .ok()
-        .and_then(|xml| crate::domain::content_types::read::ContentTypes::parse(&xml).ok());
+    let parsed_content_types = match archive.get_content_types() {
+        Ok(xml) => match crate::domain::content_types::read::ContentTypes::parse(&xml) {
+            Err(crate::domain::content_types::read::ParseError::InvalidAttribute("PartName")) => {
+                return Err("Colliding OPC content-type PartName".to_string());
+            }
+            result => result.ok(),
+        },
+        Err(_) => None,
+    };
 
     // Parse theme (optional)
     let (

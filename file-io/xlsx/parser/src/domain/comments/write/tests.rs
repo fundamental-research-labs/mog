@@ -642,3 +642,137 @@ fn test_dispatch_threaded_reply_uses_own_comment_id() {
     assert!(threaded_str.contains(r#"id="reply-001""#));
     assert!(threaded_str.contains(r#"parentId="thread-root""#));
 }
+
+// -------------------------------------------------------------------------
+// Synthesized threaded UIDs with preserved legacy root namespaces
+// -------------------------------------------------------------------------
+
+mod uid_namespace_regressions {
+    use super::*;
+    use crate::testing::xml_diff::{XmlDiffOptions, assert_structurally_equal};
+
+    const MAIN_NS: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+    const REVISION_NS: &str = "http://schemas.microsoft.com/office/spreadsheetml/2014/revision";
+    const THREAD_ID: &str = "{11111111-2222-3333-4444-555555555555}";
+
+    fn threaded_xml(extra_namespaces: Option<&[(&str, &str)]>, extension: Option<&str>) -> Vec<u8> {
+        let root_attrs: Option<Vec<(String, String)>> = extra_namespaces.map(|namespaces| {
+            std::iter::once(("xmlns", MAIN_NS))
+                .chain(namespaces.iter().copied())
+                .map(|(name, value)| (name.to_string(), value.to_string()))
+                .collect()
+        });
+        let thread = domain_types::Comment {
+            id: "{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}".to_string(),
+            cell_ref: "C7".to_string(),
+            author: "Synthetic author".to_string(),
+            content: Some("Synthetic <thread> & text".to_string()),
+            runs: vec![domain_types::RichTextRun {
+                text: "Synthetic <thread> & text".to_string(),
+                ..Default::default()
+            }],
+            comment_type: CommentType::ThreadedComment,
+            thread_id: Some(THREAD_ID.to_string()),
+            // The bridge must synthesize the UID from thread_id.
+            xr_uid: None,
+            ..Default::default()
+        };
+        comments_from_domain(1, &[thread], None, root_attrs.as_deref(), extension).0
+    }
+
+    fn assert_threaded_xml(xml: &[u8], expected_extension: &str) {
+        // Use an independent prefix for the expected UID. Comparison resolves
+        // expanded names and rejects undeclared prefixes in the emitted XML.
+        let expected = format!(
+            r#"<comments xmlns="{MAIN_NS}" xmlns:uidns="{REVISION_NS}">
+                <authors><author>tc={THREAD_ID}</author></authors>
+                <commentList><comment ref="C7" authorId="0" uidns:uid="{THREAD_ID}">
+                    <text><t>Synthetic &lt;thread&gt; &amp; text</t></text>
+                </comment></commentList>
+                {expected_extension}
+            </comments>"#
+        );
+        assert_structurally_equal(xml, expected.as_bytes(), &XmlDiffOptions::default())
+            .expect("threaded legacy XML must retain content and bind UID to the revision URI");
+    }
+
+    #[test]
+    fn threaded_uid_without_preserved_metadata_uses_fallback() {
+        let xml = threaded_xml(None, None);
+        let expected = format!(
+            r#"<comments xmlns="{MAIN_NS}" xmlns:xr="{REVISION_NS}"
+                xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="xr">
+                <authors><author>tc={THREAD_ID}</author></authors>
+                <commentList><comment ref="C7" authorId="0" xr:uid="{THREAD_ID}">
+                    <text><t>Synthetic &lt;thread&gt; &amp; text</t></text>
+                </comment></commentList>
+            </comments>"#
+        );
+        assert_structurally_equal(&xml, expected.as_bytes(), &XmlDiffOptions::default())
+            .expect("absent metadata must retain the threaded UID and compatibility fallback");
+    }
+
+    #[test]
+    fn threaded_uid_with_imported_default_namespace_only() {
+        let xml = threaded_xml(Some(&[]), None);
+        assert_threaded_xml(&xml, "");
+    }
+
+    #[test]
+    fn threaded_uid_with_existing_xr_binding() {
+        let xml = threaded_xml(Some(&[("xmlns:xr", REVISION_NS)]), None);
+        assert_threaded_xml(&xml, "");
+    }
+
+    #[test]
+    fn threaded_uid_with_alternate_revision_alias() {
+        let extension = r#"<extLst><ext uri="urn:synthetic:revision-extension"><rev:marker rev:value="retained"/></ext></extLst>"#;
+        let xml = threaded_xml(Some(&[("xmlns:rev", REVISION_NS)]), Some(extension));
+        let expected_extension = format!(
+            r#"<extLst><ext uri="urn:synthetic:revision-extension"><other:marker xmlns:other="{REVISION_NS}" other:value="retained"/></ext></extLst>"#
+        );
+        assert_threaded_xml(&xml, &expected_extension);
+    }
+
+    #[test]
+    fn threaded_uid_with_conflicting_xr_binding_preserves_extension_meaning() {
+        let extension = r#"<extLst><ext uri="urn:synthetic:extension"><xr:marker xr:value="retained"/></ext></extLst>"#;
+        let xml = threaded_xml(
+            Some(&[("xmlns:xr", "urn:synthetic:existing-extension")]),
+            Some(extension),
+        );
+        let expected_extension = r#"<extLst><ext uri="urn:synthetic:extension"><other:marker xmlns:other="urn:synthetic:existing-extension" other:value="retained"/></ext></extLst>"#;
+        assert_threaded_xml(&xml, expected_extension);
+    }
+
+    #[test]
+    fn plain_legacy_note_without_uid_has_no_revision_attributes() {
+        let note = domain_types::Comment {
+            cell_ref: "D8".to_string(),
+            author: "Synthetic & author".to_string(),
+            content: Some("Plain <note> & text".to_string()),
+            comment_type: CommentType::Note,
+            xr_uid: None,
+            ..Default::default()
+        };
+        let root_attrs = vec![("xmlns".to_string(), MAIN_NS.to_string())];
+        for attrs in [None, Some(root_attrs.as_slice())] {
+            let (xml, _) = comments_from_domain(1, &[note.clone()], None, attrs, None);
+            let expected = format!(
+                r#"<comments xmlns="{MAIN_NS}">
+                    <authors><author>Synthetic &amp; author</author></authors>
+                    <commentList><comment ref="D8" authorId="0">
+                        <text><t>Plain &lt;note&gt; &amp; text</t></text>
+                    </comment></commentList>
+                </comments>"#
+            );
+            assert_structurally_equal(&xml, expected.as_bytes(), &XmlDiffOptions::default())
+                .expect("plain legacy note must retain its author, text and reference without UID");
+            // Structural comparison ignores namespace declarations, so also
+            // guard against adding unused revision or compatibility bindings.
+            let xml = String::from_utf8(xml).expect("UTF-8 comments XML");
+            assert!(!xml.contains(REVISION_NS));
+            assert!(!xml.contains("http://schemas.openxmlformats.org/markup-compatibility/2006"));
+        }
+    }
+}

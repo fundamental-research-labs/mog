@@ -204,6 +204,16 @@ impl CommentsWriter {
             w.attr_num("shapeId", shape_id);
         }
         if let Some(ref uid) = comment.xr_uid {
+            if !self.root_namespace_attrs.is_empty()
+                && !self
+                    .root_namespace_attrs
+                    .iter()
+                    .any(|(name, value)| name == "xmlns:xr" && value == XR_NS)
+            {
+                // Bind locally so a preserved root xr prefix keeps its meaning
+                // for extension content outside this comment.
+                w.attr("xmlns:xr", XR_NS);
+            }
             w.attr("xr:uid", uid);
         }
         w.end_attrs();

@@ -182,12 +182,7 @@ pub(in crate::storage::engine) fn get_col_width_query(
     sheet_id: &SheetId,
     col: u32,
 ) -> Pixels {
-    let width_cw = sheet_dimensions::get_col_width(
-        &stores.storage,
-        sheet_id,
-        col,
-        stores.grid_indexes.get(sheet_id),
-    );
+    let width_cw = get_col_width_chars_query(stores, sheet_id, col);
     if width_cw.0 == 0.0 {
         Pixels(0.0)
     } else {
@@ -210,9 +205,17 @@ pub(in crate::storage::engine) fn get_default_col_width(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> CharWidth {
-    properties::get_sheet_meta(&stores.storage, sheet_id)
-        .map(|m| CharWidth(m.default_col_width))
-        .unwrap_or(sheet_dimensions::DEFAULT_COL_WIDTH)
+    let mdw = stores.layout_metrics.column_width_mdw;
+    stores.storage.sheet_metadata.get(sheet_id).map_or_else(
+        || domain_types::units::pixels_to_char_width(stores.layout_metrics.default_column_width(), mdw),
+        |metadata| {
+            if metadata.format.default_col_width.is_none() && metadata.format.base_col_width.is_none() {
+                domain_types::units::pixels_to_char_width(stores.layout_metrics.default_column_width(), mdw)
+            } else {
+                metadata.format.effective_default_col_width_with_mdw(mdw)
+            }
+        },
+    )
 }
 
 /// Returns row heights in **pixels** (for TypeScript bridge).
@@ -249,12 +252,14 @@ pub(in crate::storage::engine) fn get_col_width_chars_query(
     sheet_id: &SheetId,
     col: u32,
 ) -> CharWidth {
-    sheet_dimensions::get_col_width(
-        &stores.storage,
-        sheet_id,
-        col,
-        stores.grid_indexes.get(sheet_id),
-    )
+    let grid = stores.grid_indexes.get(sheet_id);
+    if sheet_dimensions::is_column_hidden(&stores.storage, sheet_id, col, grid)
+        || !crate::storage::sheet::grouping::is_column_visible_by_groups(&stores.storage, sheet_id, col)
+    {
+        return CharWidth(0.0);
+    }
+    sheet_dimensions::get_col_width_explicit(&stores.storage, sheet_id, col, grid)
+        .unwrap_or_else(|| get_default_col_width(stores, sheet_id))
 }
 
 /// Returns column widths in **character-width units** for a range.
@@ -266,12 +271,7 @@ pub(in crate::storage::engine) fn get_col_widths_batch_chars(
 ) -> Vec<(u32, CharWidth)> {
     (start_col..=end_col)
         .map(|col| {
-            let cw = sheet_dimensions::get_col_width(
-                &stores.storage,
-                sheet_id,
-                col,
-                stores.grid_indexes.get(sheet_id),
-            );
+            let cw = get_col_width_chars_query(stores, sheet_id, col);
             (col, cw)
         })
         .collect()
@@ -287,12 +287,7 @@ pub(in crate::storage::engine) fn get_col_widths_batch(
     let mdw = stores.layout_metrics.column_width_mdw;
     (start_col..=end_col)
         .map(|col| {
-            let cw = sheet_dimensions::get_col_width(
-                &stores.storage,
-                sheet_id,
-                col,
-                stores.grid_indexes.get(sheet_id),
-            );
+            let cw = get_col_width_chars_query(stores, sheet_id, col);
             (
                 col,
                 if cw.0 == 0.0 {

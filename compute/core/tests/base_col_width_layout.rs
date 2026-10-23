@@ -274,7 +274,7 @@ fn base_col_width_survives_xlsx_reload_and_deferred_hydration() {
 
 #[test]
 fn explicit_default_col_width_wins_over_base_and_missing_values_use_profile_fallback() {
-    for (mdw, explicit_width, fallback_width) in [(7.0, 70.0, 64.0), (8.0, 79.0, 72.0)] {
+    for (mdw, explicit_width, fallback_width) in [(7.0, 65.0, 64.0), (8.0, 74.0, 72.0)] {
         let explicit = explicit_and_base_xlsx();
         let mut explicit_engine = import_directly(&explicit, mdw);
         assert_layout_and_viewport_width(&explicit_engine, explicit_width);

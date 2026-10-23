@@ -127,6 +127,53 @@ pub(super) fn build_axes(spec: &ChartSpec) -> Vec<ChartAxis> {
         }
     }
 
+    // AxisData can contain only the axis edited by a caller. Missing entries
+    // do not remove the other axes required by the chart's generated topology.
+    // In particular, a first axis-title edit must not leave crossAx pointing
+    // to an axis that was omitted from the exported chart.
+    for default in build_default_axes(spec) {
+        if !axes.iter().any(|axis| axis.ax_id == default.ax_id) {
+            axes.push(default);
+        }
+    }
+    // Explicit secondary-axis settings also require their crossing partner,
+    // even when no series has selected the secondary axis yet.
+    if chart_type_requires_axes(&spec.chart_type)
+        && axes
+            .iter()
+            .any(|axis| matches!(axis.ax_id, 333333333 | 444444444))
+    {
+        if !axes.iter().any(|axis| axis.ax_id == 333333333) {
+            let axis_type = if matches!(
+                spec.chart_type,
+                DomainChartType::Scatter | DomainChartType::Bubble
+            ) {
+                AxisType::Value
+            } else {
+                AxisType::Category
+            };
+            axes.push(build_axis_for_slot(
+                spec,
+                &default_axis,
+                AxisSlot::SecondaryCategory,
+                axis_type,
+                333333333,
+                444444444,
+            ));
+        }
+        if !axes.iter().any(|axis| axis.ax_id == 444444444) {
+            axes.push(build_axis_for_slot(
+                spec,
+                &default_axis,
+                AxisSlot::SecondaryValue,
+                AxisType::Value,
+                444444444,
+                333333333,
+            ));
+        }
+    }
+    axes.sort_by_key(|axis| axis.ax_id);
+
     axes
 }
 

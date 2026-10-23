@@ -14,6 +14,20 @@ pub fn set_col_width(
     grid_index: Option<&GridIndex>,
 ) -> Result<(), ComputeError> {
     let default = get_sheet_default_col_width(storage, sheet_id);
+    set_col_width_with_default(storage, sheet_id, col, width, default, grid_index)
+}
+
+/// Runtime callers supply the resolved default for their active font/profile.
+/// A storage-only default cannot decide whether an override is redundant when
+/// a sheet has an unpadded base count or uses a custom runtime pixel fallback.
+pub(crate) fn set_col_width_with_default(
+    storage: &mut WorkbookStorage,
+    sheet_id: &SheetId,
+    col: u32,
+    width: CharWidth,
+    default: CharWidth,
+    grid_index: Option<&GridIndex>,
+) -> Result<(), ComputeError> {
     let Some(id) = grid_index.and_then(|grid| grid.col_id(col)) else {
         return if width == default {
             Ok(())

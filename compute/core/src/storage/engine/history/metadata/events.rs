@@ -3,7 +3,9 @@ use super::*;
 use crate::identity::GridIndex;
 use crate::snapshot::*;
 use crate::storage::{properties, sheet};
-use domain_types::units::{LayoutMetrics, char_width_to_pixels, points_to_pixels};
+use domain_types::units::{
+    CharWidth, LayoutMetrics, char_width_to_pixels, points_to_pixels, resolve_default_column_width,
+};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 #[derive(Debug, Default)]
@@ -210,18 +212,27 @@ pub(crate) fn emit_events(
             }
             MetadataKey::Column(sid, id) => {
                 if let Some(index) = grids.get(&sid).and_then(|grid| grid.col_index(&id)) {
-                    let width = sheet::dimensions::get_col_width_explicit(
+                    let pixels = sheet::dimensions::get_col_width_explicit(
                         storage,
                         &sid,
                         index,
                         grids.get(&sid),
                     )
+                    .map(|width| char_width_to_pixels(width, metrics.column_width_mdw))
                     .unwrap_or_else(|| {
-                        sheet::dimensions::get_sheet_default_col_width(storage, &sid)
+                        storage.sheet_metadata.get(&sid).map_or_else(
+                            || metrics.default_column_width(),
+                            |meta| {
+                                resolve_default_column_width(
+                                    meta.format.default_col_width.map(CharWidth),
+                                    meta.format.base_col_width,
+                                    metrics,
+                                )
+                                .pixels
+                            },
+                        )
                     });
-                    let size = value_types::FiniteF64::new(
-                        char_width_to_pixels(width, metrics.column_width_mdw).0,
-                    );
+                    let size = value_types::FiniteF64::new(pixels.0);
                     effects.format_rects.push((sid, 0, index, u32::MAX, index));
                     effects.result.dimension_changes.push(DimensionChange {
                         sheet_id: sid.to_uuid_string(),

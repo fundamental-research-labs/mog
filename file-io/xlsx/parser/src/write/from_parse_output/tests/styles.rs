@@ -875,8 +875,10 @@ fn styled_column_without_width_uses_base_col_width_as_the_sheet_default() {
     );
     let xml = String::from_utf8(writer.to_xml()).unwrap();
 
+    // baseColWidth counts unpadded characters. At MDW 7, ten characters
+    // plus five pixels of padding serialize to raw OOXML width 10.7109375.
     assert!(
-        xml.contains("width=\"10\""),
+        xml.contains("width=\"10.7109375\""),
         "styled column should take the base-derived sheet default, got: {}",
         &xml[..xml.len().min(2000)]
     );

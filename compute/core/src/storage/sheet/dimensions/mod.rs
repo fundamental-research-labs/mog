@@ -3,6 +3,7 @@
 mod col_visibility;
 mod cols;
 pub(crate) use cols::get_col_width_by_id;
+pub(crate) use cols::set_col_width_with_default;
 mod row_visibility;
 mod rows;
 mod scans;

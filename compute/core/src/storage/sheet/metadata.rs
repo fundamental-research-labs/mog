@@ -248,6 +248,20 @@ impl SheetFormatMetadata {
         )
         .width
     }
+
+    /// Runtime consumers must resolve unpadded base counts with their active
+    /// Normal-font metric rather than the metadata-only canonical fallback.
+    pub(crate) fn effective_default_col_width_with_mdw(
+        &self,
+        mdw: f64,
+    ) -> domain_types::units::CharWidth {
+        domain_types::units::effective_default_column_width_with_mdw(
+            self.default_col_width,
+            self.base_col_width,
+            mdw,
+        )
+        .width
+    }
 }
 
 impl From<&SheetDimensions> for SheetFormatMetadata {

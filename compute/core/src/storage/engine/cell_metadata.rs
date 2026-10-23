@@ -40,8 +40,7 @@ impl StorageCellMetadata {
         storage: &WorkbookStorage,
         layout_metrics: domain_types::units::LayoutMetrics,
     ) -> bool {
-        self.source_revision == storage.metadata_revision()
-            && self.layout_metrics.column_width_mdw == layout_metrics.column_width_mdw
+        self.source_revision == storage.metadata_revision() && self.layout_metrics == layout_metrics
     }
 }
 
@@ -62,6 +61,7 @@ pub(crate) fn provider(
                 ..Default::default()
             };
             sheet.format.default_col_width = metadata.format.default_col_width;
+            sheet.format.base_col_width = metadata.format.base_col_width;
             (*id, sheet)
         })
         .collect();
@@ -209,11 +209,28 @@ impl CellMetadataProvider for StorageCellMetadata {
             0.0
         } else {
             explicit_width.map(|width| width.0).unwrap_or_else(|| {
+                let fallback = domain_types::units::pixels_to_char_width(
+                    self.layout_metrics.default_column_width(),
+                    self.layout_metrics.column_width_mdw,
+                );
                 storage
                     .sheet_metadata
                     .get(sheet)
-                    .map(|metadata| metadata.format.effective_default_col_width().0)
-                    .unwrap_or(dimensions::DEFAULT_COL_WIDTH.0)
+                    .map(|metadata| {
+                        if metadata.format.default_col_width.is_none()
+                            && metadata.format.base_col_width.is_none()
+                        {
+                            fallback.0
+                        } else {
+                            metadata
+                                .format
+                                .effective_default_col_width_with_mdw(
+                                    self.layout_metrics.column_width_mdw,
+                                )
+                                .0
+                        }
+                    })
+                    .unwrap_or(fallback.0)
             })
         };
         Some(CellReferenceMetadata {

@@ -14,18 +14,20 @@
 //!   in the Normal style font, in pixels. For Calibri 11pt: 7px at 96 DPI
 //!   (Windows/Linux), 8px on macOS (Core Text).
 //!
-//! - **PP** (Pixel Padding): `2 * ceil(MDW / 4) + 1`. Accounts for left/right
-//!   cell margin (2× quarter-MDW) plus 1px gridline.
+//! - **Padding**: OOXML column widths already include five pixels for the
+//!   cell margins and gridline. `baseColWidth` is an unpadded character count.
 //!
-//! # Formulas (from ClosedXML's reverse-engineering of Excel behavior)
+//! # Formulas (ISO/IEC 29500, spreadsheet column width)
 //!
 //! ```text
 //! char_width → pixels:
-//!   content_px = trunc(((256 × width + trunc(128 / MDW)) / 256) × MDW)
-//!   total_px   = content_px + PP
+//!   pixels = trunc(((256 × width + trunc(128 / MDW)) / 256) × MDW)
 //!
 //! pixels → char_width:
-//!   width = trunc(((pixels - PP) / MDW) × 256) / 256
+//!   width = trunc((pixels / MDW) × 256) / 256
+//!
+//! unpadded character count → OOXML width:
+//!   width = trunc(((characters × MDW + 5) / MDW) × 256) / 256
 //!
 //! points → pixels:
 //!   pixels = points × DPI / 72        (DPI = 96 for standard screens)
@@ -34,7 +36,7 @@
 //!   points = pixels × 72 / DPI
 //! ```
 //!
-//! Reference: <https://github.com/ClosedXML/ClosedXML/wiki/Cell-Dimensions>
+//! Reference: <https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.spreadsheet.column>
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -128,41 +130,39 @@ pub fn platform_mdw() -> f64 {
 // Column width: character units ↔ pixels
 // =============================================================================
 
-/// Pixel padding for a given MDW.
-///
-/// ECMA-376: PP = 2 × ⌈MDW/4⌉ + 1
-fn pixel_padding(mdw: f64) -> f64 {
-    2.0 * (mdw / 4.0).ceil() + 1.0
-}
+/// The padding is part of stored OOXML widths, not an additional rendered inset.
+const COLUMN_PADDING_PIXELS: f64 = 5.0;
 
 /// Convert OOXML character-width units to pixels.
 ///
-/// Uses the ECMA-376 formula (via ClosedXML reverse-engineering):
-///   content_px = trunc(((256 × width + trunc(128/MDW)) / 256) × MDW)
-///   total_px   = content_px + PP
+/// Stored widths include cell padding. Adding padding here would make imported
+/// columns wider than Excel and make the inverse export narrower than requested.
 pub fn char_width_to_pixels(width: CharWidth, mdw: f64) -> Pixels {
-    let pp = pixel_padding(mdw);
     if width.0 <= 0.0 {
         return Pixels(0.0);
     }
-    let content_px = (((256.0 * width.0 + (128.0_f64 / mdw).trunc()) / 256.0) * mdw).trunc();
-    Pixels(content_px + pp)
+    Pixels((((256.0 * width.0 + (128.0_f64 / mdw).trunc()) / 256.0) * mdw).trunc())
 }
 
 /// Convert pixels to OOXML character-width units.
 ///
 /// Inverse of `char_width_to_pixels`:
-///   width = trunc(((pixels - PP) / MDW) × 256) / 256
+///   width = trunc((pixels / MDW) × 256) / 256
+///
+/// Pixels already contain margins and the gridline. This applies to narrow
+/// widths too; the piecewise UI-character-count conversion is not an OOXML
+/// serialization conversion.
 pub fn pixels_to_char_width(pixels: Pixels, mdw: f64) -> CharWidth {
-    let pp = pixel_padding(mdw);
     if pixels.0 <= 0.0 {
         return CharWidth(0.0);
     }
-    if pixels.0 >= mdw + pp {
-        CharWidth((((pixels.0 - pp) / mdw) * 256.0).trunc() / 256.0)
-    } else {
-        CharWidth((pixels.0 / (mdw + pp) * 256.0).trunc() / 256.0)
-    }
+    CharWidth(((pixels.0 / mdw) * 256.0).trunc() / 256.0)
+}
+
+/// Convert an unpadded Normal-font character count to a stored OOXML width.
+/// `baseColWidth` uses this unit, unlike `defaultColWidth` and explicit widths.
+pub fn character_count_to_char_width(characters: f64, mdw: f64) -> CharWidth {
+    pixels_to_char_width(Pixels(characters * mdw + COLUMN_PADDING_PIXELS), mdw)
 }
 
 // =============================================================================
@@ -193,8 +193,12 @@ pub fn pixels_to_points(px: Pixels) -> Points {
 /// Default row height: 15 points (= 20px at 96 DPI).
 pub const DEFAULT_ROW_HEIGHT: Points = Points(15.0);
 
-/// Default column width: 8.43 character-width units.
-pub const DEFAULT_COL_WIDTH: CharWidth = CharWidth(8.43);
+/// Default visible character count. This is a UI quantity, not an OOXML width.
+pub const DEFAULT_COLUMN_CHARACTER_COUNT: f64 = 8.43;
+
+/// Canonical metadata fallback at MDW 7: visible 8.43 characters, 64 pixels.
+/// Runtime profiles use their actual MDW instead of reusing this stored value.
+pub const DEFAULT_COL_WIDTH: CharWidth = CharWidth(9.140625);
 
 /// Runtime layout metrics used to convert canonical spreadsheet dimensions
 /// into pixels.
@@ -216,7 +220,11 @@ impl LayoutMetrics {
 
         Some(Self {
             column_width_mdw,
-            default_column_width_px: char_width_to_pixels(DEFAULT_COL_WIDTH, column_width_mdw).0,
+            default_column_width_px: char_width_to_pixels(
+                character_count_to_char_width(DEFAULT_COLUMN_CHARACTER_COUNT, column_width_mdw),
+                column_width_mdw,
+            )
+            .0,
             default_row_height_px: points_to_pixels(DEFAULT_ROW_HEIGHT).0,
         })
     }
@@ -274,7 +282,7 @@ pub struct ResolvedDefaultColumnWidth {
     pub source: DefaultColumnWidthSource,
 }
 
-/// A sheet default column width in character units, and the branch that won.
+/// A sheet default width in stored OOXML units, and the branch that won.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EffectiveDefaultColumnWidth {
     pub width: CharWidth,
@@ -290,11 +298,22 @@ pub struct EffectiveDefaultColumnWidth {
 /// This is the one precedence rule for a sheet default width. Callers holding
 /// [`LayoutMetrics`] should prefer [`resolve_default_column_width`], which
 /// reports pixels and honours the layout profile's own fallback; this entry
-/// point serves metadata and serialization surfaces that speak the file
-/// format's character units and hold no layout metrics.
+/// point serves metadata-only surfaces with the canonical MDW 7 fallback.
+/// Runtime consumers must use [`effective_default_column_width_with_mdw`] or
+/// [`resolve_default_column_width`] so base counts use the active font metric.
 pub fn effective_default_column_width(
     default_col_width: Option<f64>,
     base_col_width: Option<u32>,
+) -> EffectiveDefaultColumnWidth {
+    effective_default_column_width_with_mdw(default_col_width, base_col_width, MDW_CALIBRI_11_96DPI)
+}
+
+/// Resolve sheet metadata to raw OOXML width using the supplied font metric.
+/// Original imported metadata is not changed by this calculation.
+pub fn effective_default_column_width_with_mdw(
+    default_col_width: Option<f64>,
+    base_col_width: Option<u32>,
+    mdw: f64,
 ) -> EffectiveDefaultColumnWidth {
     if let Some(width) = default_col_width {
         return EffectiveDefaultColumnWidth {
@@ -305,13 +324,13 @@ pub fn effective_default_column_width(
 
     if let Some(base_width) = base_col_width {
         return EffectiveDefaultColumnWidth {
-            width: CharWidth(f64::from(base_width)),
+            width: character_count_to_char_width(f64::from(base_width), mdw),
             source: DefaultColumnWidthSource::BaseDerived,
         };
     }
 
     EffectiveDefaultColumnWidth {
-        width: DEFAULT_COL_WIDTH,
+        width: character_count_to_char_width(DEFAULT_COLUMN_CHARACTER_COUNT, mdw),
         source: DefaultColumnWidthSource::ProfileFallback,
     }
 }
@@ -329,7 +348,11 @@ pub fn resolve_default_column_width(
     base_col_width: Option<u32>,
     layout_metrics: LayoutMetrics,
 ) -> ResolvedDefaultColumnWidth {
-    let effective = effective_default_column_width(default_col_width.map(|w| w.0), base_col_width);
+    let effective = effective_default_column_width_with_mdw(
+        default_col_width.map(|w| w.0),
+        base_col_width,
+        layout_metrics.column_width_mdw,
+    );
     let pixels = match effective.source {
         DefaultColumnWidthSource::ProfileFallback => layout_metrics.default_column_width(),
         DefaultColumnWidthSource::ExplicitDefault | DefaultColumnWidthSource::BaseDerived => {
@@ -352,16 +375,17 @@ mod tests {
 
     #[test]
     fn default_col_width_windows() {
-        // 8.43 chars @ MDW=7 should give 64 pixels
-        let px = char_width_to_pixels(CharWidth(8.43), MDW_CALIBRI_11_96DPI);
+        // The canonical stored width includes padding for 8.43 visible chars.
+        let px = char_width_to_pixels(DEFAULT_COL_WIDTH, MDW_CALIBRI_11_96DPI);
         assert_eq!(px, Pixels(64.0));
     }
 
     #[test]
-    fn default_col_width_macos() {
-        // 8.43 chars @ MDW=8 should give 72 pixels
+    fn explicit_stored_width_uses_active_mdw_without_extra_padding() {
+        // 8.43 is a raw stored width here, not a UI character count.
         let px = char_width_to_pixels(CharWidth(8.43), MDW_CALIBRI_11_MACOS);
-        assert_eq!(px, Pixels(72.0));
+        assert_eq!(px, Pixels(67.0));
+        assert_eq!(char_width_to_pixels(CharWidth(8.43), 7.0), Pixels(59.0));
     }
 
     #[test]
@@ -427,7 +451,7 @@ mod tests {
     fn effective_default_column_width_falls_back_to_base_character_count() {
         let effective = effective_default_column_width(None, Some(10));
 
-        assert_eq!(effective.width, CharWidth(10.0));
+        assert_eq!(effective.width, CharWidth(10.7109375));
         assert_eq!(effective.source, DefaultColumnWidthSource::BaseDerived);
     }
 
@@ -444,20 +468,17 @@ mod tests {
         // The metadata surfaces resolve in character units and the layout index
         // resolves in pixels; a sheet carrying only `baseColWidth` must not get
         // two different answers.
-        let metrics = LayoutMetrics::from_column_width_mdw(MDW_CALIBRI_11_96DPI).unwrap();
-        for (default_width, base_width) in
-            [(Some(9.25), Some(10)), (None, Some(10)), (None, None)]
-        {
-            let chars = effective_default_column_width(default_width, base_width);
-            let pixels =
-                resolve_default_column_width(default_width.map(CharWidth), base_width, metrics);
+        for mdw in [7.0, 8.0] {
+            let metrics = LayoutMetrics::from_column_width_mdw(mdw).unwrap();
+            for (default_width, base_width) in
+                [(Some(9.25), Some(10)), (None, Some(10)), (None, None)]
+            {
+                let chars = effective_default_column_width_with_mdw(default_width, base_width, mdw);
+                let pixels =
+                    resolve_default_column_width(default_width.map(CharWidth), base_width, metrics);
 
-            assert_eq!(chars.source, pixels.source);
-            if chars.source != DefaultColumnWidthSource::ProfileFallback {
-                assert_eq!(
-                    pixels.pixels,
-                    char_width_to_pixels(chars.width, MDW_CALIBRI_11_96DPI)
-                );
+                assert_eq!(chars.source, pixels.source);
+                assert_eq!(pixels.pixels, char_width_to_pixels(chars.width, mdw));
             }
         }
     }
@@ -490,7 +511,7 @@ mod tests {
         let mdw = MDW_CALIBRI_11_MACOS;
         let original = CharWidth(8.43);
         let px = char_width_to_pixels(original, mdw);
-        assert_eq!(px, Pixels(72.0));
+        assert_eq!(px, Pixels(67.0));
         let back = pixels_to_char_width(px, mdw);
         assert!((back.0 - original.0).abs() < 0.1, "got {back}");
     }
@@ -498,13 +519,97 @@ mod tests {
     #[test]
     fn wide_column() {
         let px = char_width_to_pixels(CharWidth(20.0), MDW_CALIBRI_11_96DPI);
-        assert_eq!(px, Pixels(145.0));
+        assert_eq!(px, Pixels(140.0));
     }
 
     #[test]
     fn narrow_column() {
         let px = char_width_to_pixels(CharWidth(1.0), MDW_CALIBRI_11_96DPI);
-        assert_eq!(px, Pixels(12.0));
+        assert_eq!(px, Pixels(7.0));
+    }
+
+    #[test]
+    fn iso_stored_width_example_already_includes_padding() {
+        // ISO/IEC 29500: eight visible characters, MDW 7, five padding pixels.
+        assert_eq!(
+            character_count_to_char_width(8.0, 7.0),
+            CharWidth(8.7109375)
+        );
+        assert_eq!(
+            char_width_to_pixels(CharWidth(8.7109375), 7.0),
+            Pixels(61.0)
+        );
+        assert_eq!(character_count_to_char_width(8.0, 8.0), CharWidth(8.625));
+        assert_eq!(char_width_to_pixels(CharWidth(8.625), 8.0), Pixels(69.0));
+    }
+
+    #[test]
+    fn explicit_pixel_widths_do_not_lose_padding_during_export() {
+        assert_eq!(
+            pixels_to_char_width(Pixels(32.0), 7.0),
+            CharWidth(4.5703125)
+        );
+        assert_eq!(pixels_to_char_width(Pixels(32.0), 8.0), CharWidth(4.0));
+        assert_eq!(
+            char_width_to_pixels(CharWidth(4.5703125), 7.0),
+            Pixels(32.0)
+        );
+    }
+
+    #[test]
+    fn integer_pixel_widths_roundtrip_including_narrow_columns() {
+        for mdw in [7.0, 8.0] {
+            for pixels in 0..=300 {
+                let pixels = Pixels(f64::from(pixels));
+                let stored = pixels_to_char_width(pixels, mdw);
+                assert_eq!(char_width_to_pixels(stored, mdw), pixels);
+            }
+        }
+    }
+
+    #[test]
+    fn fractional_raw_widths_use_the_same_ooxml_conversion() {
+        assert_eq!(char_width_to_pixels(CharWidth(0.5), 7.0), Pixels(3.0));
+        assert_eq!(char_width_to_pixels(CharWidth(0.5), 8.0), Pixels(4.0));
+        assert_eq!(char_width_to_pixels(CharWidth(0.125), 7.0), Pixels(1.0));
+        assert_eq!(char_width_to_pixels(CharWidth(0.125), 8.0), Pixels(1.0));
+        assert_eq!(pixels_to_char_width(Pixels(1.0), 7.0), CharWidth(0.140625));
+        assert_eq!(pixels_to_char_width(Pixels(1.0), 8.0), CharWidth(0.125));
+    }
+
+    #[test]
+    fn nonpositive_widths_remain_zero_and_invalid_profiles_are_rejected() {
+        for width in [0.0, -1.0] {
+            assert_eq!(char_width_to_pixels(CharWidth(width), 7.0), Pixels(0.0));
+            assert_eq!(pixels_to_char_width(Pixels(width), 7.0), CharWidth(0.0));
+        }
+        for mdw in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert_eq!(LayoutMetrics::from_column_width_mdw(mdw), None);
+        }
+    }
+
+    #[test]
+    fn base_count_and_same_numeric_stored_width_are_different_units() {
+        for (mdw, explicit_pixels, base_pixels) in [(7.0, 70.0, 75.0), (8.0, 80.0, 85.0)] {
+            let metrics = LayoutMetrics::from_column_width_mdw(mdw).unwrap();
+            assert_eq!(
+                resolve_default_column_width(Some(CharWidth(10.0)), None, metrics).pixels,
+                Pixels(explicit_pixels)
+            );
+            assert_eq!(
+                resolve_default_column_width(None, Some(10), metrics).pixels,
+                Pixels(base_pixels)
+            );
+        }
+    }
+
+    #[test]
+    fn resolving_default_does_not_rewrite_explicit_raw_width() {
+        for mdw in [7.0, 8.0] {
+            let explicit = effective_default_column_width_with_mdw(Some(8.83203125), Some(10), mdw);
+            assert_eq!(explicit.width, CharWidth(8.83203125));
+            assert_eq!(explicit.source, DefaultColumnWidthSource::ExplicitDefault);
+        }
     }
 
     #[test]

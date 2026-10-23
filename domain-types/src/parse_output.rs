@@ -1797,7 +1797,10 @@ impl SheetDimensions {
     /// The sheet's effective default column width in character units.
     ///
     /// `defaultColWidth` wins, then `baseColWidth`, then the workbook default.
-    /// Serialization and metadata surfaces must use this rather than reading
+    /// This metadata-only helper uses the canonical MDW 7 profile when deriving
+    /// an OOXML width from an unpadded base count. Runtime layout must resolve
+    /// using its supplied metric instead. Serialization and metadata surfaces
+    /// must use this rather than reading
     /// `default_col_width` directly, or a sheet that carries only
     /// `baseColWidth` silently falls back to the workbook default.
     pub fn effective_default_col_width(&self) -> crate::units::CharWidth {

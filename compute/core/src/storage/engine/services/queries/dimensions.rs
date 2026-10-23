@@ -207,10 +207,20 @@ pub(in crate::storage::engine) fn get_default_col_width(
 ) -> CharWidth {
     let mdw = stores.layout_metrics.column_width_mdw;
     stores.storage.sheet_metadata.get(sheet_id).map_or_else(
-        || domain_types::units::pixels_to_char_width(stores.layout_metrics.default_column_width(), mdw),
+        || {
+            domain_types::units::pixels_to_char_width(
+                stores.layout_metrics.default_column_width(),
+                mdw,
+            )
+        },
         |metadata| {
-            if metadata.format.default_col_width.is_none() && metadata.format.base_col_width.is_none() {
-                domain_types::units::pixels_to_char_width(stores.layout_metrics.default_column_width(), mdw)
+            if metadata.format.default_col_width.is_none()
+                && metadata.format.base_col_width.is_none()
+            {
+                domain_types::units::pixels_to_char_width(
+                    stores.layout_metrics.default_column_width(),
+                    mdw,
+                )
             } else {
                 metadata.format.effective_default_col_width_with_mdw(mdw)
             }
@@ -254,7 +264,11 @@ pub(in crate::storage::engine) fn get_col_width_chars_query(
 ) -> CharWidth {
     let grid = stores.grid_indexes.get(sheet_id);
     if sheet_dimensions::is_column_hidden(&stores.storage, sheet_id, col, grid)
-        || !crate::storage::sheet::grouping::is_column_visible_by_groups(&stores.storage, sheet_id, col)
+        || !crate::storage::sheet::grouping::is_column_visible_by_groups(
+            &stores.storage,
+            sheet_id,
+            col,
+        )
     {
         return CharWidth(0.0);
     }

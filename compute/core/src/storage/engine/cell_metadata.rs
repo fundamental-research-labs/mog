@@ -40,8 +40,7 @@ impl StorageCellMetadata {
         storage: &WorkbookStorage,
         layout_metrics: domain_types::units::LayoutMetrics,
     ) -> bool {
-        self.source_revision == storage.metadata_revision()
-            && self.layout_metrics == layout_metrics
+        self.source_revision == storage.metadata_revision() && self.layout_metrics == layout_metrics
     }
 }
 
@@ -225,7 +224,9 @@ impl CellMetadataProvider for StorageCellMetadata {
                         } else {
                             metadata
                                 .format
-                                .effective_default_col_width_with_mdw(self.layout_metrics.column_width_mdw)
+                                .effective_default_col_width_with_mdw(
+                                    self.layout_metrics.column_width_mdw,
+                                )
                                 .0
                         }
                     })

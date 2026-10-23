@@ -81,8 +81,14 @@ fn base_col_width_supplies_the_sheet_default_when_default_col_width_is_absent() 
 
     // This low-level metadata surface has no runtime profile, so it uses the
     // documented canonical MDW 7 fallback to include the base-count padding.
-    assert_eq!(get_sheet_default_col_width(&storage, &sid), CharWidth(10.7109375));
-    assert_eq!(get_col_width(&storage, &sid, 0, Some(&gi)), CharWidth(10.7109375));
+    assert_eq!(
+        get_sheet_default_col_width(&storage, &sid),
+        CharWidth(10.7109375)
+    );
+    assert_eq!(
+        get_col_width(&storage, &sid, 0, Some(&gi)),
+        CharWidth(10.7109375)
+    );
 }
 
 #[test]

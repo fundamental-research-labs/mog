@@ -223,7 +223,8 @@ impl LayoutMetrics {
             default_column_width_px: char_width_to_pixels(
                 character_count_to_char_width(DEFAULT_COLUMN_CHARACTER_COUNT, column_width_mdw),
                 column_width_mdw,
-            ).0,
+            )
+            .0,
             default_row_height_px: points_to_pixels(DEFAULT_ROW_HEIGHT).0,
         })
     }
@@ -304,11 +305,7 @@ pub fn effective_default_column_width(
     default_col_width: Option<f64>,
     base_col_width: Option<u32>,
 ) -> EffectiveDefaultColumnWidth {
-    effective_default_column_width_with_mdw(
-        default_col_width,
-        base_col_width,
-        MDW_CALIBRI_11_96DPI,
-    )
+    effective_default_column_width_with_mdw(default_col_width, base_col_width, MDW_CALIBRI_11_96DPI)
 }
 
 /// Resolve sheet metadata to raw OOXML width using the supplied font metric.
@@ -534,17 +531,29 @@ mod tests {
     #[test]
     fn iso_stored_width_example_already_includes_padding() {
         // ISO/IEC 29500: eight visible characters, MDW 7, five padding pixels.
-        assert_eq!(character_count_to_char_width(8.0, 7.0), CharWidth(8.7109375));
-        assert_eq!(char_width_to_pixels(CharWidth(8.7109375), 7.0), Pixels(61.0));
+        assert_eq!(
+            character_count_to_char_width(8.0, 7.0),
+            CharWidth(8.7109375)
+        );
+        assert_eq!(
+            char_width_to_pixels(CharWidth(8.7109375), 7.0),
+            Pixels(61.0)
+        );
         assert_eq!(character_count_to_char_width(8.0, 8.0), CharWidth(8.625));
         assert_eq!(char_width_to_pixels(CharWidth(8.625), 8.0), Pixels(69.0));
     }
 
     #[test]
     fn explicit_pixel_widths_do_not_lose_padding_during_export() {
-        assert_eq!(pixels_to_char_width(Pixels(32.0), 7.0), CharWidth(4.5703125));
+        assert_eq!(
+            pixels_to_char_width(Pixels(32.0), 7.0),
+            CharWidth(4.5703125)
+        );
         assert_eq!(pixels_to_char_width(Pixels(32.0), 8.0), CharWidth(4.0));
-        assert_eq!(char_width_to_pixels(CharWidth(4.5703125), 7.0), Pixels(32.0));
+        assert_eq!(
+            char_width_to_pixels(CharWidth(4.5703125), 7.0),
+            Pixels(32.0)
+        );
     }
 
     #[test]
@@ -583,8 +592,14 @@ mod tests {
     fn base_count_and_same_numeric_stored_width_are_different_units() {
         for (mdw, explicit_pixels, base_pixels) in [(7.0, 70.0, 75.0), (8.0, 80.0, 85.0)] {
             let metrics = LayoutMetrics::from_column_width_mdw(mdw).unwrap();
-            assert_eq!(resolve_default_column_width(Some(CharWidth(10.0)), None, metrics).pixels, Pixels(explicit_pixels));
-            assert_eq!(resolve_default_column_width(None, Some(10), metrics).pixels, Pixels(base_pixels));
+            assert_eq!(
+                resolve_default_column_width(Some(CharWidth(10.0)), None, metrics).pixels,
+                Pixels(explicit_pixels)
+            );
+            assert_eq!(
+                resolve_default_column_width(None, Some(10), metrics).pixels,
+                Pixels(base_pixels)
+            );
         }
     }
 

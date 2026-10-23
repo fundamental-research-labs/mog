@@ -559,6 +559,27 @@ mod tests {
     }
 
     #[test]
+    fn fractional_raw_widths_use_the_same_ooxml_conversion() {
+        assert_eq!(char_width_to_pixels(CharWidth(0.5), 7.0), Pixels(3.0));
+        assert_eq!(char_width_to_pixels(CharWidth(0.5), 8.0), Pixels(4.0));
+        assert_eq!(char_width_to_pixels(CharWidth(0.125), 7.0), Pixels(1.0));
+        assert_eq!(char_width_to_pixels(CharWidth(0.125), 8.0), Pixels(1.0));
+        assert_eq!(pixels_to_char_width(Pixels(1.0), 7.0), CharWidth(0.140625));
+        assert_eq!(pixels_to_char_width(Pixels(1.0), 8.0), CharWidth(0.125));
+    }
+
+    #[test]
+    fn nonpositive_widths_remain_zero_and_invalid_profiles_are_rejected() {
+        for width in [0.0, -1.0] {
+            assert_eq!(char_width_to_pixels(CharWidth(width), 7.0), Pixels(0.0));
+            assert_eq!(pixels_to_char_width(Pixels(width), 7.0), CharWidth(0.0));
+        }
+        for mdw in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert_eq!(LayoutMetrics::from_column_width_mdw(mdw), None);
+        }
+    }
+
+    #[test]
     fn base_count_and_same_numeric_stored_width_are_different_units() {
         for (mdw, explicit_pixels, base_pixels) in [(7.0, 70.0, 75.0), (8.0, 80.0, 85.0)] {
             let metrics = LayoutMetrics::from_column_width_mdw(mdw).unwrap();

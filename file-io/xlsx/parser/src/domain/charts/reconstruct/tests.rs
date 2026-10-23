@@ -22,6 +22,7 @@ mod point_format_fidelity;
 mod scatter;
 mod series_shadow_fidelity;
 mod shape_preservation;
+mod sparse_axes;
 mod surface;
 mod title_overlay_fidelity;
 mod title_rich_text_fidelity;

@@ -56,6 +56,7 @@ fn base_only_queries_match_index_and_keep_original_metadata() {
         assert_eq!(engine.get_col_width_from_index(&sheet, 0), expected);
         assert_eq!(engine.get_col_width_chars_query(&sheet, 0), raw);
         assert_eq!(engine.get_default_col_width_chars(&sheet), raw);
+        assert_eq!(engine.get_sheet_meta(&sheet).unwrap().default_col_width, raw);
         assert_eq!(engine.get_col_widths_batch(&sheet, 0, 1), vec![(0, expected), (1, expected)]);
         assert_eq!(engine.get_col_widths_batch_chars(&sheet, 0, 1), vec![(0, raw), (1, raw)]);
         let exported = engine.export_to_parse_output().unwrap().parse_output;
@@ -76,6 +77,7 @@ fn explicit_raw_default_is_not_reinterpreted_as_a_base_count() {
         assert_eq!(engine.get_col_width_query(&sheet, 0), expected);
         assert_eq!(engine.get_col_width_from_index(&sheet, 0), expected);
         assert_eq!(engine.get_default_col_width(&sheet), expected);
+        assert_eq!(engine.get_sheet_meta(&sheet).unwrap().default_col_width, 9.25);
         let exported = engine.export_to_parse_output().unwrap().parse_output;
         assert_eq!(exported.sheets[0].dimensions.default_col_width, Some(9.25));
         assert_eq!(exported.sheets[0].dimensions.base_col_width, Some(10));
@@ -101,14 +103,37 @@ fn pixel_setter_exports_raw_width_that_roundtrips_to_requested_pixels() {
 
 #[test]
 fn profile_fallback_pixels_and_created_sheet_defaults_are_preserved() {
-    for (mdw, expected) in [(7.0, 64.0), (8.0, 72.0)] {
+    for (mdw, expected, raw) in [(7.0, 64.0, 9.140625), (8.0, 72.0, 9.0)] {
         let (imported, sheet) = import(&fixture(SheetDimensions::default()), mdw);
         assert_eq!(imported.get_col_width_query(&sheet, 0), expected);
         assert_eq!(imported.get_col_width_from_index(&sheet, 0), expected);
+        assert_eq!(imported.get_sheet_meta(&sheet).unwrap().default_col_width, raw);
         let mut created = blank(mdw);
         created.create_sheet("Created").unwrap();
         let sheet = *created.cell_store().sheet_ids().next().unwrap();
         assert_eq!(created.get_col_width_query(&sheet, 0), expected);
         assert_eq!(created.get_col_width_from_index(&sheet, 0), expected);
+        assert_eq!(created.get_sheet_meta(&sheet).unwrap().default_col_width, raw);
     }
+}
+
+#[test]
+fn runtime_sheet_metadata_uses_custom_profile_fallback() {
+    let (mut engine, _) = ComputeEngine::from_snapshot_with_layout_metrics(
+        WorkbookSnapshot::default(),
+        LayoutMetrics {
+            column_width_mdw: 9.0,
+            default_column_width_px: 123.0,
+            default_row_height_px: 20.0,
+        },
+    )
+    .unwrap();
+    engine
+        .import_from_xlsx_bytes_no_recalc(&fixture(SheetDimensions::default()))
+        .unwrap();
+    let sheet = *engine.cell_store().sheet_ids().next().unwrap();
+    assert_eq!(engine.get_default_col_width(&sheet), 123.0);
+    assert_eq!(engine.get_col_width_from_index(&sheet, 0), 123.0);
+    assert_eq!(engine.get_default_col_width_chars(&sheet), 13.6640625);
+    assert_eq!(engine.get_sheet_meta(&sheet).unwrap().default_col_width, 13.6640625);
 }

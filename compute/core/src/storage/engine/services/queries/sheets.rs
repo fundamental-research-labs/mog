@@ -144,7 +144,11 @@ pub(in crate::storage::engine) fn get_sheet_meta(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Option<SheetMeta> {
-    properties::get_sheet_meta(&stores.storage, sheet_id)
+    let mut metadata = properties::get_sheet_meta(&stores.storage, sheet_id)?;
+    // The storage-only projection has no font metrics. Runtime metadata must
+    // use the same active-MDW and profile fallback as the dimension queries.
+    metadata.default_col_width = super::get_default_col_width(stores, sheet_id).0;
+    Some(metadata)
 }
 
 pub(in crate::storage::engine) fn has_sheet_protection_password(

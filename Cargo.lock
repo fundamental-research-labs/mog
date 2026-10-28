@@ -1211,6 +1211,7 @@ name = "mog"
 version = "1.0.0"
 dependencies = [
  "compute-api",
+ "compute-parser",
  "domain-types",
  "errno",
  "libc",

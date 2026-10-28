@@ -2297,7 +2297,7 @@ impl Host {
                         continue;
                     }
                     let write_property = WriteProperty::from_name(&property)?;
-                    let mut grid = json_to_write_grid(&value, write_property)?;
+                    let mut grid = json_to_write_grid(&value)?;
                     let bounds =
                         crate::range_navigation::parse_range_address(&range.sheet, address)
                             .map_err(|error| BatchError {
@@ -2333,6 +2333,13 @@ impl Host {
                             }
                         }
                     }
+                    prepare_formula_inputs(
+                        &self.workbook,
+                        &range.sheet,
+                        bounds,
+                        write_property,
+                        &mut grid,
+                    )?;
                     range
                         .sheet
                         .set_range_typed(address, &grid)
@@ -3295,10 +3302,7 @@ fn unsupported_load_property(object: &str, property: &str) -> BatchError {
     }
 }
 
-fn json_to_write_grid(
-    value: &Value,
-    property: WriteProperty,
-) -> Result<Vec<Vec<Option<CellInput>>>, BatchError> {
+fn json_to_write_grid(value: &Value) -> Result<Vec<Vec<Option<CellInput>>>, BatchError> {
     let rows = value.as_array().ok_or_else(|| BatchError {
         code: "InvalidArgument",
         message: "Range.values and Range.formulas require a 2-dimensional array".to_string(),
@@ -3311,17 +3315,14 @@ fn json_to_write_grid(
         })?;
         let mut out_row = Vec::with_capacity(cells.len());
         for cell in cells {
-            out_row.push(js_cell_to_write(cell, property)?);
+            out_row.push(js_cell_to_write(cell)?);
         }
         grid.push(out_row);
     }
     Ok(grid)
 }
 
-fn js_cell_to_write(
-    value: &Value,
-    property: WriteProperty,
-) -> Result<Option<CellInput>, BatchError> {
+fn js_cell_to_write(value: &Value) -> Result<Option<CellInput>, BatchError> {
     match value {
         // Microsoft documents null entries in a 2-D property payload as
         // preserve-cell sentinels. They must never become clear intents.
@@ -3338,9 +3339,6 @@ fn js_cell_to_write(
                 message: "Range values must contain finite JavaScript numbers".to_string(),
             }),
         Value::String(value) if value.is_empty() => Ok(Some(CellInput::Clear)),
-        Value::String(value) if has_formula_intent(value, property) => {
-            Ok(Some(CellInput::formula(value)))
-        }
         Value::String(value) => Ok(Some(CellInput::Parse {
             text: value.clone(),
         })),
@@ -3363,6 +3361,80 @@ fn has_formula_intent(value: &str, property: WriteProperty) -> bool {
         // values and retain their JavaScript string type.
         WriteProperty::Formulas => value.starts_with('='),
     }
+}
+
+fn prepare_formula_inputs(
+    workbook: &Workbook,
+    sheet: &Sheet,
+    bounds: (u32, u32, u32, u32),
+    property: WriteProperty,
+    grid: &mut [Vec<Option<CellInput>>],
+) -> Result<(), BatchError> {
+    if !grid.iter().flatten().any(|input| {
+        matches!(input, Some(CellInput::Parse { text }) if text.trim().starts_with('=') || has_formula_intent(text, property))
+    }) {
+        return Ok(());
+    }
+    let sheet_names = workbook.sheet_names().map_err(engine_error)?;
+    let names: Vec<&str> = sheet_names.iter().map(String::as_str).collect();
+    let tables = sheet.tables().get_all().map_err(engine_error)?;
+    for (row_offset, row) in grid.iter_mut().enumerate() {
+        for (col_offset, input) in row.iter_mut().enumerate() {
+            let Some(CellInput::Parse { text }) = input else {
+                continue;
+            };
+            let needs_prefix = has_formula_intent(text, property) && !text.starts_with('=');
+            if !needs_prefix && !text.trim().starts_with('=') {
+                continue;
+            }
+            let row = bounds.0 + row_offset as u32;
+            let col = bounds.1 + col_offset as u32;
+            let formula = if needs_prefix {
+                format!("={text}")
+            } else {
+                text.trim().to_owned()
+            };
+            let table_name = tables
+                .iter()
+                .find(|table| {
+                    row >= table.range.start_row()
+                        && row <= table.range.end_row()
+                        && col >= table.range.start_col()
+                        && col <= table.range.end_col()
+                })
+                .map(|table| table.name.as_str());
+            let qualified = compute_parser::qualify_implicit_structured_refs(&formula, table_name);
+            let normalized = compute_parser::normalize_formula_input(&qualified, &names);
+            let error = compute_parser::parse_formula(&normalized, None).err();
+            if (needs_prefix || error.is_some())
+                && sheet
+                    .formats()
+                    .get_cell_format(row, col)
+                    .map_err(engine_error)?
+                    .number_format
+                    .as_deref()
+                    == Some("@")
+            {
+                *input = Some(CellInput::Literal { text: text.clone() });
+                continue;
+            }
+            if let Some(error) = error {
+                return Err(BatchError {
+                    code: "InvalidArgument",
+                    message: format!(
+                        "Invalid formula at {}!{}: {}. For a literal text note, set numberFormat to '@' before writing values, or prefix the text with an apostrophe.",
+                        sheet.name().map_err(engine_error)?,
+                        crate::range_navigation::cell_name(row, col),
+                        error,
+                    ),
+                });
+            }
+            if needs_prefix {
+                *input = Some(CellInput::formula(text));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn range_values_json(sheet: &Sheet, bounds: (u32, u32, u32, u32)) -> Result<Value, BatchError> {

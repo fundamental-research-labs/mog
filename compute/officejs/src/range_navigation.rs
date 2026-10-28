@@ -988,7 +988,7 @@ fn expect_arg_count(
     Ok(())
 }
 
-fn cell_name(row: u32, column: u32) -> String {
+pub(crate) fn cell_name(row: u32, column: u32) -> String {
     format!("{}{}", column_name(column), row + 1)
 }
 

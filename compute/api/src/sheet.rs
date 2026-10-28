@@ -263,14 +263,10 @@ impl Sheet {
     ) -> Result<Option<String>, ComputeApiError> {
         let (row, col) = addr.into().resolve()?;
         let sid = self.sheet_id;
-        let raw = self
-            .dispatch
-            .query_engine(move |e| e.get_raw_value(&sid, row, col))?;
-        if raw.starts_with('=') {
-            Ok(Some(raw))
-        } else {
-            Ok(None)
-        }
+        self.dispatch.query_engine(move |e| {
+            e.get_raw_cell_data(&sid, row, col, true)
+                .and_then(|cell| cell.formula)
+        })
     }
 
     /// Get the semantic value of a cell: computed value for formula cells, raw value otherwise.

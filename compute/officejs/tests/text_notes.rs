@@ -70,7 +70,7 @@ fn explicit_text_notes_survive_export_without_formula_records() {
             .unwrap(),
     )
     .unwrap();
-    assert!(!xml.contains("<f>"), "{xml}");
+    assert!(!xml.contains("<f"), "{xml}");
     let reopened = Workbook::from_xlsx_bytes(&bytes).unwrap().0;
     let sheet = reopened.sheet_by_name("Sheet1").unwrap();
     for address in ["N23", "N24"] {

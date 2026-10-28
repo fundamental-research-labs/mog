@@ -1,4 +1,5 @@
 use super::helpers::{current_timestamp, indices_to_cell_ref, parse_cell_ref};
+use super::namespaces::{MC_NS, SPREADSHEETML_NS, XR_NS};
 use super::*;
 use domain_types::domain::comment::CommentType;
 
@@ -641,4 +642,117 @@ fn test_dispatch_threaded_reply_uses_own_comment_id() {
     assert!(threaded_str.contains(r#"id="thread-root""#));
     assert!(threaded_str.contains(r#"id="reply-001""#));
     assert!(threaded_str.contains(r#"parentId="thread-root""#));
+}
+
+// -------------------------------------------------------------------------
+// Preserved `<comments>` roots must still bind the `xr` prefix
+// -------------------------------------------------------------------------
+
+const XR_TEST_THREAD_ID: &str = "{6F9619FF-8B86-D011-B42D-00C04FC964FF}";
+
+fn threaded_comment_for_xr_tests() -> domain_types::Comment {
+    domain_types::Comment {
+        id: XR_TEST_THREAD_ID.to_string(),
+        cell_ref: "A1".to_string(),
+        author: "Synthetic Reviewer".to_string(),
+        content: Some("Synthetic note".to_string()),
+        comment_type: CommentType::ThreadedComment,
+        thread_id: Some(XR_TEST_THREAD_ID.to_string()),
+        ..Default::default()
+    }
+}
+
+fn comments_root(xml: &str) -> &str {
+    let start = xml.find("<comments").expect("comments root");
+    let end = start + xml[start..].find('>').expect("root end");
+    &xml[start..=end]
+}
+
+#[test]
+fn test_preserved_root_without_xr_declares_xr_for_threaded_uid() {
+    let main_only = vec![("xmlns".to_string(), SPREADSHEETML_NS.to_string())];
+    let (legacy_xml, _vml) = comments_from_domain(
+        1,
+        &[threaded_comment_for_xr_tests()],
+        None,
+        Some(&main_only),
+        None,
+    );
+    let xml = String::from_utf8(legacy_xml).expect("utf8");
+    assert!(xml.contains(&format!("xr:uid=\"{XR_TEST_THREAD_ID}\"")), "{xml}");
+    let root = comments_root(&xml);
+    assert_eq!(
+        root,
+        format!(
+            "<comments xmlns=\"{SPREADSHEETML_NS}\" xmlns:mc=\"{MC_NS}\" mc:Ignorable=\"xr\" xmlns:xr=\"{XR_NS}\">"
+        )
+    );
+}
+
+#[test]
+fn test_preserved_root_appends_xr_to_existing_ignorable() {
+    let attrs = vec![
+        ("xmlns".to_string(), SPREADSHEETML_NS.to_string()),
+        ("xmlns:mc".to_string(), MC_NS.to_string()),
+        ("mc:Ignorable".to_string(), "x14ac".to_string()),
+        (
+            "xmlns:x14ac".to_string(),
+            "http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac".to_string(),
+        ),
+    ];
+    let (legacy_xml, _vml) = comments_from_domain(
+        1,
+        &[threaded_comment_for_xr_tests()],
+        None,
+        Some(&attrs),
+        None,
+    );
+    let xml = String::from_utf8(legacy_xml).expect("utf8");
+    let root = comments_root(&xml);
+    assert!(root.contains("mc:Ignorable=\"x14ac xr\""), "{root}");
+    assert_eq!(root.matches("xmlns:mc=").count(), 1, "{root}");
+    assert!(root.contains(&format!("xmlns:xr=\"{XR_NS}\"")), "{root}");
+}
+
+#[test]
+fn test_preserved_root_with_xr_is_replayed_verbatim() {
+    let attrs = vec![
+        ("xmlns".to_string(), SPREADSHEETML_NS.to_string()),
+        ("xmlns:xr".to_string(), XR_NS.to_string()),
+        ("xmlns:mc".to_string(), MC_NS.to_string()),
+        ("mc:Ignorable".to_string(), "xr".to_string()),
+    ];
+    let (legacy_xml, _vml) = comments_from_domain(
+        1,
+        &[threaded_comment_for_xr_tests()],
+        None,
+        Some(&attrs),
+        None,
+    );
+    let xml = String::from_utf8(legacy_xml).expect("utf8");
+    assert_eq!(
+        comments_root(&xml),
+        format!(
+            "<comments xmlns=\"{SPREADSHEETML_NS}\" xmlns:xr=\"{XR_NS}\" xmlns:mc=\"{MC_NS}\" mc:Ignorable=\"xr\">"
+        )
+    );
+}
+
+#[test]
+fn test_preserved_root_without_xr_uid_is_unchanged() {
+    let main_only = vec![("xmlns".to_string(), SPREADSHEETML_NS.to_string())];
+    let note = domain_types::Comment {
+        id: "note-1".to_string(),
+        cell_ref: "A1".to_string(),
+        author: "Synthetic Author".to_string(),
+        content: Some("Synthetic note".to_string()),
+        comment_type: CommentType::Note,
+        ..Default::default()
+    };
+    let (legacy_xml, _vml) = comments_from_domain(1, &[note], None, Some(&main_only), None);
+    let xml = String::from_utf8(legacy_xml).expect("utf8");
+    assert_eq!(
+        comments_root(&xml),
+        format!("<comments xmlns=\"{SPREADSHEETML_NS}\">")
+    );
 }

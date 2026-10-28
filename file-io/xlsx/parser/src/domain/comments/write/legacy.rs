@@ -138,8 +138,12 @@ impl CommentsWriter {
             .iter()
             .any(|c| c.comment_pr.as_ref().and_then(|pr| pr.anchor).is_some());
         if !self.root_namespace_attrs.is_empty() {
-            // Emit root namespace declarations from the original file.
-            for (attr_name, attr_value) in &self.root_namespace_attrs {
+            // Emit root namespace declarations from the original file, adding
+            // the `xr` binding when a comment writes `xr:uid` but the original
+            // root never declared that prefix (for example a threaded comment
+            // whose legacy `<comments>` root only bound the main namespace).
+            // Without it the part is not well-formed XML and Excel repairs it.
+            for (attr_name, attr_value) in &self.root_attrs_with_required_xr() {
                 w.attr(attr_name, attr_value);
             }
         } else {
@@ -193,6 +197,49 @@ impl CommentsWriter {
     /// Generate VML drawing for comment shapes
     pub fn to_vml(&self) -> Vec<u8> {
         vml::write_vml(&self.shapes)
+    }
+
+    /// Preserved root attributes, plus an `xr` binding (and an `mc:Ignorable`
+    /// token for it) when some comment writes `xr:uid` and the preserved root
+    /// does not already declare `xmlns:xr`.
+    fn root_attrs_with_required_xr(&self) -> Vec<(String, String)> {
+        let mut attrs = self.root_namespace_attrs.clone();
+        let needs_xr = self.comments.iter().any(|c| c.xr_uid.is_some())
+            && !attrs.iter().any(|(name, _)| name == "xmlns:xr");
+        if !needs_xr {
+            return attrs;
+        }
+        let mc_prefix = attrs.iter().find_map(|(name, value)| {
+            name.strip_prefix("xmlns:")
+                .filter(|_| value == MC_NS)
+                .map(str::to_owned)
+        });
+        match mc_prefix {
+            Some(prefix) => {
+                let ignorable_name = format!("{prefix}:Ignorable");
+                if let Some((_, value)) =
+                    attrs.iter_mut().find(|(name, _)| *name == ignorable_name)
+                {
+                    if !value.split_whitespace().any(|token| token == "xr") {
+                        if !value.trim().is_empty() {
+                            value.push(' ');
+                        }
+                        value.push_str("xr");
+                    }
+                } else {
+                    attrs.push((ignorable_name, "xr".to_string()));
+                }
+            }
+            None if !attrs.iter().any(|(name, _)| name == "xmlns:mc") => {
+                attrs.push(("xmlns:mc".to_string(), MC_NS.to_string()));
+                attrs.push(("mc:Ignorable".to_string(), "xr".to_string()));
+            }
+            // `mc` is bound to another namespace. Declaring `xr` still makes
+            // the part well-formed, and Excel 2016+ understands `xr` natively.
+            None => {}
+        }
+        attrs.push(("xmlns:xr".to_string(), XR_NS.to_string()));
+        attrs
     }
 
     /// Write a single comment element

@@ -1,5 +1,6 @@
 use domain_types::domain::comment::CommentType;
 
+use super::helpers::ooxml_guid;
 use super::legacy::CommentsWriter;
 use super::threaded::ThreadedCommentsWriter;
 use super::types::{
@@ -99,11 +100,8 @@ fn build_comments_writer(
             // is the canonical GUID; fall back to comment.id if missing
             // (storage invariant says threads have `Some(...)`, but the writer
             // is the last line of defense).
-            let thread_id_str = comment
-                .thread_id
-                .as_deref()
-                .unwrap_or(comment.id.as_str())
-                .to_string();
+            let thread_id_str =
+                ooxml_guid(comment.thread_id.as_deref().unwrap_or(comment.id.as_str()));
             let tc_author = format!("tc={}", thread_id_str);
 
             // If the comment has original rich text runs from a parsed file, preserve
@@ -161,7 +159,11 @@ fn build_comments_writer(
                     ..Default::default()
                 }]
             };
-            (comment.author.clone(), runs, comment.xr_uid.clone())
+            (
+                comment.author.clone(),
+                runs,
+                comment.xr_uid.as_deref().map(ooxml_guid),
+            )
         } else {
             let runs = comment
                 .runs
@@ -184,7 +186,11 @@ fn build_comments_writer(
                     preserve_space: r.preserve_space,
                 })
                 .collect();
-            (comment.author.clone(), runs, comment.xr_uid.clone())
+            (
+                comment.author.clone(),
+                runs,
+                comment.xr_uid.as_deref().map(ooxml_guid),
+            )
         };
 
         let author_id = cw.get_or_create_author(&author_name);
@@ -280,7 +286,12 @@ pub fn threaded_comments_xml_from_domain(
         } else {
             comment.id.clone()
         };
-        let person_id = comment.person_id.clone().unwrap_or_default();
+        let comment_id = ooxml_guid(&comment_id);
+        let person_id = comment
+            .person_id
+            .as_deref()
+            .map(ooxml_guid)
+            .unwrap_or_default();
         let timestamp = comment.timestamp.clone().unwrap_or_default();
 
         // Convert domain mentions to writer mentions
@@ -288,7 +299,7 @@ pub fn threaded_comments_xml_from_domain(
             .mentions
             .iter()
             .map(|m| ThreadedMention {
-                mention_person_id: m.user_id.clone(),
+                mention_person_id: ooxml_guid(&m.user_id),
                 start_index: m.start_index,
                 length: m.length,
             })
@@ -300,7 +311,7 @@ pub fn threaded_comments_xml_from_domain(
             author_id: person_id,
             text: comment.content.as_deref().unwrap_or("").to_string(),
             timestamp,
-            parent_id: comment.parent_id.clone(),
+            parent_id: comment.parent_id.as_deref().map(ooxml_guid),
             done: comment.resolved.unwrap_or(false),
             ext_lst_xml: comment.ext_lst_xml.clone(),
             mentions,
@@ -315,7 +326,7 @@ pub fn persons_xml_from_domain(persons: &[domain_types::PersonInfo]) -> Vec<u8> 
     let mut tw = ThreadedCommentsWriter::new();
     for person in persons {
         tw.add_author_full(ThreadedAuthor {
-            id: person.id.clone(),
+            id: ooxml_guid(&person.id),
             display_name: person.display_name.clone(),
             user_id: person.user_id.clone(),
             provider_id: person.provider_id.clone(),

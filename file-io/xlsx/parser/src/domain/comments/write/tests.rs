@@ -572,7 +572,9 @@ fn test_note_with_tc_author_and_stale_thread_id_stays_legacy_only() {
 
     assert!(legacy_str.contains("<author>tc={LITERAL-AUTHOR}</author>"));
     assert!(legacy_str.contains("Literal legacy note"));
-    assert!(legacy_str.contains("xr:uid=\"xr-note-uid\""));
+    // xr:uid is an ST_Guid; a non-GUID value is written in its canonical GUID form.
+    let uid = super::helpers::ooxml_guid("xr-note-uid");
+    assert!(legacy_str.contains(&format!(r#"xr:uid="{uid}""#)));
     assert!(
         !legacy_str.contains("stale-thread-id"),
         "a note's thread_id metadata must not rewrite its legacy author or xr:uid"
@@ -596,17 +598,18 @@ fn test_dispatch_threaded_writes_to_both() {
         ..Default::default()
     };
 
+    let guid = super::helpers::ooxml_guid("thread-001");
     let (legacy_xml, _vml_xml) = comments_from_domain(1, &[thread.clone()], None, None, None);
     let legacy_str = String::from_utf8(legacy_xml).expect("utf8");
     assert!(
-        legacy_str.contains("tc=thread-001"),
+        legacy_str.contains(&format!("tc={guid}")),
         "threaded comment must use `tc={{thread_id}}` author in legacy XML"
     );
 
     let threaded = threaded_comments_xml_from_domain(&[thread], None)
         .expect("threaded comment must produce threaded XML");
     let threaded_str = String::from_utf8(threaded).expect("utf8");
-    assert!(threaded_str.contains("thread-001"));
+    assert!(threaded_str.contains(&format!(r#"id="{guid}""#)));
 }
 
 #[test]
@@ -638,7 +641,81 @@ fn test_dispatch_threaded_reply_uses_own_comment_id() {
         .expect("threaded comments must produce threaded XML");
     let threaded_str = String::from_utf8(threaded).expect("utf8");
 
-    assert!(threaded_str.contains(r#"id="thread-root""#));
-    assert!(threaded_str.contains(r#"id="reply-001""#));
-    assert!(threaded_str.contains(r#"parentId="thread-root""#));
+    let root_id = super::helpers::ooxml_guid("thread-root");
+    let reply_id = super::helpers::ooxml_guid("reply-001");
+    assert_ne!(root_id, reply_id);
+    assert!(threaded_str.contains(&format!(r#"id="{root_id}""#)));
+    assert!(threaded_str.contains(&format!(r#"id="{reply_id}""#)));
+    assert!(threaded_str.contains(&format!(r#"parentId="{root_id}""#)));
+}
+
+/// Excel repairs a package whose threaded comment, person, `tc=` author or `xr:uid`
+/// IDs are not braced GUIDs. Engine-minted IDs (32 hex digits) keep their value.
+#[test]
+fn test_engine_comment_ids_are_written_as_braced_guids() {
+    let person = "e64f9b1eaf1c8e860000000000000001";
+    let thread = domain_types::Comment {
+        id: "e64f9b1eaf1c8e860000000000000002".to_string(),
+        cell_ref: "C6".to_string(),
+        author: "User".to_string(),
+        content: Some("fy26_10k.html | Page N/A | 47,525".to_string()),
+        comment_type: CommentType::ThreadedComment,
+        thread_id: Some("e64f9b1eaf1c8e860000000000000002".to_string()),
+        person_id: Some(person.to_string()),
+        ..Default::default()
+    };
+    let guid = "{E64F9B1E-AF1C-8E86-0000-000000000002}";
+    let person_guid = "{E64F9B1E-AF1C-8E86-0000-000000000001}";
+
+    let (legacy_xml, _) = comments_from_domain(1, &[thread.clone()], None, None, None);
+    let legacy = String::from_utf8(legacy_xml).expect("utf8");
+    assert!(
+        legacy.contains(&format!("<author>tc={guid}</author>")),
+        "{legacy}"
+    );
+    assert!(legacy.contains(&format!(r#"xr:uid="{guid}""#)), "{legacy}");
+
+    let threaded = String::from_utf8(
+        threaded_comments_xml_from_domain(&[thread], None).expect("threaded XML"),
+    )
+    .expect("utf8");
+    assert!(
+        threaded.contains(&format!(r#"personId="{person_guid}" id="{guid}""#)),
+        "{threaded}"
+    );
+
+    let persons = String::from_utf8(persons_xml_from_domain(&[domain_types::PersonInfo {
+        id: person.to_string(),
+        display_name: "User".to_string(),
+        user_id: None,
+        provider_id: None,
+    }]))
+    .expect("utf8");
+    assert!(
+        persons.contains(&format!(r#"id="{person_guid}""#)),
+        "{persons}"
+    );
+}
+
+#[test]
+fn test_ooxml_guid_keeps_guids_and_maps_other_ids_stably() {
+    use super::helpers::ooxml_guid;
+    let excel = "{0AB1C2D3-E4F5-4A6B-8C7D-9E0F1A2B3C4D}";
+    assert_eq!(ooxml_guid(excel), excel);
+    assert_eq!(ooxml_guid(&excel.to_lowercase()), excel);
+    assert_eq!(ooxml_guid("0ab1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d"), excel);
+    assert_eq!(ooxml_guid(""), "");
+    let mapped = ooxml_guid("person-alice");
+    assert_eq!(mapped, ooxml_guid("person-alice"));
+    assert_ne!(mapped, ooxml_guid("person-bob"));
+    let bare = mapped.trim_start_matches('{').trim_end_matches('}');
+    assert!(mapped.starts_with('{') && mapped.ends_with('}'));
+    assert_eq!(
+        bare.split('-').map(str::len).collect::<Vec<_>>(),
+        [8, 4, 4, 4, 12]
+    );
+    assert!(
+        bare.chars()
+            .all(|c| c == '-' || c.is_ascii_hexdigit() && !c.is_ascii_lowercase())
+    );
 }

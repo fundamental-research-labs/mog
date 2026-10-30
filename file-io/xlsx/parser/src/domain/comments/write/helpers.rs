@@ -22,6 +22,48 @@ pub fn generate_guid() -> String {
     format!("{{{:08X}-{:04X}-{:04X}-{:04X}-{:012X}}}", a, b, c, d, e)
 }
 
+/// The OOXML `ST_Guid` form (`{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}`) of a domain ID.
+///
+/// Threaded comment and person IDs, `tc=` legacy authors and `xr:uid` must be braced
+/// GUIDs: Excel reports any other form as corrupt content and repairs the file.
+/// Engine-minted IDs are 32 hex digits and keep their value; any other non-empty ID
+/// maps to a GUID derived from its text, so every reference to it in a package agrees.
+pub fn ooxml_guid(id: &str) -> String {
+    if id.is_empty() {
+        return String::new();
+    }
+    let bare = id
+        .strip_prefix('{')
+        .and_then(|rest| rest.strip_suffix('}'))
+        .unwrap_or(id);
+    let dashed = bare.len() == 36
+        && bare
+            .char_indices()
+            .all(|(i, c)| matches!(i, 8 | 13 | 18 | 23) == (c == '-'));
+    let digits: String = bare.chars().filter(|c| *c != '-').collect();
+    let value = (digits.len() == 32 && (bare.len() == 32 || dashed))
+        .then(|| u128::from_str_radix(&digits, 16).ok())
+        .flatten()
+        .unwrap_or_else(|| {
+            // FNV-1a over two offset bases: stable across builds, unlike std's hasher.
+            let fnv = |mut hash: u64| {
+                for byte in id.bytes() {
+                    hash = (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3);
+                }
+                u128::from(hash)
+            };
+            fnv(0xcbf2_9ce4_8422_2325) << 64 | fnv(0x6c62_272e_07bb_0142)
+        });
+    format!(
+        "{{{:08X}-{:04X}-{:04X}-{:04X}-{:012X}}}",
+        value >> 96,
+        (value >> 80) & 0xFFFF,
+        (value >> 64) & 0xFFFF,
+        (value >> 48) & 0xFFFF,
+        value & 0xFFFF_FFFF_FFFF
+    )
+}
+
 /// Get current timestamp in ISO 8601 format
 pub(super) fn current_timestamp() -> String {
     let ms = standalone_unix_millis();

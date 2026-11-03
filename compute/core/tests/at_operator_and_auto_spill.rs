@@ -455,3 +455,67 @@ fn formula_text_round_trips_unchanged() {
         "@-prefixed formula text must round-trip without SINGLE wrap",
     );
 }
+
+#[test]
+fn at_operator_inside_array_function_is_evaluated_per_row() {
+    // Every row has the same formula text, but `@$A$1:$A$3` (and SINGLE)
+    // picks that row's name, so each row filters for a different owner.
+    let mut core = ComputeCore::new();
+    let mut cell_store = CellStore::default();
+    let snapshot = build_snapshot(vec![(
+        "Sheet1",
+        100,
+        26,
+        vec![
+            (0, 0, text("Ann"), None),
+            (1, 0, text("Bob"), None),
+            (2, 0, text("Ann"), None),
+            (0, 1, CellValue::number(1.0), None),
+            (1, 1, CellValue::number(2.0), None),
+            (2, 1, CellValue::number(4.0), None),
+            (
+                0,
+                2,
+                CellValue::Null,
+                Some("SUM(FILTER($B$1:$B$3,$A$1:$A$3=@$A$1:$A$3))"),
+            ),
+            (
+                1,
+                2,
+                CellValue::Null,
+                Some("SUM(FILTER($B$1:$B$3,$A$1:$A$3=@$A$1:$A$3))"),
+            ),
+            (
+                2,
+                2,
+                CellValue::Null,
+                Some("SUM(FILTER($B$1:$B$3,$A$1:$A$3=@$A$1:$A$3))"),
+            ),
+            (
+                0,
+                3,
+                CellValue::Null,
+                Some("SUM(FILTER($B$1:$B$3,$A$1:$A$3=SINGLE($A$1:$A$3)))"),
+            ),
+            (
+                1,
+                3,
+                CellValue::Null,
+                Some("SUM(FILTER($B$1:$B$3,$A$1:$A$3=SINGLE($A$1:$A$3)))"),
+            ),
+            (
+                2,
+                3,
+                CellValue::Null,
+                Some("SUM(FILTER($B$1:$B$3,$A$1:$A$3=SINGLE($A$1:$A$3)))"),
+            ),
+        ],
+    )]);
+    core.init_from_snapshot(&mut cell_store, snapshot).unwrap();
+
+    for col in [2, 3] {
+        assert_store_number(&cell_store, 0, 0, col, 5.0);
+        assert_store_number(&cell_store, 0, 1, col, 2.0);
+        assert_store_number(&cell_store, 0, 2, col, 5.0);
+    }
+}

@@ -29,7 +29,7 @@ use compute_functions::helpers::VOLATILE_FUNCTIONS;
 #[cfg(test)]
 use compute_parser::AbsFlags;
 use compute_parser::{ASTNode, AstVisitor, BinOp, CellRefNode, RangeRef, UnaryOp};
-use formula_types::{StructuredRef, StructuredRefSpecifier};
+use formula_types::{SpecialItem, StructuredRef, StructuredRefSpecifier};
 use rustc_hash::{FxHashMap, FxHasher};
 use value_types::CellValue;
 
@@ -56,8 +56,10 @@ thread_local! {
 /// Check if a subexpression is worth caching and safe to cache.
 ///
 /// Returns `false` for trivial leaves (not worth caching) and for subtrees
-/// containing volatile functions, position-dependent nullary functions
-/// (`ROW()`/`COLUMN()` without args), identifiers, or unresolved sheet refs.
+/// containing volatile functions, identifiers, unresolved sheet refs, or
+/// anything that reads the calling cell's position: `ROW()`/`COLUMN()` without
+/// args, implicit intersection (`@` / `SINGLE`), and this-row table references
+/// (`Table[@Col]`, `[#This Row]`). The cache key does not include the caller.
 pub(in crate::eval) fn is_cacheable(node: &ASTNode) -> bool {
     match node {
         ASTNode::Number(_)
@@ -149,6 +151,30 @@ impl AstVisitor for SubtreeSafetyChecker {
         self.safe = false;
     }
 
+    fn visit_structured_ref(&mut self, r: &StructuredRef) {
+        // `Table[@Col]` / `Table[[#This Row],[Col]]` read the caller's row
+        if r.specifiers.iter().any(|s| {
+            matches!(
+                s,
+                StructuredRefSpecifier::ThisRow
+                    | StructuredRefSpecifier::Special {
+                        item: SpecialItem::ThisRow
+                    }
+            )
+        }) {
+            self.safe = false;
+        }
+    }
+
+    fn visit_unary_op(&mut self, op: UnaryOp, operand: &ASTNode) {
+        // `@range` picks the cell in the caller's row or column
+        if op == UnaryOp::ImplicitIntersection {
+            self.safe = false;
+            return;
+        }
+        self.visit(operand);
+    }
+
     fn visit_function(&mut self, name: &str, args: &[ASTNode]) {
         let upper = name.to_ascii_uppercase();
         // Reject volatile functions
@@ -158,6 +184,11 @@ impl AstVisitor for SubtreeSafetyChecker {
         }
         // ROW() / COLUMN() without args → position-dependent
         if (upper == "ROW" || upper == "COLUMN") && args.is_empty() {
+            self.safe = false;
+            return;
+        }
+        // SINGLE(range) is `@range` → position-dependent
+        if upper == "SINGLE" {
             self.safe = false;
             return;
         }
@@ -562,6 +593,101 @@ mod tests {
             }],
         };
         assert!(!is_cacheable(&node));
+    }
+
+    #[test]
+    fn test_is_cacheable_rejects_this_row_structured_ref() {
+        let filter_with = |specifiers| ASTNode::Function {
+            name: "FILTER".into(),
+            args: vec![
+                ASTNode::StructuredRef(StructuredRef {
+                    table_name: "Sales".into(),
+                    specifiers: vec![StructuredRefSpecifier::Column { name: "Amt".into() }],
+                }),
+                ASTNode::BinaryOp {
+                    op: BinOp::Eq,
+                    left: Box::new(ASTNode::StructuredRef(StructuredRef {
+                        table_name: "Sales".into(),
+                        specifiers: vec![StructuredRefSpecifier::Column {
+                            name: "Owner".into(),
+                        }],
+                    })),
+                    right: Box::new(ASTNode::StructuredRef(StructuredRef {
+                        table_name: "Sales".into(),
+                        specifiers,
+                    })),
+                },
+            ],
+        };
+        let owner = || StructuredRefSpecifier::Column {
+            name: "Owner".into(),
+        };
+
+        // FILTER(Sales[Amt], Sales[Owner]=Sales[@Owner])
+        assert!(!is_cacheable(&filter_with(vec![
+            StructuredRefSpecifier::ThisRow,
+            owner(),
+        ])));
+        // FILTER(Sales[Amt], Sales[Owner]=Sales[[#This Row],[Owner]])
+        assert!(!is_cacheable(&filter_with(vec![
+            StructuredRefSpecifier::Special {
+                item: SpecialItem::ThisRow,
+            },
+            owner(),
+        ])));
+        // FILTER(Sales[Amt], Sales[Owner]=Sales[[#Data],[Owner]]) — same for every row
+        assert!(is_cacheable(&filter_with(vec![
+            StructuredRefSpecifier::Special {
+                item: SpecialItem::Data,
+            },
+            owner(),
+        ])));
+    }
+
+    #[test]
+    fn test_is_cacheable_rejects_implicit_intersection() {
+        let column = || {
+            ASTNode::Range(RangeRef {
+                start: pos(0, 0),
+                end: pos(99, 0),
+                abs_start: AbsFlags {
+                    row: true,
+                    col: true,
+                },
+                abs_end: AbsFlags {
+                    row: true,
+                    col: true,
+                },
+                range_type: RangeType::CellRange,
+            })
+        };
+        let filter_eq = |criterion| ASTNode::Function {
+            name: "FILTER".into(),
+            args: vec![
+                column(),
+                ASTNode::BinaryOp {
+                    op: BinOp::Eq,
+                    left: Box::new(column()),
+                    right: Box::new(criterion),
+                },
+            ],
+        };
+
+        // FILTER($A$1:$A$100, $A$1:$A$100=@$A$1:$A$100)
+        assert!(!is_cacheable(&filter_eq(ASTNode::UnaryOp {
+            op: UnaryOp::ImplicitIntersection,
+            operand: Box::new(column()),
+        })));
+        // FILTER($A$1:$A$100, $A$1:$A$100=SINGLE($A$1:$A$100))
+        assert!(!is_cacheable(&filter_eq(ASTNode::Function {
+            name: "SINGLE".into(),
+            args: vec![column()],
+        })));
+        // FILTER($A$1:$A$100, $A$1:$A$100=-$A$1:$A$100) — other unary ops are fine
+        assert!(is_cacheable(&filter_eq(ASTNode::UnaryOp {
+            op: UnaryOp::Minus,
+            operand: Box::new(column()),
+        })));
     }
 
     #[test]

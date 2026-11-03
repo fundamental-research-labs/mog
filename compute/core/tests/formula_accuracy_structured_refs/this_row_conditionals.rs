@@ -134,3 +134,45 @@ fn test_structured_ref_this_row_conditionals() {
     assert_cell_number(&result, 0, 4, 2, 0.0);
     assert_cell_number(&result, 0, 5, 2, 0.0);
 }
+
+/// Rows sharing the formula text `FILTER(Sales[Amt],Sales[Owner]=Sales[@Owner])`
+/// each filter on their own row's owner; one row's result must not be reused
+/// for the others.
+#[test]
+fn test_structured_ref_this_row_filter_is_evaluated_per_row() {
+    let formulas = [
+        "SUM(FILTER(Sales[Amt],Sales[Owner]=Sales[@Owner]))",
+        "SUM(FILTER(Sales[Amt],Sales[Owner]=[@Owner]))",
+        "SUM(FILTER(Sales[Amt],Sales[Owner]=Sales[[#This Row],[Owner]]))",
+    ];
+    for formula in formulas {
+        let snapshot = single_sheet_table_snapshot(
+            "Sheet1",
+            "Sales",
+            &["Owner", "Amt", "OwnerTotal"],
+            vec![
+                vec![
+                    CellValue::Text("Ann".into()),
+                    CellValue::number(1.0),
+                    CellValue::Null,
+                ],
+                vec![
+                    CellValue::Text("Bob".into()),
+                    CellValue::number(2.0),
+                    CellValue::Null,
+                ],
+                vec![
+                    CellValue::Text("Ann".into()),
+                    CellValue::number(4.0),
+                    CellValue::Null,
+                ],
+            ],
+            vec![(0, 2, formula), (1, 2, formula), (2, 2, formula)],
+        );
+
+        let result = recalc_snapshot(snapshot);
+        assert_cell_number(&result, 0, 1, 2, 5.0);
+        assert_cell_number(&result, 0, 2, 2, 2.0);
+        assert_cell_number(&result, 0, 3, 2, 5.0);
+    }
+}

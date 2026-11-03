@@ -6,6 +6,7 @@
 //! ## Module categories
 //!
 //! **Function utilities** — used by function implementations:
+//! - [`array_size`] — result-array size limit
 //! - [`coercion`] — value coercion and flattening
 //! - [`criteria`] — wildcard/operator criteria parsing
 //! - [`conditional_aggregate`] — shared SUMIFS/COUNTIFS aggregation
@@ -23,6 +24,7 @@
 
 // -- Function utilities --
 pub mod arithmetic;
+pub mod array_size;
 pub mod coercion;
 pub mod conditional_aggregate;
 pub mod criteria;

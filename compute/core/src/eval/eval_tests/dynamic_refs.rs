@@ -695,6 +695,54 @@ fn offset_resolves_reference_bases_before_resizing() {
 }
 
 #[test]
+fn offset_rejects_targets_past_the_sheet_edge() {
+    let (store, sheet) = test_store();
+    let context = make_ctx(&store, sheet);
+    for formula in [
+        // Moved past the last row or column, including offsets that used to
+        // wrap back onto the sheet when narrowed to u32
+        "=OFFSET(Sheet1!A1,1048576,0)",
+        "=OFFSET(Sheet1!A1,0,16384)",
+        "=OFFSET(Sheet1!A1,4294967296,0)",
+        "=OFFSET(Sheet1!A1,0,4294967296)",
+        "=OFFSET(Sheet1!B2,1E300,1E300)",
+        // Heights and widths that run past the last row or column
+        "=OFFSET(Sheet1!A1,0,0,1048577)",
+        "=OFFSET(Sheet1!A1,0,0,1,16385)",
+        "=SUM(OFFSET(Sheet1!A1,0,0,1048577))",
+        // Reference form, as read by ROW and COLUMN
+        "=ROW(OFFSET(Sheet1!A1,4294967296,0))",
+        "=COLUMN(OFFSET(Sheet1!A1,0,4294967296))",
+        "=ROW(OFFSET(Sheet1!A1,0,0,1048577))",
+    ] {
+        let node = compute_parser::parse_formula(formula, None)
+            .unwrap()
+            .into_inner();
+        assert_eq!(
+            eval(&node, &context),
+            CellValue::Error(CellError::Ref, None),
+            "{formula}"
+        );
+    }
+    // The last row and column are still in bounds
+    for (formula, expected) in [
+        ("=ROW(OFFSET(Sheet1!A1,1048575,0))", 1_048_576.0),
+        ("=COLUMN(OFFSET(Sheet1!A1,0,16383))", 16_384.0),
+        // Negative height and width extend up and left: D4:E5 = 33+34+43+44
+        ("=SUM(OFFSET(Sheet1!E5,0,0,-2,-2))", 154.0),
+    ] {
+        let node = compute_parser::parse_formula(formula, None)
+            .unwrap()
+            .into_inner();
+        assert_eq!(
+            eval(&node, &context),
+            CellValue::number(expected),
+            "{formula}"
+        );
+    }
+}
+
+#[test]
 fn offset_rejects_cross_sheet_base_range() {
     let (store, sheet) = test_store();
     let context = make_ctx(&store, sheet);

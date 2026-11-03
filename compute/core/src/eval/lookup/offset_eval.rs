@@ -1,4 +1,4 @@
-use cell_types::SheetId;
+use cell_types::{MAX_COLS, MAX_ROWS, SheetId};
 use compute_parser::ASTNode;
 use formula_types::{CellRef, RangeType};
 use value_types::{CellError, CellValue, ComputeError};
@@ -20,6 +20,21 @@ async fn resolve_offset_base<D: EvalDataAccess, M: EvalMetadata>(
         i64::from(end_row) - i64::from(start_row) + 1,
         i64::from(end_col) - i64::from(start_col) + 1,
     ))
+}
+
+// First and last row (or column) of OFFSET's target on one axis: `base`
+// moved by `offset`, spanning `extent` (negative extends up or left).
+// `None` when any of it falls outside `0..limit`, including on overflow.
+fn offset_span(base: i64, offset: i64, extent: i64, limit: u32) -> Option<(u32, u32)> {
+    let moved = base.checked_add(offset)?;
+    let far = if extent > 0 {
+        moved.checked_add(extent - 1)?
+    } else {
+        moved.checked_add(extent + 1)?
+    };
+    let start = u32::try_from(moved.min(far)).ok()?;
+    let end = u32::try_from(moved.max(far)).ok()?;
+    (end < limit).then_some((start, end))
 }
 
 pub(in crate::eval) async fn eval_offset<'a, D: EvalDataAccess, M: EvalMetadata>(
@@ -110,30 +125,12 @@ pub(in crate::eval) async fn eval_offset<'a, D: EvalDataAccess, M: EvalMetadata>
     };
 
     // --- Compute the result region ---
-    let new_row = base_row + rows_offset;
-    let new_col = base_col + cols_offset;
-
-    // Negative height/width means the range extends upward/leftward
-    let (start_row, end_row) = if height > 0 {
-        (new_row, new_row + height - 1)
-    } else {
-        (new_row + height + 1, new_row)
-    };
-    let (start_col, end_col) = if width > 0 {
-        (new_col, new_col + width - 1)
-    } else {
-        (new_col + width + 1, new_col)
-    };
-
-    // Bounds check
-    if start_row < 0 || start_col < 0 || end_row < 0 || end_col < 0 {
+    let (Some((start_row, end_row)), Some((start_col, end_col))) = (
+        offset_span(base_row, rows_offset, height, MAX_ROWS),
+        offset_span(base_col, cols_offset, width, MAX_COLS),
+    ) else {
         return Ok(CellValue::Error(CellError::Ref, None));
-    }
-
-    let start_row = start_row as u32;
-    let start_col = start_col as u32;
-    let end_row = end_row as u32;
-    let end_col = end_col as u32;
+    };
 
     // --- Fetch values ---
     if start_row == end_row && start_col == end_col {
@@ -245,31 +242,14 @@ pub(in crate::eval) async fn eval_offset_as_area<'a, D: EvalDataAccess, M: EvalM
     };
 
     // Compute the result region
-    let new_row = base_row + rows_offset;
-    let new_col = base_col + cols_offset;
-
-    let (start_row, end_row) = if height > 0 {
-        (new_row, new_row + height - 1)
-    } else {
-        (new_row + height + 1, new_row)
-    };
-    let (start_col, end_col) = if width > 0 {
-        (new_col, new_col + width - 1)
-    } else {
-        (new_col + width + 1, new_col)
-    };
-
-    if start_row < 0 || start_col < 0 || end_row < 0 || end_col < 0 {
+    let (Some((start_row, end_row)), Some((start_col, end_col))) = (
+        offset_span(base_row, rows_offset, height, MAX_ROWS),
+        offset_span(base_col, cols_offset, width, MAX_COLS),
+    ) else {
         return Err(ComputeError::Eval {
             message: "OFFSET: out of bounds".into(),
         });
-    }
+    };
 
-    Ok((
-        base_sheet,
-        start_row as u32,
-        start_col as u32,
-        end_row as u32,
-        end_col as u32,
-    ))
+    Ok((base_sheet, start_row, start_col, end_row, end_col))
 }

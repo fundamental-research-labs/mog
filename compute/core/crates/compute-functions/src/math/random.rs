@@ -3,6 +3,7 @@
 use rand::Rng;
 use value_types::{CellError, CellValue};
 
+use crate::helpers::array_size::check_array_size;
 use crate::helpers::coercion::check_error;
 use crate::{FunctionRegistry, PureFunction};
 
@@ -143,11 +144,8 @@ impl PureFunction for FnRandArray {
                 format!("RANDARRAY: min ({min}) must be <= max ({max})"),
             );
         }
-        if rows > 1048576 || cols > 16384 || rows * cols > 2_000_000 {
-            return CellValue::error_with_message(
-                CellError::Calc,
-                format!("RANDARRAY: dimensions {rows}x{cols} too large"),
-            );
+        if let Some(e) = check_array_size("RANDARRAY", rows as u64, cols as u64) {
+            return e;
         }
 
         let mut rng = rand::thread_rng();

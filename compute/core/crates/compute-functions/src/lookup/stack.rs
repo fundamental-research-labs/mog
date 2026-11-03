@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use value_types::{CellArray, CellError, CellValue};
 
+use crate::helpers::array_size::check_array_size;
 use crate::helpers::coercion::flatten_values;
 use crate::{FunctionRegistry, PureFunction};
 
@@ -348,6 +349,9 @@ impl PureFunction for FnWrapCols {
 
         let total = flat.len();
         let num_cols = total.div_ceil(wrap_count);
+        if let Some(e) = check_array_size("WRAPCOLS", wrap_count as u64, num_cols as u64) {
+            return e;
+        }
 
         // Build column-major, then convert to row-major
         let mut result = vec![Vec::with_capacity(num_cols); wrap_count];
@@ -404,6 +408,9 @@ impl PureFunction for FnWrapRows {
 
         let total = flat.len();
         let num_rows = total.div_ceil(wrap_count);
+        if let Some(e) = check_array_size("WRAPROWS", num_rows as u64, wrap_count as u64) {
+            return e;
+        }
 
         let mut result = Vec::with_capacity(num_rows);
         for ri in 0..num_rows {

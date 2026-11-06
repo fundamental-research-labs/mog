@@ -122,6 +122,30 @@ fn attribute(tag: &str, name: &str) -> String {
         .to_owned()
 }
 
+fn relationship_part(owner: &str) -> String {
+    let (directory, name) = owner.rsplit_once('/').unwrap();
+    format!("{directory}/_rels/{name}.rels")
+}
+
+fn internal_target(owner: &str, relationship: &str) -> String {
+    assert!(!relationship.contains("TargetMode=\"External\""));
+    let target = attribute(relationship, "Target");
+    let joined = if target.starts_with('/') {
+        target.trim_start_matches('/').to_owned()
+    } else {
+        format!("{}/{target}", owner.rsplit_once('/').unwrap().0)
+    };
+    let mut normalized = Vec::new();
+    for component in joined.split('/') {
+        match component {
+            ".." => assert!(normalized.pop().is_some(), "target escapes package"),
+            "." | "" => {}
+            other => normalized.push(other),
+        }
+    }
+    normalized.join("/")
+}
+
 fn assert_drawing(bytes: &[u8], depth: usize, camera: Camera) {
     let archive = XlsxArchive::new(bytes).unwrap();
     assert!(
@@ -131,7 +155,26 @@ fn assert_drawing(bytes: &[u8], depth: usize, camera: Camera) {
             .any(|e| e.name.starts_with("xl/ctrlProps/")),
         "camera picture must not become a modern form control"
     );
-    let xml = String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap()).unwrap();
+    let sheet_path = "xl/worksheets/sheet1.xml";
+    let sheet = String::from_utf8(archive.read_file(sheet_path).unwrap()).unwrap();
+    let drawings = tags(&sheet, "drawing");
+    assert_eq!(drawings.len(), 1, "worksheet lost its drawing reference");
+    let drawing_id = attribute(&drawings[0], "r:id");
+    let sheet_rels_xml =
+        String::from_utf8(archive.read_file(&relationship_part(sheet_path)).unwrap()).unwrap();
+    let sheet_rels = tags(&sheet_rels_xml, "Relationship");
+    let drawing_rels: Vec<_> = sheet_rels
+        .iter()
+        .filter(|rel| attribute(rel, "Id") == drawing_id)
+        .collect();
+    assert_eq!(
+        drawing_rels.len(),
+        1,
+        "worksheet drawing reference must resolve uniquely"
+    );
+    assert_eq!(attribute(drawing_rels[0], "Type"), format!("{REL}/drawing"));
+    let drawing_path = internal_target(sheet_path, drawing_rels[0]);
+    let xml = String::from_utf8(archive.read_file(&drawing_path).unwrap()).unwrap();
     assert_eq!(tags(&xml, "grpSp").len(), depth, "group hierarchy changed");
     assert_eq!(tags(&xml, "pic").len(), 1, "picture disappeared");
     let blips = tags(&xml, "blip");
@@ -139,7 +182,7 @@ fn assert_drawing(bytes: &[u8], depth: usize, camera: Camera) {
     let embed = attribute(&blips[0], "r:embed");
     let rel_xml = String::from_utf8(
         archive
-            .read_file("xl/drawings/_rels/drawing1.xml.rels")
+            .read_file(&relationship_part(&drawing_path))
             .expect("picture lost its relationship part"),
     )
     .unwrap();
@@ -151,25 +194,9 @@ fn assert_drawing(bytes: &[u8], depth: usize, camera: Camera) {
         .find(|rel| attribute(rel, "Id") == embed)
         .expect("picture has a dangling embedded-image reference");
     assert_eq!(attribute(rel, "Type"), format!("{REL}/image"));
-    assert!(!rel.contains("TargetMode=\"External\""));
-    let target = attribute(rel, "Target");
-    let joined = if target.starts_with('/') {
-        target.trim_start_matches('/').to_owned()
-    } else {
-        format!("xl/drawings/{target}")
-    };
-    let mut normalized = Vec::new();
-    for component in joined.split('/') {
-        match component {
-            ".." => {
-                assert!(normalized.pop().is_some(), "target escapes package");
-            }
-            "." | "" => {}
-            other => normalized.push(other),
-        }
-    }
+    let image_path = internal_target(&drawing_path, rel);
     assert_eq!(
-        archive.read_file(&normalized.join("/")).unwrap(),
+        archive.read_file(&image_path).unwrap(),
         PNG,
         "image bytes changed"
     );
@@ -254,4 +281,76 @@ fn cli_preserves_grouped_picture_after_edit_and_reopen() {
 #[test]
 fn cli_preserves_nested_picture_after_edit_and_reopen() {
     roundtrip(2, Camera::None);
+}
+
+// Check the assertion itself against an orphaned drawing and a valid alternate
+// package layout; neither check invokes the importer as its oracle.
+fn rewrite_fixture(mut rewrite: impl FnMut(&str, Vec<u8>) -> (String, Vec<u8>)) -> Vec<u8> {
+    let original = fixture(0, Camera::None);
+    let archive = XlsxArchive::new(&original).unwrap();
+    let mut zip = ZipWriter::new();
+    for entry in archive.entries() {
+        let (name, bytes) = rewrite(&entry.name, archive.read_file(&entry.name).unwrap());
+        zip.add_file(&name, bytes);
+    }
+    zip.finish().unwrap()
+}
+
+#[test]
+fn drawing_assertion_rejects_orphaned_or_dangling_sheet_reference() {
+    for replacement in ["", r#"<drawing r:id="missing"/>"#] {
+        let orphaned = rewrite_fixture(|name, bytes| {
+            let bytes = if name == "xl/worksheets/sheet1.xml" {
+                String::from_utf8(bytes)
+                    .unwrap()
+                    .replace(r#"<drawing r:id="rIdDrawing"/>"#, replacement)
+                    .into_bytes()
+            } else {
+                bytes
+            };
+            (name.to_owned(), bytes)
+        });
+        assert!(std::panic::catch_unwind(|| assert_drawing(&orphaned, 0, Camera::None)).is_err());
+    }
+}
+
+#[test]
+fn drawing_assertion_follows_renamed_and_relocated_drawing() {
+    for target in [
+        "../custom/drawings/renamed.xml",
+        "/xl/custom/drawings/renamed.xml",
+    ] {
+        let relocated = rewrite_fixture(|name, bytes| {
+            let (new_name, bytes) = match name {
+                "xl/drawings/drawing1.xml" => ("xl/custom/drawings/renamed.xml", bytes),
+                "xl/drawings/_rels/drawing1.xml.rels" => (
+                    "xl/custom/drawings/_rels/renamed.xml.rels",
+                    String::from_utf8(bytes)
+                        .unwrap()
+                        .replace("../media/", "../../media/")
+                        .into_bytes(),
+                ),
+                "xl/worksheets/_rels/sheet1.xml.rels" => (
+                    name,
+                    String::from_utf8(bytes)
+                        .unwrap()
+                        .replace("../drawings/drawing1.xml", target)
+                        .into_bytes(),
+                ),
+                "[Content_Types].xml" => (
+                    name,
+                    String::from_utf8(bytes)
+                        .unwrap()
+                        .replace(
+                            "/xl/drawings/drawing1.xml",
+                            "/xl/custom/drawings/renamed.xml",
+                        )
+                        .into_bytes(),
+                ),
+                _ => (name, bytes),
+            };
+            (new_name.to_owned(), bytes)
+        });
+        assert_drawing(&relocated, 0, Camera::None);
+    }
 }

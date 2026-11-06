@@ -233,6 +233,56 @@ fn comment_identity_survives_edits_and_root_deletion_removes_replies() {
 }
 
 #[test]
+fn comment_and_reply_ids_resolve_before_and_after_xlsx_save() {
+    let workbook = compute_api::Workbook::blank().unwrap().0;
+    let ids = mog::run_office_js_with_workbook(
+        &workbook,
+        r#"
+        return Excel.run(async context => {
+          const root = context.workbook.comments.add("Sheet1!B3", "root");
+          const reply = root.replies.add("reply");
+          root.load("id"); reply.load("id");
+          await context.sync();
+          return [root.id, reply.id];
+        });
+    "#,
+    )
+    .unwrap()
+    .value;
+    // Earlier versions exposed these same IDs as 32 lowercase hex digits.
+    let lookup = r#"
+        return Excel.run(async context => {
+          const [rootId, replyId] = SAVED_IDS;
+          const compact = id => id.replace(/[{}-]/g, "").toLowerCase();
+          const comments = context.workbook.comments;
+          const root = comments.getItem(rootId).load("id,content");
+          const reply = root.replies.getItem(replyId).load("id,content");
+          const rootAlias = comments.getItemOrNullObject(compact(rootId)).load("id");
+          const replyAlias = root.replies.getItem(compact(replyId)).load("id");
+          const parent = comments.getItemByReplyId(replyId).load("id");
+          const parentAlias = comments.getItemByReplyId(compact(replyId)).load("id");
+          const wrongCollection = comments.getItemOrNullObject(replyId);
+          await context.sync();
+          return [root.id, root.content, reply.id, reply.content, rootAlias.id,
+                  replyAlias.id, parent.id, parentAlias.id, wrongCollection.isNullObject];
+        });
+    "#
+    .replace("SAVED_IDS", &ids.to_string());
+    let expected = serde_json::json!([
+        ids[0], "root", ids[1], "reply", ids[0], ids[1], ids[0], ids[0], true
+    ]);
+    let read = |book| {
+        mog::run_office_js_with_workbook(book, &lookup)
+            .unwrap()
+            .value
+    };
+    assert_eq!(read(&workbook), expected);
+    let bytes = workbook.to_xlsx_bytes().unwrap();
+    let reopened = compute_api::Workbook::from_xlsx_bytes(&bytes).unwrap().0;
+    assert_eq!(read(&reopened), expected);
+}
+
+#[test]
 fn conditional_format_aliases_read_current_state_and_clear_only_the_target_range() {
     let result = run_office_js(
         r##"

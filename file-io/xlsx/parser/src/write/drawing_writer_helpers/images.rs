@@ -11,15 +11,20 @@ use super::anchors::EMUS_PER_PIXEL;
 pub(super) fn convert_image(
     common: &FloatingObjectCommon,
     picture_src: &str,
+    drawing_owner: &str,
     image_blobs: &mut Vec<(String, Vec<u8>)>,
     image_rels: &mut Vec<(String, String)>,
 ) -> Option<DrawingObject> {
-    let (ext, decoded) = parse_data_url(picture_src)?;
+    let (ext, _) = parse_data_url(picture_src)?;
     let image_idx = image_blobs.len() + 1;
-    let image_path = format!("../media/image{}.{}", image_idx, ext);
+    let image_path = ensure_image_blob_for_current_payload(
+        image_blobs,
+        drawing_owner,
+        &format!("../media/image{}.{}", image_idx, ext),
+        picture_src,
+    )?;
     let r_id = next_available_image_r_id(image_rels);
     image_rels.push((r_id.clone(), image_path.clone()));
-    image_blobs.push((image_path, decoded));
 
     let name = if common.name.is_empty() {
         "Image".to_string()
@@ -83,17 +88,32 @@ pub(super) fn push_image_blob_if_data_url(
 
 pub(super) fn ensure_image_blob_for_current_payload(
     image_blobs: &mut Vec<(String, Vec<u8>)>,
+    drawing_owner: &str,
     image_path: &str,
     picture_src: &str,
-) -> bool {
-    if image_blobs.iter().any(|(path, _)| path == image_path) {
-        return true;
+) -> Option<String> {
+    let (ext, decoded) = parse_data_url(picture_src)?;
+    let resolve =
+        |path: &str| crate::infra::opc::resolve_relationship_target(Some(drawing_owner), path).ok();
+    let mut target = image_path.to_string();
+    let mut suffix = image_blobs.len() + 1;
+    loop {
+        let package_path = resolve(&target)?;
+        match image_blobs
+            .iter()
+            .find(|(path, _)| resolve(path).as_ref() == Some(&package_path))
+        {
+            Some((path, bytes)) if bytes == &decoded => return Some(path.clone()),
+            Some(_) => {
+                target = format!("../media/image{suffix}.{ext}");
+                suffix += 1;
+            }
+            None => {
+                image_blobs.push((target.clone(), decoded));
+                return Some(target);
+            }
+        }
     }
-    let Some((_, decoded)) = parse_data_url(picture_src) else {
-        return false;
-    };
-    image_blobs.push((image_path.to_string(), decoded));
-    true
 }
 
 /// Parse a `data:` URL into (file_extension, decoded_bytes).
@@ -131,6 +151,32 @@ fn mime_to_extension(mime: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn image_payload_allocation_uses_actual_drawing_owner() {
+        let mut blobs = vec![("../media/image1.png".to_string(), vec![1, 2, 3])];
+        let owner = "xl/custom/drawings/drawing1.xml";
+        let shared = ensure_image_blob_for_current_payload(
+            &mut blobs,
+            owner,
+            "/xl/custom/media/image1.png",
+            "data:image/png;base64,AQID",
+        )
+        .unwrap();
+        assert_eq!(shared, "../media/image1.png");
+        let distinct = ensure_image_blob_for_current_payload(
+            &mut blobs,
+            owner,
+            "/xl/custom/media/image1.png",
+            "data:image/png;base64,BAUG",
+        )
+        .unwrap();
+        assert_eq!(distinct, "../media/image2.png");
+        assert_eq!(
+            blobs,
+            vec![(shared, vec![1, 2, 3]), (distinct, vec![4, 5, 6])]
+        );
+    }
 
     #[test]
     fn parse_data_url_preserves_jfif_extension() {

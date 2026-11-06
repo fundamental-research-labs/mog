@@ -737,6 +737,7 @@ mod tests {
                 ..Default::default()
             }),
             nv_ext_lst: None,
+            c_nv_pic_pr_ext_lst: None,
             preset_geometry: Some(PresetGeometry {
                 prst: ShapePreset::Rect,
                 av_list: vec![],

@@ -130,10 +130,16 @@ fn relationship_part(owner: &str) -> String {
 fn internal_target(owner: &str, relationship: &str) -> String {
     assert!(!relationship.contains("TargetMode=\"External\""));
     let target = attribute(relationship, "Target");
+    assert!(!target.is_empty(), "empty internal relationship target");
     let joined = if target.starts_with('/') {
         target.trim_start_matches('/').to_owned()
     } else {
-        format!("{}/{target}", owner.rsplit_once('/').unwrap().0)
+        format!(
+            "{}/{target}",
+            owner
+                .rsplit_once('/')
+                .map_or("", |(directory, _)| directory)
+        )
     };
     let mut normalized = Vec::new();
     for component in joined.split('/') {
@@ -146,8 +152,55 @@ fn internal_target(owner: &str, relationship: &str) -> String {
     normalized.join("/")
 }
 
+fn assert_internal_relationships(archive: &XlsxArchive<'_>) {
+    let names: HashSet<_> = archive
+        .entries()
+        .iter()
+        .map(|entry| entry.name.as_str())
+        .collect();
+    for name in names.iter().filter(|name| name.ends_with(".rels")) {
+        let owner = if *name == "_rels/.rels" {
+            String::new()
+        } else {
+            let (directory, file) = if let Some(file) = name.strip_prefix("_rels/") {
+                ("", file)
+            } else {
+                name.rsplit_once("/_rels/")
+                    .expect("invalid relationship part path")
+            };
+            let owner = format!("{directory}/{}", file.strip_suffix(".rels").unwrap())
+                .trim_start_matches('/')
+                .to_owned();
+            assert!(
+                names.contains(owner.as_str()),
+                "relationship owner missing: {owner}"
+            );
+            owner
+        };
+        let xml = String::from_utf8(archive.read_file(name).unwrap()).unwrap();
+        let relationships = tags(&xml, "Relationship");
+        let mut ids = HashSet::new();
+        for relationship in relationships {
+            let id = attribute(&relationship, "Id");
+            assert!(
+                !id.is_empty() && ids.insert(id),
+                "missing or duplicate relationship ID"
+            );
+            if relationship.contains("TargetMode=\"External\"") {
+                continue;
+            }
+            let target = internal_target(&owner, &relationship);
+            assert!(
+                names.contains(target.as_str()),
+                "{name} references missing part: {target}"
+            );
+        }
+    }
+}
+
 fn assert_drawing(bytes: &[u8], depth: usize, camera: Camera) {
     let archive = XlsxArchive::new(bytes).unwrap();
+    assert_internal_relationships(&archive);
     assert!(
         !archive
             .entries()
@@ -353,4 +406,42 @@ fn drawing_assertion_follows_renamed_and_relocated_drawing() {
         });
         assert_drawing(&relocated, 0, Camera::None);
     }
+}
+
+#[test]
+fn drawing_assertion_checks_unreferenced_internal_relationships() {
+    // Retained relationships must resolve even if no drawing element uses them.
+    // External links need not name a package part; modern pictures need no VML.
+    for external in [false, true] {
+        let bytes = rewrite_fixture(|name, bytes| {
+            let bytes = if name == "xl/worksheets/_rels/sheet1.xml.rels" {
+                let mode = if external {
+                    r#" TargetMode="External""#
+                } else {
+                    ""
+                };
+                let extra = format!(
+                    r#"<Relationship Id="rIdUnusedLegacy" Type="{REL}/vmlDrawing" Target="../drawings/missing.vml"{mode}/></Relationships>"#
+                );
+                String::from_utf8(bytes)
+                    .unwrap()
+                    .replace("</Relationships>", &extra)
+                    .into_bytes()
+            } else {
+                bytes
+            };
+            (name.to_owned(), bytes)
+        });
+        let result = std::panic::catch_unwind(|| assert_drawing(&bytes, 0, Camera::None));
+        assert_eq!(result.is_ok(), external);
+    }
+    let orphan_owner = rewrite_fixture(|name, bytes| {
+        let name = if name == "xl/drawings/_rels/drawing1.xml.rels" {
+            "xl/drawings/_rels/missing.xml.rels"
+        } else {
+            name
+        };
+        (name.to_owned(), bytes)
+    });
+    assert!(std::panic::catch_unwind(|| assert_drawing(&orphan_owner, 0, Camera::None)).is_err());
 }

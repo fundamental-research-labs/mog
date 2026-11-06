@@ -4,7 +4,7 @@
   "excel_version": "16.0",
   "excel_build": "20527",
   "binary_sha256": "33af4b3a2ffc52c8d3ab2e4f36f77816c84f00082d1a803022e744e302e1c502",
-  "input_sha256": "5cfb4c26350028b9a61e1eb96fed55625ccd9119078e2a1e1932208c978fa432",
+  "input_sha256": "82f6198c44cf6a5092eec5f392563b4d2ae1b7801ee8986945d81eb0f8a74dcf",
   "output_sha256": "41b52d83a35a1c9b61ade0af3294e8ac9b9c3a9212cb84b6da937b52d110c90f",
   "completed": true,
   "initial": {
@@ -35,5 +35,7 @@
     "verdict": "LGTM",
     "findings": 0,
     "hosted_bot_approval": false
-  }
+  },
+  "committed_fixture_sha256": "5cfb4c26350028b9a61e1eb96fed55625ccd9119078e2a1e1932208c978fa432",
+  "fixture_note": "The committed fixture replaces the native test input author metadata with Synthetic fixture; all other ZIP parts are identical."
 }

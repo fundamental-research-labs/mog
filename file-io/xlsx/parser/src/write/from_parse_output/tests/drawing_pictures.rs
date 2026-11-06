@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn drawing_export_preserves_distinct_image_relationships_to_same_media_part() {
+fn drawing_export_preserves_two_pictures_sharing_the_same_media_part() {
     use domain_types::domain::floating_object::{
         AnchorMode, FloatingObject, FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,
         PictureData, PictureOoxmlProps,
@@ -58,19 +58,43 @@ fn drawing_export_preserves_distinct_image_relationships_to_same_media_part() {
             .unwrap(),
     );
 
-    assert!(drawing_xml.contains(r#"r:embed="rId1""#));
-    assert!(drawing_xml.contains(r#"r:embed="rId2""#));
-    let image_rels: Vec<_> = drawing_rels
-        .iter()
-        .filter(|rel| rel.rel_type == crate::infra::opc::REL_IMAGE)
-        .collect();
-    assert_eq!(image_rels.len(), 2);
-    assert!(image_rels.iter().any(|rel| rel.id == "rId1"));
-    assert!(image_rels.iter().any(|rel| rel.id == "rId2"));
-    assert!(
-        image_rels
-            .iter()
-            .all(|rel| rel.target == "../media/image1.png")
+    // Relationship IDs are package-local: identical image targets may share one
+    // relationship. Check both pictures and resolve each emitted embed instead.
+    let mut reader = quick_xml::Reader::from_str(&drawing_xml);
+    let mut pictures = 0;
+    let mut embeds = Vec::new();
+    loop {
+        match reader.read_event().unwrap() {
+            quick_xml::events::Event::Start(element) | quick_xml::events::Event::Empty(element) => {
+                if element.local_name().as_ref() == b"pic" {
+                    pictures += 1;
+                }
+                if element.local_name().as_ref() == b"blip" {
+                    for attribute in element.attributes() {
+                        let attribute = attribute.unwrap();
+                        if attribute.key.as_ref() == b"r:embed" {
+                            embeds.push(String::from_utf8(attribute.value.into_owned()).unwrap());
+                        }
+                    }
+                }
+            }
+            quick_xml::events::Event::Eof => break,
+            _ => {}
+        }
+    }
+    assert_eq!(pictures, 2);
+    assert_eq!(embeds.len(), 2);
+    for embed in embeds {
+        let relationships: Vec<_> = drawing_rels.iter().filter(|rel| rel.id == embed).collect();
+        assert_eq!(relationships.len(), 1, "each embed must resolve uniquely");
+        let relationship = relationships[0];
+        assert_eq!(relationship.rel_type, crate::infra::opc::REL_IMAGE);
+        assert_eq!(relationship.target, "../media/image1.png");
+        assert!(relationship.target_mode.is_none());
+    }
+    assert_eq!(
+        archive.read_file("xl/media/image1.png").unwrap(),
+        [1, 2, 3, 4]
     );
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }

@@ -162,3 +162,23 @@ fn test_transpose() {
         _ => panic!("Expected array"),
     }
 }
+
+#[test]
+fn test_expand_rejects_arrays_larger_than_a_sheet() {
+    let f = FnExpand;
+    // More rows or columns than a sheet has
+    assert_calc_error(f.call(&[num(1.0), num(1_048_577.0)]), "EXPAND(1,1048577)");
+    assert_calc_error(
+        f.call(&[num(1.0), num(1.0), num(16_385.0)]),
+        "EXPAND(1,1,16385)",
+    );
+    // More than 2,000,000 cells
+    assert_calc_error(
+        f.call(&[num(1.0), num(2_000.0), num(1_001.0)]),
+        "EXPAND(1,2000,1001)",
+    );
+    // Rejected before anything is allocated
+    assert_calc_error(f.call(&[num(1.0), num(1e9)]), "EXPAND(1,1E9)");
+    // A smaller target than the source is still #VALUE!
+    assert_eq!(f.call(&[test_array(), num(2.0)]), err(CellError::Value));
+}

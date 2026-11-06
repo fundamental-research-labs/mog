@@ -1,0 +1,37 @@
+{
+  "completed": true,
+  "candidate": "e2188d5f736877c427027e2debf2ec291c6a72de",
+  "version": "16.0",
+  "build": "20527",
+  "initial": {
+    "normalOpen": true,
+    "repair": false,
+    "shapes": 1,
+    "formula": "$A$1:$B$2 "
+  },
+  "reopened": {
+    "normalOpen": true,
+    "repair": false,
+    "shapes": 1,
+    "formula": "$A$1:$B$2 ",
+    "a2": 99
+  },
+  "frames": 30,
+  "binary_sha256": "e5b1b49d18430ea916bd08d44b4d1e9c8e77dfc6a4b094f76fa8626a0f9e313b",
+  "input_sha256": "5cfb4c26350028b9a61e1eb96fed55625ccd9119078e2a1e1932208c978fa432",
+  "output_sha256": "9d10f8a869ef25861f542327a71ef499bb219138c550d0a078df3c21fc87bd72",
+  "platform": "Linux arm64 Mog CLI; native Windows Excel",
+  "recording": {
+    "seconds": 6,
+    "fps": 5,
+    "description": "Three sampled stages: normal open, linked source edit, native save and reopen."
+  },
+  "tests": {
+    "control_tests": 80,
+    "xlsx_roundtrip_tests": 104,
+    "range_load_tests": 3,
+    "comments_parser_tests": 64,
+    "dynamic_array_limit_tests": 4,
+    "native_cli_smoke": "passed"
+  }
+}

@@ -276,3 +276,36 @@ When adding new test files:
 2. Ensure the error is reproducible
 3. Add corresponding assertions in `corpus_tests.rs`
 4. Update this README with any new categories or conventions
+
+## Linked-picture native acceptance
+
+`parity/floating-objects/linked-picture.xlsx` is an Excel-authored synthetic
+camera picture linked to `Synthetic!A1:B2`. Its VML `Pict` fallback must not
+become a modern form control; DrawingML owns the picture and camera link.
+
+From the repository root:
+
+```sh
+cargo test -p xlsx-parser --lib domain::controls --locked
+cargo test -p xlsx-parser --test roundtrip_parse_output --locked
+cargo build -p mog --locked
+./target-native/debug/mog -i file-io/xlsx/parser/test-corpus/parity/floating-objects/linked-picture.xlsx -o /tmp/linked-picture-fixed.xlsx
+```
+
+Open the exported copy normally in Windows Excel. Assert no repair, one picture,
+and its formula `$A$1:$B$2`. Change A2 from 12 to 99 and calculate; verify that the
+picture displays 99. Save a new `.xlsx`, close, and reopen: assert no repair and
+the same picture, formula and value. The unpatched export fails normal open.
+
+[Recording](verification/linked-picture/acceptance.webm),
+[edited-picture still](verification/linked-picture/edited-picture.jpg), and
+[results/hashes](verification/linked-picture/result.json) cover behavior commit
+`e2188d5f736877c427027e2debf2ec291c6a72de` with a Linux arm64 native CLI and
+Windows Excel 16.0 build 20527. The recording samples three asserted stages over
+six seconds. Later documentation/evidence commits do not change tested behavior.
+Both new regressions fail before the fix. All 80 control and 104 XLSX round-trip
+tests pass on the combined candidate. Separate checks pass for range-load limits
+(3), comments parsing/writing (64), and dynamic-array limits (4).
+
+This does not establish VML-only picture support. Grouped-picture media loss is
+tracked separately in [#493](https://github.com/fundamental-research-labs/mog/issues/493).

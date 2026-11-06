@@ -133,3 +133,20 @@ fn test_wraprows() {
         _ => panic!("Expected array"),
     }
 }
+
+#[test]
+fn test_wrapcols_wraprows_reject_arrays_larger_than_a_sheet() {
+    let vec = || CellValue::from_rows(vec![vec![num(1.0), num(2.0), num(3.0)]]);
+    // WRAPCOLS returns wrap_count rows; WRAPROWS returns wrap_count columns
+    assert_calc_error(
+        FnWrapCols.call(&[vec(), num(1_048_577.0)]),
+        "WRAPCOLS({1,2,3},1048577)",
+    );
+    assert_calc_error(
+        FnWrapRows.call(&[vec(), num(16_385.0)]),
+        "WRAPROWS({1,2,3},16385)",
+    );
+    // Rejected before anything is allocated
+    assert_calc_error(FnWrapCols.call(&[vec(), num(1e9)]), "WRAPCOLS({1,2,3},1E9)");
+    assert_calc_error(FnWrapRows.call(&[vec(), num(1e9)]), "WRAPROWS({1,2,3},1E9)");
+}

@@ -21,6 +21,49 @@ fn imported_jpeg_floating_object_exports_media_part_and_content_type() {
 }
 
 #[test]
+fn excel_linked_picture_does_not_create_invalid_form_controls() {
+    // Excel-authored Paste Special -> Linked Picture of synthetic A1:B2 cells.
+    // Excel stores a DrawingML picture and a legacy VML Pict fallback. Pict is
+    // not a CT_ControlPr objectType; exporting it as a control makes Excel
+    // reject a workbook that opened normally before the round-trip.
+    let input = fs::read(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("test-corpus/parity/floating-objects/linked-picture.xlsx"),
+    )
+    .unwrap();
+    let original = XlsxArchive::new(&input).unwrap();
+    let (parsed, _) = parse_xlsx_to_output(&input).unwrap();
+    assert_eq!(parsed_picture_sources(&parsed).len(), 1);
+    assert!(
+        parsed.sheets[0]
+            .floating_objects
+            .iter()
+            .all(|object| { !matches!(&object.data, FloatingObjectData::FormControl(_)) })
+    );
+
+    let exported = write_xlsx_from_parse_output(&parsed).unwrap();
+    let archive = XlsxArchive::new(&exported).unwrap();
+    assert!(
+        archive
+            .entries()
+            .iter()
+            .all(|entry| !entry.name.starts_with("xl/ctrlProps/"))
+    );
+    let sheet = String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    assert!(!sheet.contains("<controls>"));
+    let drawing =
+        String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap()).unwrap();
+    assert!(drawing.contains("cameraTool"));
+    assert!(drawing.contains("$A$1:$B$2"));
+    assert_eq!(drawing_image_parts(&archive), vec!["xl/media/image1.emf"]);
+    assert_eq!(
+        archive.read_file("xl/media/image1.emf").unwrap(),
+        original.read_file("xl/media/image1.emf").unwrap()
+    );
+    validate_archive_package_integrity(&archive).unwrap();
+}
+
+#[test]
 fn imported_shared_drawing_media_target_roundtrips_as_shared_package_part() {
     let imported = create_drawing_fixture_xlsx(
         &drawing_xml_for_blips(&[

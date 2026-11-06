@@ -2,6 +2,25 @@ use crate::domain::controls::types::{FormControlProperties, FormControlType};
 use crate::domain::controls::vml;
 
 #[test]
+fn legacy_pictures_are_not_imported_as_form_controls() {
+    let xml = br##"<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:x="urn:schemas-microsoft-com:office:excel">
+        <v:shape id="_x0000_s1025" type="#_x0000_t75">
+            <x:ClientData ObjectType="Pict"><x:Camera/><x:FmlaPict>Sheet1!A1:B2</x:FmlaPict></x:ClientData>
+        </v:shape>
+        <v:shape id="_x0000_s1026" type="#_x0000_t201">
+            <x:ClientData ObjectType="Checkbox"><x:Anchor>1,0,0,0,3,0,1,0</x:Anchor></x:ClientData>
+        </v:shape>
+    </xml>"##;
+
+    let mut controls = Vec::new();
+    vml::parse_vml_drawing(xml, &mut controls);
+
+    assert_eq!(controls.len(), 1);
+    assert_eq!(controls[0].object_type, FormControlType::CheckBox);
+    assert_eq!(controls[0].shape_id, Some(1026));
+}
+
+#[test]
 fn parses_vml_client_data_control() {
     let xml = br##"<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:x="urn:schemas-microsoft-com:office:excel">
         <v:shape id="_x0000_s1025" type="#_x0000_t201">

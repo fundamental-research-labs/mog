@@ -219,6 +219,40 @@ fn nested_group_external_picture_keeps_link_without_creating_media() {
 }
 
 #[test]
+fn camera_cell_reference_survives_typed_picture_export_without_alternate_content() {
+    for depth in [0, 2] {
+        for locks in [
+            "",
+            r#"<a:picLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/>"#,
+        ] {
+            let ext = r#"<a:extLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:ext uri="{84589F7E-364E-4C9E-8A38-B11213B215E9}"><a14:cameraTool xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main" cellRange="$A$1:$B$2" spid="_x0000_s1026"/></a:ext></a:extLst>"#;
+            let drawing = grouped_picture_drawing(depth, r#"r:embed="rIdImage1""#)
+                .replace("<cNvPicPr/>", &format!("<cNvPicPr>{locks}{ext}</cNvPicPr>"));
+            let input = create_drawing_fixture_xlsx(
+                &drawing,
+                &rels_xml(&[("rIdImage1", REL_IMAGE, "../media/group.png", None)]),
+                &[("xl/media/group.png", b"camera-payload")],
+            );
+            let (mut parsed, _) = parse_xlsx_to_output(&input).unwrap();
+            for _ in 0..2 {
+                let output = write_xlsx_from_parse_output(&parsed).unwrap();
+                let archive = XlsxArchive::new(&output).unwrap();
+                validate_archive_package_integrity(&archive).unwrap();
+                let xml = String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap())
+                    .unwrap();
+                assert!(xml.contains("cameraTool"), "{xml}");
+                assert!(xml.contains(r#"cellRange="$A$1:$B$2""#), "{xml}");
+                assert_eq!(
+                    archive.read_file("xl/media/group.png").unwrap(),
+                    b"camera-payload"
+                );
+                parsed = parse_xlsx_to_output(&output).unwrap().0;
+            }
+        }
+    }
+}
+
+#[test]
 fn mixed_generated_picture_and_group_preserve_distinct_payloads_and_links() {
     use xlsx_parser::infra::opc::REL_HYPERLINK;
     for depth in [0, 2] {

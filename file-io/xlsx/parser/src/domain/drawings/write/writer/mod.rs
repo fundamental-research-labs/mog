@@ -275,6 +275,10 @@ impl DrawingWriter {
                     .nv_ext_lst
                     .as_ref()
                     .map(|raw| crate::infra::xml::remap_relationship_attrs(raw, resolved_ids));
+                image.c_nv_pic_pr_ext_lst = image
+                    .c_nv_pic_pr_ext_lst
+                    .as_ref()
+                    .map(|raw| crate::infra::xml::remap_relationship_attrs(raw, resolved_ids));
                 image.sp_pr_ext_lst = image
                     .sp_pr_ext_lst
                     .as_ref()

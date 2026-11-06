@@ -764,6 +764,10 @@ impl Host {
 
     fn apply_batch(&self, ops: Vec<Value>) -> Result<BatchResult, BatchError> {
         let mut loaded = HashMap::new();
+        // Range projections are dense even when the workbook is sparse. Bound
+        // the entire response, including multiple ranges/properties, before
+        // allocating each projection. Metadata-only loads remain inexpensive.
+        let mut remaining_range_cells = MAX_RANGE_LOAD_CELLS;
         let mut results = HashMap::new();
         for raw_op in ops {
             // Give extension handlers first refusal for both new operation
@@ -2531,6 +2535,18 @@ impl Host {
                         let metadata = range_metadata(&range)?;
                         let unbounded = range_has_unbounded_dimension(&range)?;
                         for property in &properties {
+                            if !unbounded
+                                && matches!(
+                                    property.as_str(),
+                                    "values" | "formulas" | "numberFormat" | "text" | "valueTypes"
+                                )
+                            {
+                                reserve_range_load(
+                                    &mut remaining_range_cells,
+                                    metadata.row_count,
+                                    metadata.column_count,
+                                )?;
+                            }
                             match property.as_str() {
                                 "isNullObject" => {
                                     props.insert(property.clone(), Value::Bool(false));
@@ -2863,6 +2879,38 @@ fn unqualified_range_formula(sheet_name: &str, bounds: (u32, u32, u32, u32)) -> 
         col_letter(ec),
         er + 1
     )
+}
+
+const MAX_RANGE_LOAD_CELLS: u64 = 2_000_000;
+
+fn reserve_range_load(remaining: &mut u64, rows: u32, columns: u32) -> Result<(), BatchError> {
+    // Range.cellCount is -1 beyond i32::MAX; use dimensions to avoid bypassing
+    // the guard for a formatting-expanded A1:XFD1048576 used range.
+    let cells = u64::from(rows) * u64::from(columns);
+    *remaining = remaining.checked_sub(cells).ok_or_else(|| BatchError {
+        code: "RequestPayloadSizeLimitExceeded",
+        message: format!(
+            "Range loads exceed {MAX_RANGE_LOAD_CELLS} cells per context.sync(). Load smaller ranges in separate syncs; use getUsedRange(true) when only populated cells are needed."
+        ),
+    })?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod range_load_budget_tests {
+    use super::*;
+
+    #[test]
+    fn bounds_are_inclusive_and_shared_by_projections() {
+        let mut remaining = MAX_RANGE_LOAD_CELLS;
+        reserve_range_load(&mut remaining, 1000, 1000).unwrap();
+        reserve_range_load(&mut remaining, 1000, 1000).unwrap();
+        assert_eq!(remaining, 0);
+        assert!(reserve_range_load(&mut remaining, 1, 1).is_err());
+        let mut remaining = MAX_RANGE_LOAD_CELLS;
+        assert!(reserve_range_load(&mut remaining, 1_048_576, 16_384).is_err());
+        assert_eq!(remaining, MAX_RANGE_LOAD_CELLS);
+    }
 }
 
 struct RangeMetadata {

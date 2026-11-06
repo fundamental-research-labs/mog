@@ -164,6 +164,231 @@ fn imported_external_drawing_image_link_roundtrips_without_media_part() {
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
+#[test]
+fn grouped_and_nested_pictures_keep_owned_media_and_relationships() {
+    for depth in [1, 2] {
+        for target in ["../media/group.png", "/xl/media/group.png"] {
+            let drawing = grouped_picture_drawing(depth, r#"r:embed="rIdImage1""#);
+            let payload = b"\x89PNG\r\n\x1a\ngroup image payload";
+            let input = create_drawing_fixture_xlsx(
+                &drawing,
+                &rels_xml(&[("rIdImage1", REL_IMAGE, target, None)]),
+                &[("xl/media/group.png", payload)],
+            );
+            let (mut parsed, _) = parse_xlsx_to_output(&input).unwrap();
+            for _ in 0..2 {
+                let output = write_xlsx_from_parse_output(&parsed).unwrap();
+                let archive = XlsxArchive::new(&output).unwrap();
+                assert_eq!(archive.read_file("xl/media/group.png").unwrap(), payload);
+                assert_eq!(drawing_image_parts(&archive), vec!["xl/media/group.png"]);
+                let xml = String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap())
+                    .unwrap();
+                let rels = drawing_image_relationships(&archive);
+                assert!(xml.contains(&format!(r#"r:embed="{}""#, rels[0].id)));
+                assert_eq!(xml.matches("</xdr:grpSp>").count(), depth);
+                validate_archive_package_integrity(&archive).unwrap();
+                parsed = parse_xlsx_to_output(&output).unwrap().0;
+            }
+            // Payload authority belongs to the live group, not the workbook.
+            parsed.sheets[0].floating_objects.clear();
+            let output = write_xlsx_from_parse_output(&parsed).unwrap();
+            assert!(media_part_names(&XlsxArchive::new(&output).unwrap()).is_empty());
+        }
+    }
+}
+
+#[test]
+fn nested_group_external_picture_keeps_link_without_creating_media() {
+    let target = "https://example.invalid/group.png";
+    let input = create_drawing_fixture_xlsx(
+        &grouped_picture_drawing(2, r#"r:link="rIdImage1""#),
+        &rels_xml(&[("rIdImage1", REL_IMAGE, target, Some("External"))]),
+        &[],
+    );
+    let (parsed, _) = parse_xlsx_to_output(&input).unwrap();
+    let output = write_xlsx_from_parse_output(&parsed).unwrap();
+    let archive = XlsxArchive::new(&output).unwrap();
+    assert!(media_part_names(&archive).is_empty());
+    let rels = drawing_image_relationships(&archive);
+    assert_eq!(rels.len(), 1);
+    assert_eq!(rels[0].target, target);
+    assert_eq!(rels[0].target_mode.as_deref(), Some("External"));
+    let xml = String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap()).unwrap();
+    assert!(xml.contains(&format!(r#"r:link="{}""#, rels[0].id)));
+    validate_archive_package_integrity(&archive).unwrap();
+}
+
+#[test]
+fn mixed_generated_picture_and_group_preserve_distinct_payloads_and_links() {
+    use xlsx_parser::infra::opc::REL_HYPERLINK;
+    for depth in [0, 2] {
+        for generated_first in [true, false] {
+            for external in [true, false] {
+                let target = if external {
+                    "https://example.invalid/group.png"
+                } else {
+                    "/xl/media/image1.png"
+                };
+                let attr = if external {
+                    r#"r:link="rId1""#
+                } else {
+                    r#"r:embed="rId2" r:link="rId1""#
+                };
+                let drawing = grouped_picture_drawing(depth, attr).replace(
+                r#"name="Grouped Picture" descr="Picture"/>"#,
+                r#"name="Grouped Picture" descr="Picture"><a:hlinkClick xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId3"/></cNvPr>"#,
+            );
+                let input = create_drawing_fixture_xlsx(
+                    &drawing,
+                    &rels_xml(&[
+                        ("rId2", REL_IMAGE, target, external.then_some("External")),
+                        (
+                            "rId1",
+                            REL_IMAGE,
+                            "https://example.invalid/group.png",
+                            Some("External"),
+                        ),
+                        (
+                            "rId3",
+                            REL_HYPERLINK,
+                            "https://example.invalid/hyperlink",
+                            Some("External"),
+                        ),
+                    ]),
+                    if external {
+                        &[]
+                    } else {
+                        &[("xl/media/image1.png", b"group-payload")]
+                    },
+                );
+                let (mut parsed, _) = parse_xlsx_to_output(&input).unwrap();
+                let generated_input = create_drawing_fixture_xlsx(
+                    &drawing_xml_for_blips(&[(7, "Generated Picture", 10, r#"r:embed="rId1""#)]),
+                    &rels_xml(&[("rId1", REL_IMAGE, "../media/image1.png", None)]),
+                    &[("xl/media/image1.png", b"generated-payload")],
+                );
+                let mut generated = parse_xlsx_to_output(&generated_input).unwrap().0.sheets[0]
+                    .floating_objects
+                    .remove(0);
+                let FloatingObjectData::Picture(pic) = &mut generated.data else {
+                    panic!("picture")
+                };
+                pic.ooxml = None;
+                let objects = &mut parsed.sheets[0].floating_objects;
+                if generated_first {
+                    objects.insert(0, generated);
+                } else {
+                    objects.push(generated);
+                }
+                for _ in 0..2 {
+                    let output = write_xlsx_from_parse_output(&parsed).unwrap();
+                    let archive = XlsxArchive::new(&output).unwrap();
+                    validate_archive_package_integrity(&archive).unwrap();
+                    let xml =
+                        String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap())
+                            .unwrap();
+                    let rel_bytes = archive
+                        .read_file("xl/drawings/_rels/drawing1.xml.rels")
+                        .unwrap();
+                    let rels = parse_all_rels(&rel_bytes);
+                    let mut reader = quick_xml::Reader::from_str(&xml);
+                    let mut name = String::new();
+                    let mut picture_count = 0;
+                    let mut hyperlink_count = 0;
+                    loop {
+                        use quick_xml::events::Event;
+                        let event = reader.read_event().unwrap();
+                        match event {
+                            Event::Start(ref tag) | Event::Empty(ref tag) => {
+                                let attr = |key: &[u8]| {
+                                    tag.attributes()
+                                        .map(Result::unwrap)
+                                        .find(|a| a.key.as_ref() == key)
+                                        .map(|a| String::from_utf8(a.value.into_owned()).unwrap())
+                                };
+                                match tag.local_name().as_ref() {
+                                    b"cNvPr" => name = attr(b"name").unwrap_or_default(),
+                                    b"blip" => {
+                                        picture_count += 1;
+                                        if name == "Grouped Picture" {
+                                            let id = attr(b"r:link").unwrap();
+                                            let linked =
+                                                rels.iter().find(|rel| rel.id == id).unwrap();
+                                            assert_eq!(
+                                                linked.target,
+                                                "https://example.invalid/group.png"
+                                            );
+                                            assert_eq!(
+                                                linked.target_mode.as_deref(),
+                                                Some("External")
+                                            );
+                                        }
+                                        let id =
+                                            attr(b"r:embed").or_else(|| attr(b"r:link")).unwrap();
+                                        let rel = rels.iter().find(|rel| rel.id == id).unwrap();
+                                        if name == "Grouped Picture" && external {
+                                            assert_eq!(rel.target, target);
+                                            assert_eq!(
+                                                rel.target_mode.as_deref(),
+                                                Some("External")
+                                            );
+                                        } else {
+                                            let path = resolve_relationship_target(
+                                                "xl/drawings/_rels/drawing1.xml.rels",
+                                                &rel.target,
+                                            );
+                                            let expected: &[u8] = if name == "Grouped Picture" {
+                                                b"group-payload"
+                                            } else {
+                                                b"generated-payload"
+                                            };
+                                            assert_eq!(
+                                                archive.read_file(&path).unwrap(),
+                                                expected,
+                                                "{name}"
+                                            );
+                                        }
+                                    }
+                                    b"hlinkClick" if name == "Grouped Picture" => {
+                                        hyperlink_count += 1;
+                                        let id = attr(b"r:id").unwrap();
+                                        let rel = rels.iter().find(|rel| rel.id == id).unwrap();
+                                        assert_eq!(rel.target, "https://example.invalid/hyperlink");
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            Event::Eof => break,
+                            _ => {}
+                        }
+                    }
+                    assert_eq!(picture_count, 2);
+                    assert_eq!(hyperlink_count, 1);
+                    assert_eq!(
+                        media_part_names(&archive).len(),
+                        if external { 1 } else { 2 }
+                    );
+                    parsed = parse_xlsx_to_output(&output).unwrap().0;
+                }
+            }
+        }
+    }
+}
+
+fn grouped_picture_drawing(depth: usize, blip: &str) -> String {
+    let drawing = drawing_xml_for_blips(&[(1, "Grouped Picture", 2, blip)]);
+    let start = drawing.find("<pic>").unwrap();
+    let end = drawing.find("</pic>").unwrap() + "</pic>".len();
+    let mut child = drawing[start..end].to_string();
+    for index in 0..depth {
+        let id = index + 2;
+        child = format!(
+            r#"<grpSp><nvGrpSpPr><cNvPr id="{id}" name="Group {id}"/><cNvGrpSpPr/></nvGrpSpPr><grpSpPr><a:xfrm xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:off x="0" y="0"/><a:ext cx="762000" cy="762000"/><a:chOff x="0" y="0"/><a:chExt cx="762000" cy="762000"/></a:xfrm></grpSpPr>{child}</grpSp>"#
+        );
+    }
+    format!("{}{}{}", &drawing[..start], child, &drawing[end..])
+}
+
 fn assert_imported_image_fixture_exports_media(
     fixture_name: &str,
     expected_content_type: &str,

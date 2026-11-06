@@ -1,5 +1,6 @@
 use super::*;
 use crate::storage::engine::history;
+use domain_types::domain::comment::ooxml_guid;
 
 // ---------------------------------------------------------------------------
 // Import specific sheets from XLSX
@@ -42,31 +43,45 @@ pub(in crate::storage::engine) fn import_sheets_from_xlsx(
     // Imported threads retain person identity without replacing existing authors.
     history::metadata::capture_workbook_field!(engine.stores.storage, persons);
     history::metadata::capture_workbook_field!(engine.stores.storage, has_persons_part);
-    let mut person_ids = std::collections::HashMap::new();
+    // XLSX serializes the same ID differently from native storage. Merge on its
+    // package identity, but keep local IDs for every imported reference.
+    let mut target_indices: std::collections::HashMap<_, _> = engine
+        .stores
+        .storage
+        .metadata
+        .persons
+        .iter()
+        .enumerate()
+        .map(|(index, person)| (ooxml_guid(&person.id), index))
+        .collect();
+    let mut imported_ids = std::collections::HashMap::new();
     for person in &mut parse_output.persons {
-        if let Some(existing) = engine
-            .stores
-            .storage
-            .metadata
-            .persons
-            .iter()
-            .find(|existing| existing.id.eq_ignore_ascii_case(&person.id))
-        {
-            if existing == person {
+        let source_guid = ooxml_guid(&person.id);
+        if let Some(&index) = target_indices.get(&source_guid) {
+            let existing = &engine.stores.storage.metadata.persons[index];
+            person.id.clone_from(&existing.id);
+            if person == existing {
+                imported_ids.insert(source_guid, person.id.clone());
                 continue;
             }
-            let old = person.id.clone();
             person.id = engine.stores.next_id_uuid_string();
-            person_ids.insert(old, person.id.clone());
         }
-        engine.stores.storage.metadata.persons.push(person.clone());
+        imported_ids.insert(source_guid, person.id.clone());
+        let persons = &mut engine.stores.storage.metadata.persons;
+        target_indices.insert(ooxml_guid(&person.id), persons.len());
+        persons.push(person.clone());
     }
     engine.stores.storage.metadata.has_persons_part |= parse_output.has_persons_part;
     for sheet in &mut parse_output.sheets {
         for comment in &mut sheet.comments {
-            if let Some(person) = &mut comment.person_id {
-                if let Some(new) = person_ids.get(person) {
-                    *person = new.clone();
+            for reference in comment.person_id.iter_mut().chain(
+                comment
+                    .mentions
+                    .iter_mut()
+                    .map(|mention| &mut mention.user_id),
+            ) {
+                if let Some(id) = imported_ids.get(&ooxml_guid(reference)) {
+                    reference.clone_from(id);
                 }
             }
         }

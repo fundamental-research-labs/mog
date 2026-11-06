@@ -925,6 +925,8 @@ fn build_parse_output_preserves_xlsx_metadata_domain() {
 
 #[test]
 fn l2_xlsx_export_preserves_threaded_comment_persons() {
+    const THREAD_ID: &str = "{6F9619FF-8B86-D011-B42D-00C04FC964FF}";
+    const PERSON_ID: &str = "{3F2504E0-4F89-11D3-9A0C-0305E82C3301}";
     let input = ParseOutput {
         sheets: vec![SheetData {
             name: "Comments".to_string(),
@@ -942,8 +944,8 @@ fn l2_xlsx_export_preserves_threaded_comment_persons() {
                 author: "Modeled Author".to_string(),
                 author_id: Some("S::author@example.com::1".to_string()),
                 content: Some("Threaded package comment".to_string()),
-                thread_id: Some("{THREAD-1}".to_string()),
-                person_id: Some("{PERSON-1}".to_string()),
+                thread_id: Some(THREAD_ID.to_string()),
+                person_id: Some(PERSON_ID.to_string()),
                 timestamp: Some("2026-05-27T10:00:00Z".to_string()),
                 comment_type: CommentType::ThreadedComment,
                 ..Default::default()
@@ -951,7 +953,7 @@ fn l2_xlsx_export_preserves_threaded_comment_persons() {
             ..Default::default()
         }],
         persons: vec![PersonInfo {
-            id: "{PERSON-1}".to_string(),
+            id: PERSON_ID.to_string(),
             display_name: "Modeled Author".to_string(),
             user_id: Some("S::author@example.com::1".to_string()),
             provider_id: Some("AD".to_string()),
@@ -972,12 +974,12 @@ fn l2_xlsx_export_preserves_threaded_comment_persons() {
         .output;
 
     assert_eq!(parsed.persons.len(), 1);
-    assert_eq!(parsed.persons[0].id, "{PERSON-1}");
+    assert_eq!(parsed.persons[0].id, PERSON_ID);
     assert_eq!(parsed.persons[0].display_name, "Modeled Author");
     assert!(parsed.sheets[0].comments.iter().any(|comment| {
         comment.comment_type == CommentType::ThreadedComment
-            && comment.thread_id.as_deref() == Some("{THREAD-1}")
-            && comment.person_id.as_deref() == Some("{PERSON-1}")
+            && comment.thread_id.as_deref() == Some(THREAD_ID)
+            && comment.person_id.as_deref() == Some(PERSON_ID)
             && comment.content.as_deref() == Some("Threaded package comment")
             && comment.author == "Modeled Author"
     }));

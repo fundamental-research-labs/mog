@@ -73,6 +73,14 @@ pub fn comments_vml_from_domain_with_package(
     .to_vml()
 }
 
+fn thread_id(comment: &domain_types::Comment) -> &str {
+    comment
+        .thread_id
+        .as_deref()
+        .filter(|id| !id.is_empty())
+        .unwrap_or(&comment.id)
+}
+
 fn build_comments_writer(
     comments: &[domain_types::Comment],
     root_namespace_attrs: Option<&[(String, String)]>,
@@ -100,8 +108,7 @@ fn build_comments_writer(
             // is the canonical GUID; fall back to comment.id if missing
             // (storage invariant says threads have `Some(...)`, but the writer
             // is the last line of defense).
-            let thread_id_str =
-                ooxml_guid(comment.thread_id.as_deref().unwrap_or(comment.id.as_str()));
+            let thread_id_str = ooxml_guid(thread_id(comment));
             let tc_author = format!("tc={}", thread_id_str);
 
             // If the comment has original rich text runs from a parsed file, preserve
@@ -273,20 +280,11 @@ pub fn threaded_comments_xml_from_domain(
     }
 
     for comment in &threaded {
-        let thread_id = comment
-            .thread_id
-            .as_deref()
-            .filter(|id| !id.is_empty())
-            .unwrap_or(comment.id.as_str())
-            .to_string();
-        let comment_id = if comment.parent_id.is_none() {
-            thread_id.clone()
-        } else if comment.id.is_empty() {
-            thread_id.clone()
+        let comment_id = if comment.parent_id.is_some() && !comment.id.is_empty() {
+            &comment.id
         } else {
-            comment.id.clone()
+            thread_id(comment)
         };
-        let comment_id = ooxml_guid(&comment_id);
         let person_id = comment
             .person_id
             .as_deref()
@@ -306,7 +304,7 @@ pub fn threaded_comments_xml_from_domain(
             .collect();
 
         tw.add_comment(ThreadedComment {
-            id: comment_id,
+            id: ooxml_guid(comment_id),
             cell_ref: comment.cell_ref.clone(),
             author_id: person_id,
             text: comment.content.as_deref().unwrap_or("").to_string(),

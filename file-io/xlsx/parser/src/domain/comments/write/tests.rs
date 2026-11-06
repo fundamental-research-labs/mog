@@ -659,7 +659,7 @@ fn test_engine_comment_ids_are_written_as_braced_guids() {
         id: "e64f9b1eaf1c8e860000000000000002".to_string(),
         cell_ref: "C6".to_string(),
         author: "User".to_string(),
-        content: Some("fy26_10k.html | Page N/A | 47,525".to_string()),
+        content: Some("Review note".to_string()),
         comment_type: CommentType::ThreadedComment,
         thread_id: Some("e64f9b1eaf1c8e860000000000000002".to_string()),
         person_id: Some(person.to_string()),

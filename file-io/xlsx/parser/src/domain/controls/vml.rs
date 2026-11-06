@@ -54,7 +54,11 @@ pub fn parse_vml_drawing(xml: &[u8], controls: &mut Vec<FormControl>) {
             let element = &cd[..element_end];
             let object_type_str = parse_string_attr(element, b"ObjectType=\"");
 
-            if object_type_str.as_deref() == Some("Note") {
+            // Notes and pictures have their own worksheet/drawing owners.
+            // Excel camera pictures also have a VML Pict fallback, but Pict is
+            // not a valid modern formControlPr objectType. Treating it as a
+            // control emits ctrlProp parts that make Excel reject the workbook.
+            if matches!(object_type_str.as_deref(), Some("Note" | "Pict")) {
                 pos = shape_end;
                 continue;
             }

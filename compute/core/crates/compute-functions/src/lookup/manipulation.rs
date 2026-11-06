@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use value_types::{CellArray, CellError, CellValue};
 
+use crate::helpers::array_size::check_array_size;
 use crate::{FunctionRegistry, PureFunction};
 
 // ---------------------------------------------------------------------------
@@ -418,6 +419,9 @@ impl PureFunction for FnExpand {
                     "EXPAND: target size ({target_rows}x{target_cols}) is smaller than source ({src_rows}x{src_cols})"
                 ),
             );
+        }
+        if let Some(e) = check_array_size("EXPAND", target_rows as u64, target_cols as u64) {
+            return e;
         }
 
         let mut result = Vec::with_capacity(target_rows);

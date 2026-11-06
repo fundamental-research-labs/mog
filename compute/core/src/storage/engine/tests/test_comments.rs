@@ -495,45 +495,86 @@ fn selected_sheet_comment_import_preserves_colliding_person_identities() {
         )
         .unwrap();
     let imported_person = source.stores.storage.metadata.persons[0].clone();
+    let source_comment = source
+        .get_comments_for_cell_by_position(&sid, 2, 2)
+        .remove(0);
+    source
+        .update_comment_mentions(
+            &sid,
+            &source_comment.id,
+            "@Imported author",
+            vec![domain_types::domain::comment::CommentMention {
+                display_text: "@Imported author".into(),
+                user_id: imported_person.id.clone(),
+                email: None,
+                start_index: 0,
+                length: 16,
+            }],
+        )
+        .unwrap();
     let source_name = source.cell_store().get_sheet(&sid).unwrap().name.clone();
     let bytes = source.export_to_xlsx_bytes().unwrap();
-    let (mut target, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-    let mut existing = imported_person.clone();
-    existing.display_name = "Existing author".into();
-    target
-        .stores
-        .storage
-        .metadata
-        .persons
-        .push(existing.clone());
-    let before = target.stores.storage.metadata.persons.clone();
-    assert!(
+
+    for same_author in [true, false] {
+        let (mut target, _) = ComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let mut existing = imported_person.clone();
+        if !same_author {
+            existing.display_name = "Existing author".into();
+        }
         target
-            .import_sheets_from_xlsx(&bytes, vec!["Missing sheet".into()], None)
-            .is_err()
-    );
-    assert_eq!(target.stores.storage.metadata.persons, before);
-    let imported = target
-        .import_sheets_from_xlsx(&bytes, vec![source_name], None)
-        .unwrap();
-    let imported = *target
-        .cell_store()
-        .sheet_ids()
-        .find(|id| target.cell_store().get_sheet(id).unwrap().name == imported[0])
-        .unwrap();
-    let thread = target
-        .get_comments_for_cell_by_position(&imported, 2, 2)
-        .remove(0);
-    assert_ne!(thread.person_id.as_deref(), Some(existing.id.as_str()));
-    let parsed = xlsx_api::parse(&target.export_to_xlsx_bytes().unwrap())
-        .unwrap()
-        .output;
-    assert!(parsed.persons.iter().any(|person| person == &existing));
-    assert!(
-        parsed
+            .stores
+            .storage
+            .metadata
             .persons
+            .push(existing.clone());
+        let before = target.stores.storage.metadata.persons.clone();
+        assert!(
+            target
+                .import_sheets_from_xlsx(&bytes, vec!["Missing sheet".into()], None)
+                .is_err()
+        );
+        assert_eq!(target.stores.storage.metadata.persons, before);
+
+        let imported = target
+            .import_sheets_from_xlsx(&bytes, vec![source_name.clone()], None)
+            .unwrap();
+        let imported = *target
+            .cell_store()
+            .sheet_ids()
+            .find(|id| target.cell_store().get_sheet(id).unwrap().name == imported[0])
+            .unwrap();
+        let thread = target
+            .get_comments_for_cell_by_position(&imported, 2, 2)
+            .remove(0);
+        let person_id = thread.person_id.as_deref().unwrap();
+        assert_eq!(person_id == existing.id, same_author);
+        assert_eq!(thread.mentions[0].user_id, person_id);
+
+        let parsed = xlsx_api::parse(&target.export_to_xlsx_bytes().unwrap())
+            .unwrap()
+            .output;
+        assert_eq!(parsed.persons.len(), if same_author { 1 } else { 2 });
+        let existing_guid = domain_types::domain::comment::ooxml_guid(&existing.id);
+        assert!(
+            parsed
+                .persons
+                .iter()
+                .any(|p| p.id == existing_guid && p.display_name == existing.display_name)
+        );
+        let parsed_thread = parsed
+            .sheets
             .iter()
-            .any(|person| Some(&person.id) == thread.person_id.as_ref()
-                && person.display_name == imported_person.display_name)
-    );
+            .flat_map(|s| &s.comments)
+            .find(|comment| comment.content.as_deref() == Some("@Imported author"))
+            .unwrap();
+        let author_guid = parsed_thread.person_id.as_deref().unwrap();
+        assert_eq!(author_guid == existing_guid, same_author);
+        assert_eq!(parsed_thread.mentions[0].user_id, author_guid);
+        assert!(
+            parsed
+                .persons
+                .iter()
+                .any(|p| p.id == author_guid && p.display_name == imported_person.display_name)
+        );
+    }
 }

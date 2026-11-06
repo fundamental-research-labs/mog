@@ -107,3 +107,22 @@ fn test_sequence_errors() {
     // text arg → #VALUE!
     assert_eq!(f.call(&[text("abc")]), err(CellError::Value));
 }
+
+#[test]
+fn test_sequence_rejects_arrays_larger_than_a_sheet() {
+    let f = FnSequence;
+    // More rows or columns than a sheet has
+    assert_calc_error(f.call(&[num(1_048_577.0)]), "SEQUENCE(1048577)");
+    assert_calc_error(f.call(&[num(1.0), num(16_385.0)]), "SEQUENCE(1,16385)");
+    // More than 2,000,000 cells
+    assert_calc_error(f.call(&[num(2_000.0), num(1_001.0)]), "SEQUENCE(2000,1001)");
+    // Rejected before anything is allocated
+    assert_calc_error(f.call(&[num(1e9)]), "SEQUENCE(1E9)");
+    assert_calc_error(f.call(&[num(1e300), num(1e300)]), "SEQUENCE(1E300,1E300)");
+
+    // A full sheet column still fits
+    match f.call(&[num(1_048_576.0)]) {
+        CellValue::Array(arr) => assert_eq!((arr.rows(), arr.cols()), (1_048_576, 1)),
+        other => panic!("SEQUENCE(1048576): expected an array, got {other:?}"),
+    }
+}

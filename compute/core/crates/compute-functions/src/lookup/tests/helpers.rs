@@ -23,3 +23,16 @@ pub(super) fn test_array() -> CellValue {
         vec![num(3.0), text("c"), num(300.0)],
     ])
 }
+
+/// Assert `#CALC!` without printing a whole array when a size check is missing.
+pub(super) fn assert_calc_error(result: CellValue, call: &str) {
+    match result {
+        CellValue::Error(CellError::Calc, _) => {}
+        CellValue::Array(arr) => panic!(
+            "{call}: expected #CALC!, got a {}x{} array",
+            arr.rows(),
+            arr.cols()
+        ),
+        other => panic!("{call}: expected #CALC!, got {other:?}"),
+    }
+}

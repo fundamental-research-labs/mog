@@ -6,7 +6,10 @@ use crate::{
     range_navigation::{RangeAddress, parse_range_address},
 };
 use compute_api::{Sheet, Workbook};
-use domain_types::{Comment, domain::comment::CommentType};
+use domain_types::{
+    Comment,
+    domain::comment::{CommentType, ooxml_guid},
+};
 use serde_json::{Value, json};
 use std::{collections::HashMap, sync::Arc};
 
@@ -31,17 +34,71 @@ impl CommentRef {
     }
 }
 impl CollectionRef {
-    fn items(&self) -> Result<Vec<CommentRef>, BatchError> {
-        let sheets = if let Some(parent) = &self.parent {
+    fn sheets(&self) -> Result<Vec<Sheet>, BatchError> {
+        if let Some(parent) = &self.parent {
             parent.get()?;
-            vec![parent.sheet.clone()]
+            Ok(vec![parent.sheet.clone()])
         } else {
             (0..self.workbook.sheet_count().map_err(engine)?)
                 .map(|i| self.workbook.sheet_by_index(i).map_err(engine))
-                .collect::<Result<Vec<_>, _>>()?
-        };
+                .collect()
+        }
+    }
+
+    /// Accept IDs from both the live engine and its XLSX representation. Bind
+    /// the stored ID so subsequent reads, edits and deletes use the engine key.
+    fn find_id(
+        &self,
+        requested: &str,
+        parent_by_reply: bool,
+    ) -> Result<Option<CommentRef>, BatchError> {
+        let public_id = ooxml_guid(requested);
+        let mut alias = None;
+        for sheet in self.sheets()? {
+            let comments = sheet.comments().get_all().map_err(engine)?;
+            for comment in &comments {
+                if comment.comment_type != CommentType::ThreadedComment {
+                    continue;
+                }
+                let exact = comment.id == requested;
+                if !exact && (alias.is_some() || ooxml_guid(&comment.id) != public_id) {
+                    continue;
+                }
+                let target_id = if parent_by_reply {
+                    let Some(parent_id) = &comment.parent_id else {
+                        continue;
+                    };
+                    if !comments.iter().any(|root| {
+                        root.id == *parent_id
+                            && root.comment_type == CommentType::ThreadedComment
+                            && root.parent_id.is_none()
+                    }) {
+                        continue;
+                    }
+                    parent_id
+                } else if comment.parent_id.as_deref()
+                    == self.parent.as_ref().map(|p| p.id.as_str())
+                {
+                    &comment.id
+                } else {
+                    continue;
+                };
+                let found = CommentRef {
+                    sheet: sheet.clone(),
+                    id: target_id.clone(),
+                };
+                if exact {
+                    return Ok(Some(found));
+                }
+                alias = Some(found);
+            }
+        }
+        Ok(alias)
+    }
+
+    fn items(&self) -> Result<Vec<CommentRef>, BatchError> {
         let mut items = Vec::new();
-        for sheet in sheets {
+        for sheet in self.sheets()? {
             let mut comments = sheet.comments().get_all().map_err(engine)?;
             comments.retain(|c| {
                 c.comment_type == CommentType::ThreadedComment
@@ -213,9 +270,8 @@ impl ExtensionHandler for CommentsHandler {
             );
             return Ok(true);
         }
-        let items = collection.items()?;
         if method == "count" {
-            context.result(id, json!(items.len()));
+            context.result(id, json!(collection.items()?.len()));
             return Ok(true);
         }
         let found = match method {
@@ -223,11 +279,12 @@ impl ExtensionHandler for CommentsHandler {
                 let index = arg(0)
                     .as_u64()
                     .ok_or_else(|| invalid("index must be a non-negative integer"))?;
-                items.get(index as usize).cloned()
+                collection.items()?.get(index as usize).cloned()
             }
-            "item" | "itemOrNull" => items
-                .into_iter()
-                .find(|item| Some(item.id.as_str()) == arg(0).as_str()),
+            "item" | "itemOrNull" => match arg(0).as_str() {
+                Some(key) => collection.find_id(key, false)?,
+                None => None,
+            },
             "byCell" => {
                 let (sheet, row, col) = location_arg(context, arg(0))?;
                 let root = sheet
@@ -244,16 +301,7 @@ impl ExtensionHandler for CommentsHandler {
                 let reply_id = arg(0)
                     .as_str()
                     .ok_or_else(|| invalid("replyId must be a string"))?;
-                let mut found = None;
-                for item in items {
-                    if let Some(reply) = item.sheet.comments().get(reply_id).map_err(engine)? {
-                        if reply.parent_id.as_deref() == Some(&item.id) {
-                            found = Some(item);
-                            break;
-                        }
-                    }
-                }
-                found
+                collection.find_id(reply_id, true)?
             }
             _ => return Err(invalid("Unknown comment operation")),
         };
@@ -277,7 +325,7 @@ impl ExtensionObject for CommentRef {
             .iter()
             .map(|name| {
                 let value = match name.as_str() {
-                    "id" => json!(comment.id),
+                    "id" => json!(ooxml_guid(&comment.id)),
                     "content" => json!(comment.content.as_deref().unwrap_or("")),
                     "authorName" => json!(comment.author),
                     "authorEmail" => json!(comment.author_email.as_deref().unwrap_or("")),

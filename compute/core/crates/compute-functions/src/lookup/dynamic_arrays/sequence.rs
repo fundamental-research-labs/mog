@@ -1,6 +1,7 @@
 use value_types::{CellError, CellValue};
 
 use crate::PureFunction;
+use crate::helpers::array_size::check_array_size;
 
 pub(in crate::lookup) struct FnSequence;
 
@@ -52,6 +53,9 @@ impl PureFunction for FnSequence {
                 CellError::Calc,
                 format!("SEQUENCE: rows ({rows}) and columns ({cols}) must be positive"),
             );
+        }
+        if let Some(e) = check_array_size("SEQUENCE", rows as u64, cols as u64) {
+            return e;
         }
 
         let rows = rows as usize;

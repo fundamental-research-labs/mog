@@ -2596,7 +2596,6 @@ dependencies = [
  "tempfile",
  "tracing",
  "unicase",
- "uuid",
  "value-types",
  "xlsx-test-contracts",
  "xml-derive",

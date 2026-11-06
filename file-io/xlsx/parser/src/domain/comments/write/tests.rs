@@ -1,7 +1,7 @@
 use super::helpers::{current_timestamp, indices_to_cell_ref, parse_cell_ref};
 use super::namespaces::{MC_NS, SPREADSHEETML_NS, XR_NS};
 use super::*;
-use domain_types::domain::comment::CommentType;
+use domain_types::domain::comment::{CommentType, ooxml_guid};
 
 // -------------------------------------------------------------------------
 // Helper function tests
@@ -574,7 +574,7 @@ fn test_note_with_tc_author_and_stale_thread_id_stays_legacy_only() {
     assert!(legacy_str.contains("<author>tc={LITERAL-AUTHOR}</author>"));
     assert!(legacy_str.contains("Literal legacy note"));
     // xr:uid is an ST_Guid; a non-GUID value is written in its canonical GUID form.
-    let uid = super::helpers::ooxml_guid("xr-note-uid");
+    let uid = ooxml_guid("xr-note-uid");
     assert!(legacy_str.contains(&format!(r#"xr:uid="{uid}""#)));
     assert!(
         !legacy_str.contains("stale-thread-id"),
@@ -599,7 +599,7 @@ fn test_dispatch_threaded_writes_to_both() {
         ..Default::default()
     };
 
-    let guid = super::helpers::ooxml_guid("thread-001");
+    let guid = ooxml_guid("thread-001");
     let (legacy_xml, _vml_xml) = comments_from_domain(1, &[thread.clone()], None, None, None);
     let legacy_str = String::from_utf8(legacy_xml).expect("utf8");
     assert!(
@@ -642,8 +642,8 @@ fn test_dispatch_threaded_reply_uses_own_comment_id() {
         .expect("threaded comments must produce threaded XML");
     let threaded_str = String::from_utf8(threaded).expect("utf8");
 
-    let root_id = super::helpers::ooxml_guid("thread-root");
-    let reply_id = super::helpers::ooxml_guid("reply-001");
+    let root_id = ooxml_guid("thread-root");
+    let reply_id = ooxml_guid("reply-001");
     assert_ne!(root_id, reply_id);
     assert!(threaded_str.contains(&format!(r#"id="{root_id}""#)));
     assert!(threaded_str.contains(&format!(r#"id="{reply_id}""#)));
@@ -700,7 +700,6 @@ fn test_engine_comment_ids_are_written_as_braced_guids() {
 
 #[test]
 fn test_ooxml_guid_keeps_guids_and_maps_other_ids_stably() {
-    use super::helpers::ooxml_guid;
     let excel = "{0AB1C2D3-E4F5-4A6B-8C7D-9E0F1A2B3C4D}";
     assert_eq!(ooxml_guid(excel), excel);
     assert_eq!(ooxml_guid(&excel.to_lowercase()), excel);
@@ -756,7 +755,10 @@ fn test_preserved_root_without_xr_declares_xr_for_threaded_uid() {
         None,
     );
     let xml = String::from_utf8(legacy_xml).expect("utf8");
-    assert!(xml.contains(&format!("xr:uid=\"{XR_TEST_THREAD_ID}\"")), "{xml}");
+    assert!(
+        xml.contains(&format!("xr:uid=\"{XR_TEST_THREAD_ID}\"")),
+        "{xml}"
+    );
     let root = comments_root(&xml);
     assert_eq!(
         root,

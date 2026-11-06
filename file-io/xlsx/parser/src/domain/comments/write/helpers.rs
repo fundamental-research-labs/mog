@@ -22,27 +22,6 @@ pub fn generate_guid() -> String {
     format!("{{{:08X}-{:04X}-{:04X}-{:04X}-{:012X}}}", a, b, c, d, e)
 }
 
-/// The OOXML `ST_Guid` form (`{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}`) of a domain ID.
-///
-/// Threaded comment and person IDs, `tc=` legacy authors and `xr:uid` must be braced
-/// GUIDs: Excel reports any other form as corrupt content and repairs the file.
-/// Engine-minted IDs are 32 hex digits and keep their value; any other non-empty ID
-/// maps to a GUID derived from its text, so every reference to it in a package agrees.
-pub(super) fn ooxml_guid(id: &str) -> String {
-    if id.is_empty() {
-        return String::new();
-    }
-    // A fixed namespace keeps references to opaque domain IDs stable on every export.
-    const COMMENT_NAMESPACE: uuid::Uuid = uuid::Uuid::from_bytes(*b"mog-comment-guid");
-    let bare = id
-        .strip_prefix('{')
-        .and_then(|s| s.strip_suffix('}'))
-        .unwrap_or(id);
-    let guid = uuid::Uuid::parse_str(bare)
-        .unwrap_or_else(|_| uuid::Uuid::new_v5(&COMMENT_NAMESPACE, id.as_bytes()));
-    format!("{:X}", guid.braced())
-}
-
 /// Get current timestamp in ISO 8601 format
 pub(super) fn current_timestamp() -> String {
     let ms = standalone_unix_millis();

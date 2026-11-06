@@ -46,8 +46,6 @@ path = "tests/corpus_tests.rs"
 required-features = ["slow-tests"]
 
 [dependencies]
-uuid = { workspace = true, features = ["v5"] }
-
 # XML derive macros for declarative XML <-> Rust struct mapping
 xml-derive = { path = "xml-derive" }
 

@@ -1,6 +1,5 @@
-use domain_types::domain::comment::CommentType;
+use domain_types::domain::comment::{CommentType, ooxml_guid};
 
-use super::helpers::ooxml_guid;
 use super::legacy::CommentsWriter;
 use super::threaded::ThreadedCommentsWriter;
 use super::types::{

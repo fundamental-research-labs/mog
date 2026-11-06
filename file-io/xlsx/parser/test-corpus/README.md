@@ -276,3 +276,45 @@ When adding new test files:
 2. Ensure the error is reproducible
 3. Add corresponding assertions in `corpus_tests.rs`
 4. Update this README with any new categories or conventions
+
+## Linked-picture Excel acceptance
+
+`parity/floating-objects/linked-picture.xlsx` is a synthetic Excel-authored camera
+picture linked to `Synthetic!A1:B2`. It contains both DrawingML and a legacy VML
+`Pict` fallback. Importing that fallback as a form control creates an invalid
+modern `formControlPr objectType="Pict"`, which makes Excel reject the export.
+The regression keeps picture ownership with DrawingML and checks that genuine
+controls still import.
+
+Run the focused checks from the repository root:
+
+```sh
+cargo test -p xlsx-parser --lib domain::controls --locked
+cargo test -p xlsx-parser --test roundtrip_parse_output --locked
+cargo build -p mog --locked
+./target/debug/mog -i file-io/xlsx/parser/test-corpus/parity/floating-objects/linked-picture.xlsx -o /tmp/linked-picture-fixed.xlsx
+```
+
+Repeat the native acceptance on a disposable Windows desktop with Excel:
+
+1. Open the exported workbook normally (no repair/recovery option). Assert
+   `Workbook.RepairMode == false`, one picture, and its formula `$A$1:$B$2`.
+2. Change `Synthetic!A2` from 12 to 99 and calculate. Verify that the picture
+   displays 99 as well.
+3. Save a new `.xlsx` copy in Excel, close it, and reopen normally. Verify no
+   repair, one picture with the same formula, and source/picture value 99.
+
+[Recorded acceptance](verification/linked-picture/acceptance.webm),
+[edited-picture still](verification/linked-picture/edited-picture.jpg), and
+[machine-readable results](verification/linked-picture/result.json) cover
+`8e2ba8ddb9285d67cd4b2f346109b7185d147fdb` on Windows Excel 16.0 build 20527,
+using a Linux arm64 CLI build. Later documentation/artifact commits do not change
+that tested behavior. The six-second recording samples three asserted stages;
+an Office Analyze Data tip appears after reopening without obscuring the picture.
+Both new regressions failed before the fix; all 80 control and 104 round-trip
+tests pass afterward. The native input opens normally before the fix, while
+its unpatched Mog export fails to open.
+
+This fixture does not establish support for VML-only pictures or pictures inside
+groups; grouped-picture media loss is tracked separately in
+[issue #493](https://github.com/fundamental-research-labs/mog/issues/493).

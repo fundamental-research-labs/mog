@@ -1,0 +1,39 @@
+{
+  "tested_commit": "8e2ba8ddb9285d67cd4b2f346109b7185d147fdb",
+  "platform": "Linux arm64 Mog CLI round-trip; Windows desktop Excel acceptance",
+  "excel_version": "16.0",
+  "excel_build": "20527",
+  "binary_sha256": "33af4b3a2ffc52c8d3ab2e4f36f77816c84f00082d1a803022e744e302e1c502",
+  "input_sha256": "5cfb4c26350028b9a61e1eb96fed55625ccd9119078e2a1e1932208c978fa432",
+  "output_sha256": "41b52d83a35a1c9b61ade0af3294e8ac9b9c3a9212cb84b6da937b52d110c90f",
+  "completed": true,
+  "initial": {
+    "normalOpen": true,
+    "repair": false,
+    "shapes": 1,
+    "formula": "$A$1:$B$2 "
+  },
+  "reopened": {
+    "normalOpen": true,
+    "repair": false,
+    "shapes": 1,
+    "formula": "$A$1:$B$2 ",
+    "a2": 99
+  },
+  "recording": {
+    "frames": 30,
+    "frames_per_second": 5,
+    "duration_seconds": 6,
+    "description": "Three sampled stages: initial open, source cell edit, and native save/reopen. An Office Analyze Data tip appears in the last stage; source cells and linked picture remain visible."
+  },
+  "regressions": {
+    "control_tests_passed": 80,
+    "roundtrip_tests_passed": 104
+  },
+  "review": {
+    "reviewer": "moggy-local",
+    "verdict": "LGTM",
+    "findings": 0,
+    "hosted_bot_approval": false
+  }
+}

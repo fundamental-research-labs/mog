@@ -1,4 +1,4 @@
-use cell_types::SheetId;
+use cell_types::{MAX_COLS, MAX_ROWS, SheetId, SheetRange};
 use compute_document::hex::id_to_hex;
 use compute_document::identity::GridIndex;
 use domain_types::units::Points;
@@ -27,7 +27,7 @@ struct StructureChangePreflight {
 /// Apply a structural change to native axes, cells, and metadata.
 ///
 /// Performs:
-/// 1. Validation (for deletes)
+/// 1. Validation of insertion tails and deletion bounds
 /// 2. Shared GridIndex and CellStore axis mutation
 /// 3. Resolved merge rectangle refresh
 /// 4. ComputeCore formula reparsing and full recalc
@@ -140,6 +140,10 @@ pub(in crate::storage::engine) fn apply_structure_change(
             for &(_, new_row, new_col) in updates {
                 grid.ensure_capacity(new_row, new_col);
             }
+            // Remapped cells must use the same newly grown axes as the grid.
+            // Otherwise register_cell allocates different tail identities that
+            // disappear when the shared grid axes are installed below.
+            cell_store.install_sheet_axes(*sheet_id, grid.row_axis(), grid.col_axis());
             let _ = cell_store.apply_structure_change_with_axes(
                 sheet_id,
                 change,
@@ -312,6 +316,32 @@ fn preflight_structure_change(
         let grid = grid_index(stores, sheet_id)?;
 
         match change {
+            StructureChange::InsertRows { at, count, .. } => {
+                validation::structure::validate_insert_bounds(*at, *count, MAX_ROWS)?;
+                if *count > 0 {
+                    validation::structure::validate_insert_tail(
+                        stores,
+                        cell_store,
+                        sheet_id,
+                        SheetRange::new(MAX_ROWS - count, 0, MAX_ROWS - 1, MAX_COLS - 1),
+                        false,
+                        true,
+                    )?;
+                }
+            }
+            StructureChange::InsertCols { at, count, .. } => {
+                validation::structure::validate_insert_bounds(*at, *count, MAX_COLS)?;
+                if *count > 0 {
+                    validation::structure::validate_insert_tail(
+                        stores,
+                        cell_store,
+                        sheet_id,
+                        SheetRange::new(0, MAX_COLS - count, MAX_ROWS - 1, MAX_COLS - 1),
+                        true,
+                        true,
+                    )?;
+                }
+            }
             StructureChange::DeleteRows { at, count, .. } => {
                 validation::structure::validate_delete_bounds(*at, *count, grid.row_count())?;
             }

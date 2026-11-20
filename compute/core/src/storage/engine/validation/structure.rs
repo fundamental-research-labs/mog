@@ -1,8 +1,99 @@
+use cell_types::{SheetId, SheetRange};
 use domain_types::units::{CharWidth, Points};
 use value_types::ComputeError;
 
+use crate::cells::CellStore;
+use crate::storage::engine::stores::EngineStores;
+
 const MAX_ROW_HEIGHT_PT: f64 = 409.0;
 const MAX_COL_WIDTH_CHARS: f64 = 255.0;
+
+/// Validate the inserted span without overflowing the coordinate arithmetic.
+pub fn validate_insert_bounds(at: u32, count: u32, limit: u32) -> Result<(), ComputeError> {
+    if at.checked_add(count).is_none_or(|end| end > limit) {
+        return Err(ComputeError::InvalidInput {
+            message: format!(
+                "Insertion at {at} with count {count} exceeds worksheet limit {limit}"
+            ),
+        });
+    }
+    Ok(())
+}
+
+/// Reject occupied cells in the band that would be pushed off the worksheet.
+/// Check native payloads, deferred formulas, and sparse styles before hydration
+/// or history capture. Allocated empty identities alone do not occupy a cell.
+pub(in crate::storage::engine) fn validate_insert_tail(
+    stores: &EngineStores,
+    cell_store: &CellStore,
+    sheet_id: &SheetId,
+    tail: SheetRange,
+    shift_right: bool,
+    whole_axis: bool,
+) -> Result<(), ComputeError> {
+    let sheet = cell_store
+        .get_sheet(sheet_id)
+        .ok_or_else(|| ComputeError::SheetNotFound {
+            sheet_id: sheet_id.to_uuid_string(),
+        })?;
+    let scope = (
+        tail.start_row(),
+        tail.start_col(),
+        tail.end_row(),
+        tail.end_col(),
+    );
+    let metadata = stores.storage.sheet_metadata.get(sheet_id);
+    let occupied = sheet
+        .dense_content_bounds_in_range(&cell_store.cells, &cell_store.formulas, scope)
+        .is_some()
+        || sheet
+            .cells_in_range(scope.0, scope.1, scope.2, scope.3)
+            .any(|(id, _, _)| {
+                !cell_store.is_ghost(&id)
+                    || stores.compute.get_formula(&id).is_some()
+                    || metadata.is_some_and(|meta| meta.cell_properties.contains_key(&id))
+                    || stores.storage.cell_metadata.contains_key(&id)
+            })
+        || sheet.format_ranges().iter().any(|range| {
+            tail.intersection(&SheetRange::new(
+                range.start_row,
+                range.start_col,
+                range.end_row,
+                range.end_col,
+            ))
+            .is_some()
+        });
+    // Axis formats and dimensions move only along their own axis. Check every
+    // dimension record exported by identity, including height/width-only records
+    // that the style queries omit. A column default does not occupy the final
+    // row for a whole-row insertion, and vice versa.
+    let grid = stores.grid_indexes.get(sheet_id);
+    let axis_metadata = whole_axis
+        && if shift_right {
+            metadata.zip(grid).is_some_and(|(meta, grid)| {
+                meta.dimensions.columns.keys().any(|id| {
+                    grid.col_index(id)
+                        .is_some_and(|col| col >= tail.start_col())
+                })
+            }) || sheet
+                .col_format_ranges()
+                .iter()
+                .any(|range| range.end_col >= tail.start_col())
+        } else {
+            metadata.zip(grid).is_some_and(|(meta, grid)| {
+                meta.dimensions.rows.keys().any(|id| {
+                    grid.row_index(id)
+                        .is_some_and(|row| row >= tail.start_row())
+                })
+            })
+        };
+    if occupied || axis_metadata {
+        return Err(ComputeError::InvalidInput {
+            message: "Cannot insert cells: existing cells or formatting would move beyond worksheet bounds".into(),
+        });
+    }
+    Ok(())
+}
 
 pub fn validate_delete_bounds(at: u32, count: u32, current_count: u32) -> Result<(), ComputeError> {
     if at + count > current_count {

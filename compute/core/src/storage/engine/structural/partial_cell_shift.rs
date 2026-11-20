@@ -1,8 +1,9 @@
 use super::super::ComputeEngine;
 use super::super::services;
+use super::super::validation::structure::{validate_insert_bounds, validate_insert_tail};
 use crate::cells::CellStore;
 use crate::snapshot::{MutationResult, RecalcResult};
-use cell_types::{CellId, SheetId};
+use cell_types::{CellId, MAX_COLS, MAX_ROWS, SheetId, SheetRange};
 use formula_types::StructureChange;
 use value_types::ComputeError;
 
@@ -21,6 +22,21 @@ impl ComputeEngine {
         }
 
         self.ensure_partial_cell_shift_supported(sheet_id, "insert_cells_with_shift")?;
+        validate_insert_bounds(row, row_count, MAX_ROWS)?;
+        validate_insert_bounds(col, col_count, MAX_COLS)?;
+        let tail = if shift_right {
+            SheetRange::new(row, MAX_COLS - col_count, row + row_count - 1, MAX_COLS - 1)
+        } else {
+            SheetRange::new(MAX_ROWS - row_count, col, MAX_ROWS - 1, col + col_count - 1)
+        };
+        validate_insert_tail(
+            &self.stores,
+            &self.cell_store,
+            sheet_id,
+            tail,
+            shift_right,
+            false,
+        )?;
         let updates = self.collect_insert_cell_shift_updates(
             sheet_id,
             row,
@@ -29,7 +45,85 @@ impl ComputeEngine {
             col_count,
             shift_right,
         )?;
-        self.apply_partial_insert_shift(sheet_id, updates)
+        self.stores
+            .compute
+            .ensure_graph_built(&mut self.cell_store)?;
+        let shifted_band = if shift_right {
+            SheetRange::new(row, col, row + row_count - 1, MAX_COLS - 1)
+        } else {
+            SheetRange::new(row, col, MAX_ROWS - 1, col + col_count - 1)
+        };
+        let formats_shifted = self.shift_insert_format_ranges(
+            sheet_id,
+            shifted_band,
+            if shift_right { 0 } else { row_count },
+            if shift_right { col_count } else { 0 },
+        );
+        self.apply_partial_insert_shift(sheet_id, updates, formats_shifted)
+    }
+
+    /// Imported styled blanks can live only in sparse rectangles, with no cell
+    /// identity to remap. Split at the shifted band's edges and move its styles
+    /// without materializing blank cells or changing overlay precedence.
+    fn shift_insert_format_ranges(
+        &mut self,
+        sheet_id: &SheetId,
+        band: SheetRange,
+        rows: u32,
+        cols: u32,
+    ) -> bool {
+        let Some(sheet) = self.cell_store.get_sheet_mut(sheet_id) else {
+            return false;
+        };
+        let affected: Vec<_> = sheet
+            .format_ranges()
+            .iter()
+            .filter_map(|range| {
+                let bounds = SheetRange::new(
+                    range.start_row,
+                    range.start_col,
+                    range.end_row,
+                    range.end_col,
+                );
+                bounds
+                    .intersection(&band)
+                    .map(|overlap| (*range, bounds, overlap))
+            })
+            .collect();
+        for (range, bounds, overlap) in &affected {
+            super::super::history::metadata::capture_format_range(sheet, range.id);
+            for piece in crate::storage::properties::rectangle_difference(*bounds, *overlap) {
+                let id = self.stores.id_alloc.next_range_id();
+                super::super::history::metadata::capture_format_range(sheet, id);
+                let mut outside = *range;
+                outside.id = id;
+                outside.start_row = piece.start_row();
+                outside.start_col = piece.start_col();
+                outside.end_row = piece.end_row();
+                outside.end_col = piece.end_col();
+                sheet.format_ranges.push(outside);
+                if let Some(format) = sheet.range_format_cache.get(&range.id).cloned() {
+                    sheet.range_format_cache.insert(id, format);
+                }
+                if let Some(style) = sheet.range_xlsx_style_id_cache.get(&range.id).copied() {
+                    sheet.range_xlsx_style_id_cache.insert(id, style);
+                }
+            }
+            let moved = sheet
+                .format_ranges
+                .iter_mut()
+                .find(|r| r.id == range.id)
+                .unwrap();
+            moved.start_row = overlap.start_row() + rows;
+            moved.start_col = overlap.start_col() + cols;
+            moved.end_row = overlap.end_row() + rows;
+            moved.end_col = overlap.end_col() + cols;
+        }
+        if !affected.is_empty() {
+            sheet.rebuild_format_range_spatial_index();
+            self.stores.compute.mark_dirty();
+        }
+        !affected.is_empty()
     }
 
     pub(super) fn apply_delete_cells_with_shift(
@@ -89,7 +183,9 @@ impl ComputeEngine {
         let mut updates = Vec::new();
         if shift_right {
             let row_end = row.saturating_add(row_count).min(grid.row_count());
-            let col_limit = grid.col_count();
+            // Empty identities in the discarded tail need not move off-grid.
+            // Occupied cells there have already been rejected by preflight.
+            let col_limit = grid.col_count().min(MAX_COLS - col_count);
             if col >= col_limit {
                 return Ok(updates);
             }
@@ -105,7 +201,7 @@ impl ComputeEngine {
             }
         } else {
             let col_end = col.saturating_add(col_count).min(grid.col_count());
-            let row_limit = grid.row_count();
+            let row_limit = grid.row_count().min(MAX_ROWS - row_count);
             if row >= row_limit {
                 return Ok(updates);
             }
@@ -202,9 +298,16 @@ impl ComputeEngine {
         &mut self,
         sheet_id: &SheetId,
         updates: Vec<(CellId, u32, u32)>,
+        formats_shifted: bool,
     ) -> Result<MutationResult, ComputeError> {
         let positions = self.partial_shift_positions(sheet_id, &[], &updates);
-        let mut recalc = self.apply_partial_cell_remap(sheet_id, updates)?;
+        let mut recalc = if updates.is_empty() && formats_shifted {
+            self.stores
+                .compute
+                .structure_change(&mut self.cell_store, None)?
+        } else {
+            self.apply_partial_cell_remap(sheet_id, updates)?
+        };
         services::cell_editing::append_position_changes(
             &self.stores,
             &self.cell_store,

@@ -5,6 +5,7 @@ use value_types::ComputeError;
 
 /// Merge two `CellFormat` objects with property-level precedence.
 /// For each field: if `higher` has `Some`, use it; otherwise keep `lower`.
+/// Font names and colors replace their associated theme and tint metadata.
 pub(crate) fn merge_formats(lower: &CellFormat, higher: &CellFormat) -> CellFormat {
     let higher = normalize_format_patch(higher);
     let mut merged = CellFormat {
@@ -24,7 +25,13 @@ pub(crate) fn merge_formats(lower: &CellFormat, higher: &CellFormat) -> CellForm
         subscript: higher.subscript.or(lower.subscript),
         font_outline: higher.font_outline.or(lower.font_outline),
         font_shadow: higher.font_shadow.or(lower.font_shadow),
-        font_theme: higher.font_theme.clone().or(lower.font_theme.clone()),
+        // An explicit name must not inherit a scheme that would override it
+        // when exported to XLSX. Imported fonts supplying both keep the scheme.
+        font_theme: if higher.font_family.is_some() {
+            higher.font_theme.clone()
+        } else {
+            higher.font_theme.clone().or(lower.font_theme.clone())
+        },
         font_charset: higher.font_charset.or(lower.font_charset),
         font_family_type: higher.font_family_type.or(lower.font_family_type),
         horizontal_align: higher.horizontal_align.or(lower.horizontal_align),

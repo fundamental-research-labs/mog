@@ -2,6 +2,64 @@ use super::*;
 use crate::border_patch::BorderPatchField;
 
 #[test]
+fn test_explicit_font_family_does_not_inherit_theme() {
+    for theme in ["major", "minor"] {
+        let lower = CellFormat {
+            font_family: Some("Calibri".into()),
+            font_theme: Some(theme.into()),
+            font_size: Some(11.0.into()),
+            ..Default::default()
+        };
+        let higher = CellFormat {
+            font_family: Some("Arial".into()),
+            ..Default::default()
+        };
+
+        let merged = merge_formats(&lower, &higher);
+        assert_eq!(merged.font_family.as_deref(), Some("Arial"));
+        assert_eq!(merged.font_theme, None);
+        assert_eq!(merged.font_size, Some(11.0.into()));
+    }
+}
+
+#[test]
+fn test_font_size_only_patch_preserves_theme() {
+    let lower = CellFormat {
+        font_family: Some("Calibri".into()),
+        font_theme: Some("minor".into()),
+        font_size: Some(11.0.into()),
+        ..Default::default()
+    };
+    let higher = CellFormat {
+        font_size: Some(10.0.into()),
+        ..Default::default()
+    };
+
+    let merged = merge_formats(&lower, &higher);
+    assert_eq!(merged.font_family, lower.font_family);
+    assert_eq!(merged.font_theme, lower.font_theme);
+    assert_eq!(merged.font_size, Some(10.0.into()));
+}
+
+#[test]
+fn test_font_family_with_explicit_theme_preserves_theme() {
+    let lower = CellFormat {
+        font_family: Some("Arial".into()),
+        font_theme: Some("minor".into()),
+        ..Default::default()
+    };
+    let higher = CellFormat {
+        font_family: Some("Cambria".into()),
+        font_theme: Some("major".into()),
+        ..Default::default()
+    };
+
+    let merged = merge_formats(&lower, &higher);
+    assert_eq!(merged.font_family, higher.font_family);
+    assert_eq!(merged.font_theme, higher.font_theme);
+}
+
+#[test]
 fn test_merge_formats_merges_partial_borders_per_edge_and_side_field() {
     use ooxml_types::styles::BorderStyle;
 

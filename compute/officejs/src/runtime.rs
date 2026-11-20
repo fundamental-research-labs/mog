@@ -1,9 +1,9 @@
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use compute_api::Workbook;
 use rquickjs::prelude::Func;
 use rquickjs::promise::Promise;
-use rquickjs::{AsyncContext, AsyncRuntime, CatchResultExt, Ctx};
+use rquickjs::{AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Function, Persistent};
 use serde_json::Value;
 
 use crate::diagnostics::Stage;
@@ -57,6 +57,11 @@ pub struct ScriptOutput {
     pub stdout: String,
 }
 
+struct UnhandledRejection {
+    promise: Persistent<rquickjs::Value<'static>>,
+    reason: Persistent<rquickjs::Value<'static>>,
+}
+
 pub fn run_office_js(source: &str) -> Result<ScriptOutput, OfficeJsError> {
     let (workbook, _) = Workbook::blank()?;
     run_office_js_with_workbook(&workbook, source)
@@ -83,17 +88,69 @@ async fn run_async(workbook: Workbook, source: String) -> Result<ScriptOutput, O
     let ctx = AsyncContext::full(&runtime)
         .await
         .map_err(OfficeJsError::runtime)?;
+    let rejections = Rc::new(RefCell::new(Vec::<UnhandledRejection>::new()));
+    let tracked_rejections = rejections.clone();
+    runtime
+        .set_host_promise_rejection_tracker(Some(Box::new(move |ctx, promise, reason, handled| {
+            let promise = Persistent::save(&ctx, promise);
+            let mut rejections = tracked_rejections.borrow_mut();
+            if handled {
+                rejections.retain(|rejection| rejection.promise != promise);
+            } else {
+                rejections.push(UnhandledRejection {
+                    promise,
+                    reason: Persistent::save(&ctx, reason),
+                });
+            }
+        })))
+        .await;
 
     stage.complete();
     let host_for_apply = host.clone();
     let host_for_log = host.clone();
     let json = ctx
         .async_with(async move |ctx| eval_in_ctx(ctx, host_for_apply, host_for_log, source).await)
-        .await?;
+        .await;
+    // Finish detached work and allow late catch handlers to run before deciding
+    // whether any rejection is unhandled. Awaiting the tracked promises here
+    // would itself mark them handled and hide script failures.
     runtime.idle().await;
+    runtime.set_host_promise_rejection_tracker(None).await;
+    let unhandled_error = ctx
+        .with(|ctx| {
+            // Release every persistent value inside the context, even if script
+            // evaluation or error formatting failed, before dropping the runtime.
+            let rejections = std::mem::take(&mut *rejections.borrow_mut());
+            let Some(rejection) = rejections.into_iter().next() else {
+                return Ok(None);
+            };
+            let reason = rejection
+                .reason
+                .restore(&ctx)
+                .map_err(OfficeJsError::runtime)?;
+            let format: Function = ctx
+                .eval(
+                    r#"(e) => {
+                        const message = e && e.message ? String(e.message) : String(e);
+                        const code = e && e.code ? String(e.code) : "GeneralException";
+                        return code + ": " + message;
+                    }"#,
+                )
+                .catch(&ctx)
+                .map_err(OfficeJsError::runtime)?;
+            let message = format
+                .call((reason,))
+                .catch(&ctx)
+                .map_err(OfficeJsError::runtime)?;
+            Ok::<_, OfficeJsError>(Some(OfficeJsError::Script(message)))
+        })
+        .await?;
 
-    let parsed: Value = serde_json::from_str(&json).map_err(OfficeJsError::runtime)?;
+    let parsed: Value = serde_json::from_str(&json?).map_err(OfficeJsError::runtime)?;
     if parsed.get("ok").and_then(Value::as_bool) == Some(true) {
+        if let Some(error) = unhandled_error {
+            return Err(error);
+        }
         Ok(ScriptOutput {
             value: parsed.get("value").cloned().unwrap_or(Value::Null),
             stdout: host.take_stdout(),

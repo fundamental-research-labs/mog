@@ -23,6 +23,77 @@ fn caught_run_rejection_does_not_reject_the_script() {
 }
 
 #[test]
+fn detached_rejection_after_script_completion_fails() {
+    let error = run_office_js(
+        r#"
+        (async () => {
+            for (let i = 0; i < 10; i++) await Promise.resolve();
+            throw new Error("detached boom");
+        })();
+        return "finished";
+        "#,
+    )
+    .unwrap_err();
+    assert_eq!(error.to_string(), "GeneralException: detached boom");
+}
+
+#[test]
+fn catch_attached_after_rejection_allows_success() {
+    let output = run_office_js(
+        r#"
+        const run = Excel.run(async context => {
+            await context.sync();
+            throw new Error("caught later");
+        });
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+        return await run.catch(error => error.message);
+        "#,
+    )
+    .unwrap();
+    assert_eq!(output.value, json!("caught later"));
+}
+
+#[test]
+fn handling_one_promise_does_not_hide_another_with_the_same_reason() {
+    let error = run_office_js(
+        r#"
+        const reason = new Error("shared reason");
+        const handled = Promise.reject(reason);
+        Promise.reject(reason);
+        handled.catch(() => {});
+        "#,
+    )
+    .unwrap_err();
+    assert_eq!(error.to_string(), "GeneralException: shared reason");
+}
+
+#[test]
+fn rejection_propagated_through_then_remains_unhandled() {
+    let error = run_office_js(
+        r#"
+        Promise.reject(new Error("chained boom")).then(() => "fulfilled");
+        "#,
+    )
+    .unwrap_err();
+    assert_eq!(error.to_string(), "GeneralException: chained boom");
+}
+
+#[test]
+fn unhandled_rejections_preserve_primitive_reasons_and_office_error_codes() {
+    for (source, expected) in [
+        ("Promise.reject('boom');", "GeneralException: boom"),
+        ("Promise.reject(null);", "GeneralException: null"),
+        (
+            r#"Promise.reject(new OfficeExtension.Error({code: "ItemNotFound", message: "missing"}));"#,
+            "ItemNotFound: missing",
+        ),
+    ] {
+        let error = run_office_js(source).unwrap_err();
+        assert_eq!(error.to_string(), expected);
+    }
+}
+
+#[test]
 fn explicit_context_load_defaults_and_sync_passthrough() {
     let output = run_office_js(r#"
       const context = new Excel.RequestContext();

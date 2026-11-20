@@ -1,9 +1,10 @@
-//! Insertion preflight covers values, formulas, and formatting at grid limits.
+//! Insertion preflight covers values, formulas, formatting, and dimensions at grid limits.
 
 use cell_types::{MAX_COLS, MAX_ROWS, SheetId};
 use compute_core::storage::engine::ComputeEngine;
 use domain_types::CellFormat;
 use formula_types::StructureChange;
+use regex::Regex;
 use snapshot_types::WorkbookSnapshot;
 use value_types::{CellValue, ComputeError};
 
@@ -71,6 +72,123 @@ fn sheet_xml(engine: &ComputeEngine) -> String {
             .unwrap(),
     )
     .unwrap()
+}
+
+fn assert_export_within_grid(xml: &str) {
+    for capture in Regex::new(r#"<row\b[^>]*\br="(\d+)""#)
+        .unwrap()
+        .captures_iter(xml)
+    {
+        assert!((1..=MAX_ROWS).contains(&capture[1].parse::<u32>().unwrap()));
+    }
+    let column_bounds = Regex::new(r#"\b(?:min|max)="(\d+)""#).unwrap();
+    for column in Regex::new(r"<col\b[^>]*>").unwrap().find_iter(xml) {
+        for capture in column_bounds.captures_iter(column.as_str()) {
+            assert!((1..=MAX_COLS).contains(&capture[1].parse::<u32>().unwrap()));
+        }
+    }
+    for capture in Regex::new(r#"<(?:c|dimension)\b[^>]*\b(?:r|ref)="([^"]+)""#)
+        .unwrap()
+        .captures_iter(xml)
+    {
+        for reference in capture[1].split(':') {
+            let split = reference.find(|c: char| c.is_ascii_digit()).unwrap();
+            let (letters, digits) = reference.split_at(split);
+            let col = letters
+                .bytes()
+                .fold(0u32, |n, c| n * 26 + u32::from(c - b'A' + 1));
+            assert!((1..=MAX_COLS).contains(&col), "{reference}");
+            assert!(
+                (1..=MAX_ROWS).contains(&digits.parse::<u32>().unwrap()),
+                "{reference}"
+            );
+        }
+    }
+}
+
+fn dimension_fixture(horizontal: bool, offset: u32) -> (ComputeEngine, SheetId) {
+    let (mut engine, sheet) = fixture(horizontal, Tail::Value, 5);
+    // The tail has only a dimension override: no value, formula, or cell style.
+    if horizontal {
+        engine.set_col_width_chars(&sheet, offset, 20.0).unwrap();
+    } else {
+        engine.set_row_height(&sheet, offset, 40.0).unwrap();
+    }
+    (engine, sheet)
+}
+
+fn assert_dimension(engine: &ComputeEngine, sheet: &SheetId, horizontal: bool, offset: u32) {
+    if horizontal {
+        assert_eq!(engine.get_col_width_chars_query(sheet, offset), 20.0);
+    } else {
+        assert_eq!(engine.get_row_height_query(sheet, offset), 40.0);
+    }
+}
+
+fn rejects_dimension_tail(horizontal: bool) {
+    let limit = if horizontal { MAX_COLS } else { MAX_ROWS };
+    for count in [1, 2] {
+        for imported in [false, true] {
+            let offset = limit - count;
+            let (mut engine, mut sheet) = dimension_fixture(horizontal, offset);
+            if imported {
+                (engine, sheet) = reopen(&engine);
+            }
+            assert_dimension(&engine, &sheet, horizontal, offset);
+            let before = sheet_xml(&engine);
+            assert_export_within_grid(&before);
+            let undo_depth = engine.get_undo_state().undo_depth;
+            let error = insert(&mut engine, &sheet, horizontal, false, 1, count)
+                .expect_err("dimension-only tail must reject insertion");
+            assert!(matches!(error, ComputeError::InvalidInput { .. }));
+            assert_eq!(engine.get_undo_state().undo_depth, undo_depth);
+            assert_eq!(sheet_xml(&engine), before);
+            assert_dimension(&engine, &sheet, horizontal, offset);
+            let (engine, sheet) = reopen(&engine);
+            assert_dimension(&engine, &sheet, horizontal, offset);
+            assert_export_within_grid(&sheet_xml(&engine));
+        }
+    }
+}
+
+#[test]
+fn whole_rows_reject_dimension_only_tail() {
+    rejects_dimension_tail(false);
+}
+
+#[test]
+fn whole_columns_reject_dimension_only_tail() {
+    rejects_dimension_tail(true);
+}
+
+#[test]
+fn whole_axis_dimension_can_move_to_final_position() {
+    for horizontal in [false, true] {
+        let limit = if horizontal { MAX_COLS } else { MAX_ROWS };
+        for count in [1, 2] {
+            let (engine, _) = dimension_fixture(horizontal, limit - count - 1);
+            let (mut engine, sheet) = reopen(&engine);
+            insert(&mut engine, &sheet, horizontal, false, 1, count).unwrap();
+            assert_dimension(&engine, &sheet, horizontal, limit - 1);
+            assert_export_within_grid(&sheet_xml(&engine));
+            let (engine, sheet) = reopen(&engine);
+            assert_dimension(&engine, &sheet, horizontal, limit - 1);
+        }
+    }
+}
+
+#[test]
+fn dimension_tail_allows_insertions_that_do_not_move_it() {
+    for horizontal in [false, true] {
+        let limit = if horizontal { MAX_COLS } else { MAX_ROWS };
+        let (mut engine, sheet) = dimension_fixture(horizontal, limit - 1);
+        insert(&mut engine, &sheet, horizontal, true, 1, 1).unwrap();
+        insert(&mut engine, &sheet, !horizontal, false, 1, 1).unwrap();
+        assert_dimension(&engine, &sheet, horizontal, limit - 1);
+        assert_export_within_grid(&sheet_xml(&engine));
+        let (engine, sheet) = reopen(&engine);
+        assert_dimension(&engine, &sheet, horizontal, limit - 1);
+    }
 }
 
 fn insert(

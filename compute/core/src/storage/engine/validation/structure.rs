@@ -4,7 +4,6 @@ use value_types::ComputeError;
 
 use crate::cells::CellStore;
 use crate::storage::engine::stores::EngineStores;
-use crate::storage::properties;
 
 const MAX_ROW_HEIGHT_PT: f64 = 409.0;
 const MAX_COL_WIDTH_CHARS: f64 = 255.0;
@@ -64,24 +63,31 @@ pub(in crate::storage::engine) fn validate_insert_tail(
             ))
             .is_some()
         });
-    // Whole-axis defaults move only along their own axis. A column default
-    // does not occupy the final row for a whole-row insertion, and vice versa.
+    // Axis formats and dimensions move only along their own axis. Check every
+    // dimension record exported by identity, including height/width-only records
+    // that the style queries omit. A column default does not occupy the final
+    // row for a whole-row insertion, and vice versa.
     let grid = stores.grid_indexes.get(sheet_id);
-    let axis_format = whole_axis
+    let axis_metadata = whole_axis
         && if shift_right {
-            properties::get_all_col_formats(&stores.storage, sheet_id, grid)
+            metadata.zip(grid).is_some_and(|(meta, grid)| {
+                meta.dimensions.columns.keys().any(|id| {
+                    grid.col_index(id)
+                        .is_some_and(|col| col >= tail.start_col())
+                })
+            }) || sheet
+                .col_format_ranges()
                 .iter()
-                .any(|entry| entry.col >= tail.start_col())
-                || sheet
-                    .col_format_ranges()
-                    .iter()
-                    .any(|range| range.end_col >= tail.start_col())
+                .any(|range| range.end_col >= tail.start_col())
         } else {
-            properties::get_all_row_formats(&stores.storage, sheet_id, grid)
-                .iter()
-                .any(|entry| entry.row >= tail.start_row())
+            metadata.zip(grid).is_some_and(|(meta, grid)| {
+                meta.dimensions.rows.keys().any(|id| {
+                    grid.row_index(id)
+                        .is_some_and(|row| row >= tail.start_row())
+                })
+            })
         };
-    if occupied || axis_format {
+    if occupied || axis_metadata {
         return Err(ComputeError::InvalidInput {
             message: "Cannot insert cells: existing cells or formatting would move beyond worksheet bounds".into(),
         });

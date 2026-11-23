@@ -28,7 +28,8 @@ thiserror = { workspace = true }
 rustc-hash = "2"
 
 # High-performance float parsing (used in CellValue::coerce_to_number)
-fast-float = "0.2"
+# fast-float 0.2.0 is unsound (RUSTSEC-2024-0379, RUSTSEC-2025-0003); fast-float2 is its maintained fork.
+fast-float = { package = "fast-float2", version = "0.2.4" }
 
 # Date/time (Excel serial date <-> chrono::NaiveDate conversions)
 chrono = { workspace = true }

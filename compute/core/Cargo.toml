@@ -142,7 +142,8 @@ bitvec = "1"
 phf = { version = "0.11", features = ["macros"] }
 
 # High-performance float parsing (used by scheduler/ast_helpers)
-fast-float = "0.2"
+# fast-float 0.2.0 is unsound (RUSTSEC-2024-0379, RUSTSEC-2025-0003); fast-float2 is its maintained fork.
+fast-float = { package = "fast-float2", version = "0.2.4" }
 
 # Unicode NFC normalization for sheet name keying (Hebrew, Arabic, Korean, etc.)
 unicode-normalization = "0.1"

@@ -67,3 +67,16 @@ fn test_value_boolean_coercion() {
 fn test_value_parens_negative_number() {
     assert_eq!(FnValue.call(&[text("(100)")]), num(-100.0));
 }
+
+// RUSTSEC-2025-0003: cleanup can leave nothing to parse; the float parser
+// must see the empty string safely and VALUE must report #VALUE!.
+#[test]
+fn test_value_punctuation_only_is_value_error() {
+    for input in ["$", "%", "()", ",", "$ ", " $,% "] {
+        assert_eq!(
+            FnValue.call(&[text(input)]),
+            err(CellError::Value),
+            "{input:?}"
+        );
+    }
+}

@@ -592,3 +592,10 @@ fn test_harmean_leq_geomean() {
         panic!("Expected numbers");
     }
 }
+
+// RUSTSEC-2025-0003: whitespace-only text trims to an empty parse; AVERAGEA
+// counts it as text (0), as Excel does.
+#[test]
+fn test_averagea_whitespace_text_counts_as_zero() {
+    assert_eq!(FnAverageA.call(&[num(4.0), text(" ")]), num(2.0));
+}

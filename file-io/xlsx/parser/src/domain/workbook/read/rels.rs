@@ -51,6 +51,7 @@ pub fn parse_all_rels(xml: &[u8]) -> Vec<ooxml_types::shared::OpcRelationship> {
             Event::Eof => break,
             Event::End(_)
             | Event::Text(_)
+            | Event::GeneralRef(_)
             | Event::CData(_)
             | Event::Comment(_)
             | Event::Decl(_)
@@ -81,7 +82,10 @@ fn parse_relationship_element(
 fn attr_value(start: &BytesStart<'_>, name: &[u8]) -> Option<String> {
     for attr in start.attributes().flatten() {
         if attr.key.local_name().as_ref() == name {
-            return attr.unescape_value().ok().map(|v| v.into_owned());
+            return attr
+                .normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                .ok()
+                .map(|v| v.into_owned());
         }
     }
     None

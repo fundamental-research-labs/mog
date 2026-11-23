@@ -130,7 +130,9 @@ fn scan_relationship_attrs(
                         {
                             visit(RelationshipAttr {
                                 name: String::from_utf8_lossy(key).into_owned(),
-                                value: attr.unescape_value()?.into_owned(),
+                                value: attr
+                                    .normalized_value(quick_xml::XmlVersion::Implicit1_0)?
+                                    .into_owned(),
                             });
                         }
                     }

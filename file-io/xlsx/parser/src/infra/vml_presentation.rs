@@ -46,7 +46,10 @@ pub(crate) fn elements(xml: &str) -> Option<(Element<'_>, Vec<Element<'_>>)> {
                         Some((
                             String::from_utf8(attribute.key.as_ref().to_vec()).ok()?,
                             attribute
-                                .decode_and_unescape_value(reader.decoder())
+                                .decoded_and_normalized_value(
+                                    quick_xml::XmlVersion::Implicit1_0,
+                                    reader.decoder(),
+                                )
                                 .ok()?
                                 .into_owned(),
                         ))

@@ -179,7 +179,9 @@ pub fn chart_picture_relationship_ids_from_xml(xml: &[u8]) -> BTreeSet<String> {
                     if !matches!(local_name.as_ref(), b"embed" | b"link") {
                         continue;
                     }
-                    if let Ok(value) = attribute.unescape_value() {
+                    if let Ok(value) =
+                        attribute.normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                    {
                         if !value.is_empty() {
                             relationship_ids.insert(value.into_owned());
                         }

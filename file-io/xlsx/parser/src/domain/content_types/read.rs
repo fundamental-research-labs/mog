@@ -180,6 +180,7 @@ impl ContentTypes {
                 Event::Eof => break,
                 Event::End(_)
                 | Event::Text(_)
+                | Event::GeneralRef(_)
                 | Event::CData(_)
                 | Event::Comment(_)
                 | Event::Decl(_)
@@ -353,7 +354,10 @@ fn parse_override_element(start: &BytesStart<'_>) -> Option<(String, String)> {
 fn attr_value(start: &BytesStart<'_>, name: &[u8]) -> Option<String> {
     for attr in start.attributes().flatten() {
         if attr.key.local_name().as_ref() == name {
-            return attr.unescape_value().ok().map(|v| v.into_owned());
+            return attr
+                .normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                .ok()
+                .map(|v| v.into_owned());
         }
     }
     None
@@ -384,6 +388,45 @@ fn get_extension(path: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // RUSTSEC-2026-0195: quick-xml < 0.41 allocated for every namespace
+    // declaration on one element without limit.
+    #[test]
+    fn rejects_unbounded_namespace_declarations() {
+        let mut xml = String::from(
+            r#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types""#,
+        );
+        for i in 0..10_000 {
+            xml.push_str(&format!(r#" xmlns:p{i}="urn:p{i}""#));
+        }
+        xml.push_str("/>");
+        assert!(matches!(
+            ContentTypes::parse(xml.as_bytes()),
+            Err(ParseError::MalformedXml)
+        ));
+    }
+
+    // RUSTSEC-2026-0194: quick-xml < 0.41 compared every attribute with every
+    // earlier one, so one start tag with many attributes cost quadratic time.
+    #[test]
+    fn many_distinct_attributes_parse_in_linear_time() {
+        let mut xml = String::from(
+            r#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Override"#,
+        );
+        // Filler first, so the PartName lookup walks (and duplicate-checks) all of it.
+        for i in 0..50_000 {
+            xml.push_str(&format!(r#" a{i}="""#));
+        }
+        xml.push_str(r#" PartName="/xl/a.xml" ContentType="application/xml"/></Types>"#);
+        let started = std::time::Instant::now();
+        let ct = ContentTypes::parse(xml.as_bytes()).expect("distinct attributes are valid XML");
+        let elapsed = started.elapsed();
+        assert_eq!(ct.override_count(), 1);
+        assert!(
+            elapsed < std::time::Duration::from_secs(5),
+            "took {elapsed:?}"
+        );
+    }
 
     #[test]
     fn test_parse_minimal_content_types() {

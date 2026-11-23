@@ -225,7 +225,10 @@ fn xml_relationship_reference_ids(bytes: &[u8]) -> Option<HashSet<String>> {
                     .flatten()
                     .filter_map(|attr| {
                         let key = attr.key.as_ref().to_vec();
-                        let value = attr.unescape_value().ok()?.into_owned();
+                        let value = attr
+                            .normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                            .ok()?
+                            .into_owned();
                         Some((key, value))
                     })
                     .collect();
@@ -245,6 +248,7 @@ fn xml_relationship_reference_ids(bytes: &[u8]) -> Option<HashSet<String>> {
             Ok(
                 Event::End(_)
                 | Event::Text(_)
+                | Event::GeneralRef(_)
                 | Event::CData(_)
                 | Event::Comment(_)
                 | Event::Decl(_)

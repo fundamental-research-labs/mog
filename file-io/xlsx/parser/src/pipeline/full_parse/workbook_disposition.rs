@@ -145,7 +145,7 @@ fn contains_mce_attribute(tag: &[u8], expected_local_name: &[u8]) -> bool {
         .with_checks(false)
         .filter_map(Result::ok)
         .any(|attribute| {
-            let (namespace, local_name) = reader.resolve_attribute(attribute.key);
+            let (namespace, local_name) = reader.resolver().resolve_attribute(attribute.key);
             matches!(namespace, ResolveResult::Bound(namespace) if namespace.as_ref() == NS_MC.as_bytes())
                 && local_name.as_ref() == expected_local_name
         })

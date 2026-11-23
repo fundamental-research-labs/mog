@@ -79,14 +79,18 @@ fn owned_image_ids(
                 let mut has_shape_id = false;
                 for attr in start.attributes() {
                     let attr = attr.ok()?;
-                    let (namespace, local) = reader.resolve_attribute(attr.key);
+                    let (namespace, local) = reader.resolver().resolve_attribute(attr.key);
                     if local.as_ref() == b"id"
                         && matches!(namespace, ResolveResult::Bound(ns) if ns.as_ref() == RELATIONSHIP_NS)
                     {
-                        relationship_id = Some(attr.unescape_value().ok()?.into_owned());
+                        relationship_id = Some(
+                            attr.normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                                .ok()?
+                                .into_owned(),
+                        );
                     } else if attr.key.as_ref() == b"shapeId" {
                         has_shape_id = attr
-                            .unescape_value()
+                            .normalized_value(quick_xml::XmlVersion::Implicit1_0)
                             .ok()?
                             .parse::<u32>()
                             .is_ok_and(|id| id > 0);

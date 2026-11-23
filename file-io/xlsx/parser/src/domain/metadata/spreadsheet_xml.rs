@@ -151,7 +151,10 @@ fn imported_root_attributes(source: Option<&[u8]>) -> Vec<(String, String)> {
                             .ok()?
                             .to_string();
                         let value = attribute
-                            .decode_and_unescape_value(reader.decoder())
+                            .decoded_and_normalized_value(
+                                quick_xml::XmlVersion::Implicit1_0,
+                                reader.decoder(),
+                            )
                             .ok()?
                             .into_owned();
                         Some((name, value))

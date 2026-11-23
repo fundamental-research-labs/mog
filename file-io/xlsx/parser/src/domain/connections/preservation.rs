@@ -179,7 +179,7 @@ fn valid_attrs<R: std::io::BufRead>(reader: &NsReader<R>, start: &BytesStart<'_>
             return true;
         }
         !matches!(
-            reader.resolve_attribute(attribute.key).0,
+            reader.resolver().resolve_attribute(attribute.key).0,
             ResolveResult::Unknown(_)
         )
     })
@@ -214,6 +214,11 @@ fn raw_event(event: &Event<'_>) -> Vec<u8> {
     let mut raw = Vec::new();
     match event {
         Event::Text(value) => raw.extend_from_slice(value.as_ref()),
+        Event::GeneralRef(value) => {
+            raw.push(b'&');
+            raw.extend_from_slice(value.as_ref());
+            raw.push(b';');
+        }
         Event::Comment(value) => {
             raw.extend_from_slice(b"<!--");
             raw.extend_from_slice(value.as_ref());
@@ -939,6 +944,20 @@ fn explicit_default_main(start: &[u8]) -> Option<bool> {
         .attributes()
         .filter_map(Result::ok)
         .find(|attribute| attribute.key.as_ref() == b"xmlns")?;
-    let value = attribute.unescape_value().ok()?;
+    let value = attribute
+        .normalized_value(quick_xml::XmlVersion::Implicit1_0)
+        .ok()?;
     Some(value.as_bytes() == MAIN_NS)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn raw_text_with_entity_references_replays_byte_for_byte() {
+        let xml = br#"<connections xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><x:note xmlns:x="urn:x">a &amp; b &#65; &lt;c&gt;</x:note></connections>"#;
+        let document = parse_document(xml).expect("well-formed connections XML");
+        assert_eq!(rendered(&Item::Node(document.root)), xml);
+    }
 }

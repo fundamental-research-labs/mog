@@ -14,6 +14,8 @@ pub(super) fn parse(input: &[u8]) -> Result<Document, String> {
     let mut buf = Vec::new();
     let mut stack: Vec<Element> = Vec::new();
     let mut root: Option<Element> = None;
+    // A text run like `a &amp; b` arrives as Text, GeneralRef, Text; keep it one node.
+    let mut in_text_run = false;
 
     loop {
         let (ns_result, event) = match reader.read_resolved_event_into(&mut buf) {
@@ -27,6 +29,7 @@ pub(super) fn parse(input: &[u8]) -> Result<Document, String> {
             }
         };
 
+        let continues_run = std::mem::replace(&mut in_text_run, false);
         match event {
             Event::Start(ref start) => {
                 let name = expand(&ns_result, start.local_name().as_ref())?;
@@ -76,13 +79,16 @@ pub(super) fn parse(input: &[u8]) -> Result<Document, String> {
                 }
             }
             Event::Text(ref t) => {
-                let s = t
-                    .unescape()
-                    .map_err(|e| format!("text unescape error: {e}"))?
-                    .into_owned();
-                if let Some(parent) = stack.last_mut() {
-                    parent.children.push(Node::Text(s));
-                }
+                let s = crate::infra::xml_text::decode_text(t)
+                    .map_err(|e| format!("text unescape error: {e}"))?;
+                push_text_piece(&mut stack, &s, continues_run);
+                in_text_run = true;
+            }
+            Event::GeneralRef(ref r) => {
+                let s = crate::infra::xml_text::resolve_general_ref(r)
+                    .map_err(|e| format!("text unescape error: {e}"))?;
+                push_text_piece(&mut stack, &s, continues_run);
+                in_text_run = true;
             }
             Event::CData(ref c) => {
                 let bytes: &[u8] = c.as_ref();
@@ -134,10 +140,10 @@ fn collect_attributes(
             continue;
         }
 
-        let (ns_result, local) = reader.resolve_attribute(attr.key);
+        let (ns_result, local) = reader.resolver().resolve_attribute(attr.key);
         let name = expand(&ns_result, local.as_ref())?;
         let value = attr
-            .unescape_value()
+            .normalized_value(quick_xml::XmlVersion::Implicit1_0)
             .map_err(|e| format!("attribute unescape error: {e}"))?
             .into_owned();
         out.push((name, value));
@@ -178,6 +184,18 @@ mod tests {
             XmlDiff::Equal => panic!("expected Differ; got Equal"),
             XmlDiff::Differ { path, reason, .. } => (path, reason),
         }
+    }
+
+    #[test]
+    fn text_split_by_entity_references_is_one_node() {
+        let left = "<a>x &amp; y</a>";
+        let right = "<a>x &#38; y</a>";
+        eq(left, right, &XmlDiffOptions::default());
+        differ(
+            "<a>x &amp; y</a>",
+            "<a>x &amp; z</a>",
+            &XmlDiffOptions::default(),
+        );
     }
 
     #[test]
@@ -284,5 +302,18 @@ mod tests {
         let left = r#"<?pi test?><!DOCTYPE root><root/>"#;
         let right = r#"<root/>"#;
         eq(left, right, &XmlDiffOptions::default());
+    }
+}
+
+/// Append text to the open element, extending the previous text node when the
+/// piece continues the same run.
+fn push_text_piece(stack: &mut [Element], text: &str, continues_run: bool) {
+    let Some(parent) = stack.last_mut() else {
+        return;
+    };
+    if continues_run && let Some(Node::Text(existing)) = parent.children.last_mut() {
+        existing.push_str(text);
+    } else {
+        parent.children.push(Node::Text(text.to_string()));
     }
 }

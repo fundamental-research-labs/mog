@@ -48,7 +48,9 @@ fn parse_node(xml: &[u8]) -> Option<Node> {
                         let attr = attr.ok()?;
                         Some((
                             String::from_utf8(attr.key.as_ref().to_vec()).ok()?,
-                            attr.unescape_value().ok()?.into_owned(),
+                            attr.normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                                .ok()?
+                                .into_owned(),
                         ))
                     })
                     .collect::<Option<Vec<_>>>()?;
@@ -67,7 +69,14 @@ fn parse_node(xml: &[u8]) -> Option<Node> {
                     }
                 }
             }
-            Event::Text(text) => stack.last_mut()?.text.push_str(&text.unescape().ok()?),
+            Event::Text(text) => stack
+                .last_mut()?
+                .text
+                .push_str(&crate::infra::xml_text::decode_text(&text).ok()?),
+            Event::GeneralRef(reference) => stack
+                .last_mut()?
+                .text
+                .push_str(&crate::infra::xml_text::resolve_general_ref(&reference).ok()?),
             Event::CData(text) => stack
                 .last_mut()?
                 .text

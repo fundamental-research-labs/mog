@@ -8,6 +8,7 @@ use quick_xml::events::{BytesStart, Event};
 use quick_xml::reader::Reader;
 
 use crate::infra::opc::resolve_relationship_target;
+use crate::infra::xml_text::{decode_text, resolve_general_ref};
 use crate::zip::XlsxArchive;
 
 pub const FEATURE_PROPERTY_BAG_REL_TYPE: &str =
@@ -93,15 +94,22 @@ pub fn read_workbook_feature_properties(
 }
 
 pub fn parse_feature_property_bags_xml(xml: &[u8]) -> Result<WorkbookFeatureProperties, String> {
+    // Trim each text run ourselves: quick-xml's trim_text applies to every
+    // piece of a run split by entity references, which would drop the spaces
+    // in `a &amp; b`.
     let mut reader = Reader::from_reader(xml);
-    reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
     let mut bags = Vec::new();
     let mut stack: Vec<FeaturePropertyBagElement> = Vec::new();
     let mut current_bag: Option<FeaturePropertyBag> = None;
+    let mut text_run = TextRun::default();
 
     loop {
-        match reader.read_event_into(&mut buf) {
+        let event = reader.read_event_into(&mut buf);
+        if !matches!(event, Ok(Event::Text(_) | Event::GeneralRef(_))) {
+            text_run.finish_into(stack.last_mut());
+        }
+        match event {
             Ok(Event::Start(start)) => {
                 let name = local_name(&start);
                 if name == "bag" && current_bag.is_none() {
@@ -157,15 +165,14 @@ pub fn parse_feature_property_bags_xml(xml: &[u8]) -> Result<WorkbookFeatureProp
                 }
             }
             Ok(Event::Text(text)) => {
-                if let Some(element) = stack.last_mut() {
-                    let value = text
-                        .unescape()
-                        .map_err(|err| format!("invalid feature property text: {err}"))?
-                        .into_owned();
-                    if !value.is_empty() {
-                        element.text = Some(value);
-                    }
-                }
+                let value = decode_text(&text)
+                    .map_err(|err| format!("invalid feature property text: {err}"))?;
+                text_run.push(&value, true);
+            }
+            Ok(Event::GeneralRef(reference)) => {
+                let value = resolve_general_ref(&reference)
+                    .map_err(|err| format!("invalid feature property text: {err}"))?;
+                text_run.push(&value, false);
             }
             Ok(Event::End(end)) => {
                 let name = String::from_utf8_lossy(end.local_name().as_ref()).to_string();
@@ -296,7 +303,7 @@ fn attributes(start: &BytesStart<'_>) -> Result<Vec<FeaturePropertyAttribute>, S
             Ok(FeaturePropertyAttribute {
                 name: String::from_utf8_lossy(attr.key.local_name().as_ref()).to_string(),
                 value: attr
-                    .unescape_value()
+                    .normalized_value(quick_xml::XmlVersion::Implicit1_0)
                     .map_err(|err| format!("invalid feature property attribute value: {err}"))?
                     .into_owned(),
             })
@@ -335,5 +342,63 @@ fn with_diagnostic(
             api_visible: true,
         }],
         package: None,
+    }
+}
+
+/// One run of character data between markup, as `Text` and `GeneralRef` pieces.
+///
+/// Matches the pre-0.38 `trim_text(true)` + `unescape()` result: whitespace is
+/// trimmed only from literal text at the run's ends, never from what an
+/// entity or character reference expands to, and an empty run sets nothing.
+#[derive(Default)]
+struct TextRun {
+    value: String,
+    started: bool,
+    literal_tail_len: usize,
+}
+
+impl TextRun {
+    fn push(&mut self, piece: &str, literal: bool) {
+        let piece = if literal && !self.started {
+            piece.trim_start_matches(is_xml_whitespace)
+        } else {
+            piece
+        };
+        self.started = true;
+        self.literal_tail_len = if literal { piece.len() } else { 0 };
+        self.value.push_str(piece);
+    }
+
+    fn finish_into(&mut self, element: Option<&mut FeaturePropertyBagElement>) {
+        let run = std::mem::take(self);
+        let tail_start = run.value.len() - run.literal_tail_len;
+        let trimmed_tail = run.value[tail_start..].trim_end_matches(is_xml_whitespace);
+        let value = format!("{}{}", &run.value[..tail_start], trimmed_tail);
+        if let Some(element) = element
+            && !value.is_empty()
+        {
+            element.text = Some(value);
+        }
+    }
+}
+
+fn is_xml_whitespace(c: char) -> bool {
+    matches!(c, ' ' | '\t' | '\r' | '\n')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn element_text_keeps_entities_and_trims_only_literal_ends() {
+        let xml = br#"<FeaturePropertyBags xmlns="http://schemas.microsoft.com/office/spreadsheetml/2022/featurepropertybag"><bag type="Checkbox"><a>  x &amp; y  </a><b>&#32;z</b><c>  </c><d>&lt;&gt;</d></bag></FeaturePropertyBags>"#;
+        let parsed = parse_feature_property_bags_xml(xml).expect("valid bag XML");
+        let texts: Vec<Option<&str>> = parsed.bags[0]
+            .children
+            .iter()
+            .map(|element| element.text.as_deref())
+            .collect();
+        assert_eq!(texts, [Some("x & y"), Some(" z"), None, Some("<>")]);
     }
 }

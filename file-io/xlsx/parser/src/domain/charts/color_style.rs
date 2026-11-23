@@ -118,6 +118,7 @@ pub(crate) fn chart_color_style_xml_is_replay_safe(xml: &[u8]) -> bool {
             Event::End(_) => depth = depth.saturating_sub(1),
             Event::Eof => break,
             Event::Text(_)
+            | Event::GeneralRef(_)
             | Event::CData(_)
             | Event::Comment(_)
             | Event::Decl(_)
@@ -184,7 +185,11 @@ fn namespace_is(namespace: &ResolveResult<'_>, expected: &[u8]) -> bool {
 fn attr_value(start: &BytesStart<'_>, name: &[u8]) -> Option<String> {
     start.attributes().flatten().find_map(|attr| {
         (attr.key.local_name().as_ref() == name)
-            .then(|| attr.unescape_value().ok().map(|value| value.into_owned()))
+            .then(|| {
+                attr.normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                    .ok()
+                    .map(|value| value.into_owned())
+            })
             .flatten()
     })
 }

@@ -164,3 +164,15 @@ fn test_numbervalue_currency_stripped() {
     assert_eq!(FnNumberValue.call(&[text("$100")]), num(100.0));
     assert_eq!(FnNumberValue.call(&[text("\u{20AC}100")]), num(100.0));
 }
+
+// RUSTSEC-2025-0003: currency-only text cleans to an empty string.
+#[test]
+fn test_numbervalue_punctuation_only_is_value_error() {
+    for input in ["$", "$ ", "\u{20AC}", ","] {
+        assert_eq!(
+            FnNumberValue.call(&[text(input)]),
+            err(CellError::Value),
+            "{input:?}"
+        );
+    }
+}

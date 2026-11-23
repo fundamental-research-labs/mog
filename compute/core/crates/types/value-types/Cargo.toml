@@ -21,7 +21,8 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
-fast-float = "0.2"
+# fast-float 0.2.0 is unsound (RUSTSEC-2024-0379, RUSTSEC-2025-0003); fast-float2 is its maintained fork.
+fast-float = { package = "fast-float2", version = "0.2.4" }
 # Track R3 bridge tagged-error contract: ComputeError implements
 # bridge_types::BridgeStructuredError so callers emit the same tagged-JSON
 # envelope.

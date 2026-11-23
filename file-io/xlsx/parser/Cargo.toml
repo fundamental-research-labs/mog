@@ -74,7 +74,8 @@ crc32fast = "1.4"
 # Materialize embedded XLSX media parts as browser-loadable data URLs.
 base64 = "0.22"
 
-fast-float = "0.2"
+# fast-float 0.2.0 is unsound (RUSTSEC-2024-0379, RUSTSEC-2025-0003); fast-float2 is its maintained fork.
+fast-float = { package = "fast-float2", version = "0.2.4" }
 
 # Serialization for full parse result
 serde = { version = "1.0", features = ["derive"] }

@@ -143,6 +143,7 @@ pub fn rename_table_validated(
 
     let mut result = table.clone();
     result.name = new_name.to_string();
+    result.display_name = new_name.to_string();
     Ok(result)
 }
 
@@ -413,6 +414,8 @@ mod tests {
         let t = make_table("T1", 0, 0, 10, 2);
         let t2 = rename_table_validated(&t, "NewName", &[]).unwrap();
         assert_eq!(t2.name, "NewName");
+        assert_eq!(t2.display_name, "NewName");
+        assert_eq!(t2.id, t.id);
     }
 
     #[test]

@@ -102,6 +102,12 @@ pub struct ShapeOoxmlProps {
     /// [`GroupShapeData`](crate::domain::drawings::GroupShapeData).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group_shape: Option<crate::domain::drawings::GroupShapeData>,
+    /// Owner-scoped relationships used by the group's descendants.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub group_relationships: Vec<ooxml_types::shared::OpcRelationship>,
+    /// Image payloads owned by this group, including nested groups.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub group_embedded_media: Vec<PictureEmbeddedMediaAuthority>,
 }
 
 /// OOXML round-trip properties for a connector floating object.

@@ -76,48 +76,53 @@ impl DrawingWriter {
             if let Some(false) = image.prefer_relative_resize {
                 w.attr("preferRelativeResize", "0");
             }
-            if has_any_lock || image.has_pic_locks {
+            if has_any_lock || image.has_pic_locks || image.c_nv_pic_pr_ext_lst.is_some() {
                 w.end_attrs();
-                w.start_element("a:picLocks");
-                if locks.no_crop {
-                    w.attr("noCrop", "1");
+                if has_any_lock || image.has_pic_locks {
+                    w.start_element("a:picLocks");
+                    if locks.no_crop {
+                        w.attr("noCrop", "1");
+                    }
+                    if locks.no_change_aspect {
+                        w.attr("noChangeAspect", "1");
+                    }
+                    if locks.no_grp {
+                        w.attr("noGrp", "1");
+                    }
+                    if locks.no_select {
+                        w.attr("noSelect", "1");
+                    }
+                    if locks.no_rot {
+                        w.attr("noRot", "1");
+                    }
+                    if locks.no_move {
+                        w.attr("noMove", "1");
+                    }
+                    if locks.no_resize {
+                        w.attr("noResize", "1");
+                    }
+                    if locks.no_edit_points {
+                        w.attr("noEditPoints", "1");
+                    }
+                    if locks.no_adjust_handles {
+                        w.attr("noAdjustHandles", "1");
+                    }
+                    if locks.no_change_arrowheads {
+                        w.attr("noChangeArrowheads", "1");
+                    }
+                    if locks.no_change_shape_type {
+                        w.attr("noChangeShapeType", "1");
+                    }
+                    if let Some(ref ext) = locks.ext_lst {
+                        w.end_attrs();
+                        self.write_raw_xml(w, ext);
+                        w.end_element("a:picLocks");
+                    } else {
+                        w.self_close();
+                    }
                 }
-                if locks.no_change_aspect {
-                    w.attr("noChangeAspect", "1");
-                }
-                if locks.no_grp {
-                    w.attr("noGrp", "1");
-                }
-                if locks.no_select {
-                    w.attr("noSelect", "1");
-                }
-                if locks.no_rot {
-                    w.attr("noRot", "1");
-                }
-                if locks.no_move {
-                    w.attr("noMove", "1");
-                }
-                if locks.no_resize {
-                    w.attr("noResize", "1");
-                }
-                if locks.no_edit_points {
-                    w.attr("noEditPoints", "1");
-                }
-                if locks.no_adjust_handles {
-                    w.attr("noAdjustHandles", "1");
-                }
-                if locks.no_change_arrowheads {
-                    w.attr("noChangeArrowheads", "1");
-                }
-                if locks.no_change_shape_type {
-                    w.attr("noChangeShapeType", "1");
-                }
-                if let Some(ref ext) = locks.ext_lst {
-                    w.end_attrs();
+                if let Some(ref ext) = image.c_nv_pic_pr_ext_lst {
                     self.write_raw_xml(w, ext);
-                    w.end_element("a:picLocks");
-                } else {
-                    w.self_close();
                 }
                 w.end_element("xdr:cNvPicPr");
             } else {

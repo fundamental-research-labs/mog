@@ -195,6 +195,8 @@ pub struct ImageProps {
     pub hlink_hover: Option<Hyperlink>,
     /// Extension list on cNvPr — opaque XML passthrough (CT_NonVisualDrawingProps extLst)
     pub nv_ext_lst: Option<String>,
+    /// Picture-specific extensions, including live camera cell references.
+    pub c_nv_pic_pr_ext_lst: Option<String>,
 
     // -- Shape properties -------------------------------------------------------
     /// Preset geometry with adjustment values (defaults to rect for pictures)

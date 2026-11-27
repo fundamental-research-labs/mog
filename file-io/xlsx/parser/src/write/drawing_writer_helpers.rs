@@ -66,6 +66,13 @@ pub(super) fn floating_object_requires_drawing_part(obj: &FloatingObject) -> boo
 ///
 /// This is the main entry point for the `from_parse_output` writer.
 pub fn build_sheet_drawing_data(floating_objects: &[FloatingObject]) -> SheetDrawingData {
+    build_sheet_drawing_data_for_owner(floating_objects, "xl/drawings/drawing1.xml")
+}
+
+pub(crate) fn build_sheet_drawing_data_for_owner(
+    floating_objects: &[FloatingObject],
+    drawing_owner: &str,
+) -> SheetDrawingData {
     let mut anchors = Vec::new();
     let mut image_blobs: Vec<(String, Vec<u8>)> = Vec::new();
     let mut image_rels: Vec<(String, String)> = Vec::new();
@@ -78,13 +85,52 @@ pub fn build_sheet_drawing_data(floating_objects: &[FloatingObject]) -> SheetDra
             FloatingObjectData::Picture(_)
             | FloatingObjectData::Shape(_)
             | FloatingObjectData::Textbox(_) => {
+                // Imported relationship IDs are local to each object's original drawing.
+                // Merge only after conversion, then remap this object's descendants.
+                let mut object_image_rels = Vec::new();
+                let mut object_drawing_rels = Vec::new();
                 if let Some(anchor) = objects::convert_floating_object(
                     obj,
+                    drawing_owner,
                     &mut image_blobs,
-                    &mut image_rels,
-                    &mut drawing_rels,
+                    &mut object_image_rels,
+                    &mut object_drawing_rels,
                 ) {
                     let mut anchor = anchor;
+                    let mut remap = std::collections::HashMap::new();
+                    for (id, target) in object_image_rels {
+                        let resolved = merge_object_relationship(
+                            &id,
+                            crate::infra::opc::REL_IMAGE,
+                            &target,
+                            None,
+                            &image_rels,
+                            &drawing_rels,
+                        );
+                        if !image_rels.iter().any(|(id, _)| id == &resolved) {
+                            image_rels.push((resolved.clone(), target));
+                        }
+                        remap.insert(id, resolved);
+                    }
+                    for mut rel in object_drawing_rels {
+                        let resolved = merge_object_relationship(
+                            &rel.id,
+                            &rel.rel_type,
+                            &rel.target,
+                            rel.target_mode.as_deref(),
+                            &image_rels,
+                            &drawing_rels,
+                        );
+                        remap.insert(rel.id.clone(), resolved.clone());
+                        rel.id = resolved;
+                        if !drawing_rels.iter().any(|existing| existing.id == rel.id) {
+                            drawing_rels.push(rel);
+                        }
+                    }
+                    crate::domain::drawings::write::DrawingWriter::remap_anchor_relationship_ids(
+                        &mut anchor,
+                        &remap,
+                    );
                     hyperlinks::register_anchor_hyperlink_relationships(
                         &mut anchor,
                         &mut drawing_rels,
@@ -186,4 +232,34 @@ fn is_chart_graphic_frame_xml(xml: &str) -> bool {
         || xml.contains("schemas.microsoft.com/office/drawing/2014/chartex")
         || xml.contains("<c:chart")
         || xml.contains("<cx:chart")
+}
+
+/// Preserve an imported ID if available; otherwise allocate a drawing-local ID.
+fn merge_object_relationship(
+    preferred: &str,
+    rel_type: &str,
+    target: &str,
+    target_mode: Option<&str>,
+    image_rels: &[(String, String)],
+    drawing_rels: &[ooxml_types::shared::OpcRelationship],
+) -> String {
+    let mut candidate = preferred.to_string();
+    let mut suffix = 1;
+    loop {
+        let image = image_rels.iter().find(|(id, _)| id == &candidate);
+        let drawing = drawing_rels.iter().find(|rel| rel.id == candidate);
+        let same_image = image.is_some_and(|(_, path)| path == target)
+            && rel_type == crate::infra::opc::REL_IMAGE
+            && target_mode.is_none();
+        let same_drawing = drawing.is_some_and(|rel| {
+            rel.rel_type == rel_type
+                && rel.target == target
+                && rel.target_mode.as_deref() == target_mode
+        });
+        if (image.is_none() && drawing.is_none()) || same_image || same_drawing {
+            return candidate;
+        }
+        candidate = format!("rId{suffix}");
+        suffix += 1;
+    }
 }

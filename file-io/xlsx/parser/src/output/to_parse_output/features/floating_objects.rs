@@ -448,6 +448,8 @@ pub(crate) fn convert_floating_objects(
                     client_data_prints_with_sheet: cd_prints,
                     mc_alternate_content_raw_xml: mc_alt_raw.clone(),
                     group_shape: None,
+                    group_relationships: Vec::new(),
+                    group_embedded_media: Vec::new(),
                 };
 
                 // Extract preset type for shape_type field
@@ -553,6 +555,22 @@ pub(crate) fn convert_floating_objects(
                 )
             }
             DrawingContent::GroupShape(grp) => {
+                let relationship_ids =
+                    crate::domain::drawings::convert::convert_drawing_content_with_outcome(content)
+                        .relationship_ids;
+                let relationships: Vec<_> = drawing
+                    .opc_rels
+                    .iter()
+                    .filter(|rel| relationship_ids.contains(&rel.id))
+                    .cloned()
+                    .collect();
+                let embedded_media = relationships
+                    .iter()
+                    .filter(|rel| rel.rel_type == crate::infra::opc::REL_IMAGE)
+                    .filter_map(|rel| {
+                        resolve_picture_embedded_media(binary_parts, drawing_owner_part, rel)
+                    })
+                    .collect();
                 // Carry the full CT_GroupShape payload so children and
                 // properties survive the round-trip through the unified
                 // FloatingObject model. Typed replacement for the former
@@ -567,6 +585,8 @@ pub(crate) fn convert_floating_objects(
                     client_data_prints_with_sheet: cd_prints,
                     mc_alternate_content_raw_xml: mc_alt_raw.clone(),
                     group_shape: Some(grp.clone()),
+                    group_relationships: relationships,
+                    group_embedded_media: embedded_media,
                 };
                 let data = FloatingObjectData::Shape(ShapeData {
                     shape_type: "group".to_string(),

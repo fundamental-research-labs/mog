@@ -17,6 +17,7 @@ use super::shapes::{
 /// Dispatches on `data` variant. Returns `None` if the object type cannot be converted.
 pub(super) fn convert_floating_object(
     obj: &FloatingObject,
+    drawing_owner: &str,
     image_blobs: &mut Vec<(String, Vec<u8>)>,
     image_rels: &mut Vec<(String, String)>,
     drawing_rels: &mut Vec<ooxml_types::shared::OpcRelationship>,
@@ -27,15 +28,19 @@ pub(super) fn convert_floating_object(
                 let mut image_props =
                     crate::domain::drawings::write::convert::picture_to_image_props(&ooxml.picture);
                 if let Some(ref image_path) = ooxml.image_path {
-                    if ensure_image_blob_for_current_payload(image_blobs, image_path, &pic_data.src)
-                    {
+                    if let Some(emitted_path) = ensure_image_blob_for_current_payload(
+                        image_blobs,
+                        drawing_owner,
+                        image_path,
+                        &pic_data.src,
+                    ) {
                         let r_id = reusable_image_relationship_id(ooxml, image_path, image_rels)
                             .unwrap_or_else(|| next_available_image_r_id(image_rels));
                         image_props.r_id = r_id.clone();
                         if !image_rels.iter().any(|(existing_id, existing_path)| {
-                            existing_id == &r_id && existing_path == image_path
+                            existing_id == &r_id && existing_path == &emitted_path
                         }) {
-                            image_rels.push((r_id, image_path.clone()));
+                            image_rels.push((r_id, emitted_path));
                         }
                     } else {
                         image_props.r_id.clear();
@@ -55,13 +60,38 @@ pub(super) fn convert_floating_object(
                 );
                 DrawingObject::Picture(image_props)
             } else {
-                convert_image(&obj.common, &pic_data.src, image_blobs, image_rels)?
+                convert_image(
+                    &obj.common,
+                    &pic_data.src,
+                    drawing_owner,
+                    image_blobs,
+                    image_rels,
+                )?
             }
         }
         FloatingObjectData::Shape(shape_data) => {
             if let Some(ref ooxml) = shape_data.ooxml {
                 if shape_data.shape_type == "group" {
                     if let Some(ref grp) = ooxml.group_shape {
+                        for relationship in &ooxml.group_relationships {
+                            if let Some(media) = ooxml
+                                .group_embedded_media
+                                .iter()
+                                .find(|media| media.relationship_id == relationship.id)
+                            {
+                                let target = format!("/{}", media.package_path);
+                                if let Some(target) = ensure_image_blob_for_current_payload(
+                                    image_blobs,
+                                    drawing_owner,
+                                    &target,
+                                    &media.src,
+                                ) {
+                                    image_rels.push((relationship.id.clone(), target));
+                                }
+                            } else {
+                                drawing_rels.push(relationship.clone());
+                            }
+                        }
                         DrawingObject::GroupShape(convert_group_from_data(&obj.common, grp))
                     } else {
                         DrawingObject::GroupShape(convert_group_fallback(&obj.common))

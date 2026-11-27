@@ -44,6 +44,7 @@ pub fn picture_to_image_props(p: &read::SpreadsheetPicture) -> write::ImageProps
         hlink_click: p.nv_pic_pr.c_nv_pr.hlink_click.clone(),
         hlink_hover: p.nv_pic_pr.c_nv_pr.hlink_hover.clone(),
         nv_ext_lst: p.nv_pic_pr.c_nv_pr.ext_lst.clone(),
+        c_nv_pic_pr_ext_lst: p.nv_pic_pr.c_nv_pic_pr_ext_lst.clone(),
 
         preset_geometry: p.sp_pr.geometry.as_ref().and_then(|g| match g {
             ooxml::ShapeGeometry::Preset(pg) => Some(pg.clone()),

@@ -780,9 +780,10 @@ pub fn write_xlsx_from_owned_parse_output_to<W: std::io::Write>(
             // anchor order. This preserves the anchor sequence from the original XLSX.
             let mut deferred_fobj_anchors: Vec<(Option<usize>, DrawingAnchor)> = Vec::new();
             if has_floating_objects {
-                use super::drawing_writer_helpers::build_sheet_drawing_data;
+                use super::drawing_writer_helpers::build_sheet_drawing_data_for_owner;
 
-                let drawing_data = build_sheet_drawing_data(&sheet_data.floating_objects);
+                let drawing_data =
+                    build_sheet_drawing_data_for_owner(&sheet_data.floating_objects, &drawing_path);
 
                 deferred_fobj_anchors = drawing_data.anchors;
 
